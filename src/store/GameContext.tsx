@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo, useCallback, useState } from 'react';
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
-import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld } from '../lib/supabase';
+import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, subscribeToWorld, unsubscribeFromWorld } from '../lib/supabase';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 import { advanceGameDay } from '../engine/gameLogic';
 
@@ -321,10 +321,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (isPaused || isInitialLoad || !worldId) return;
 
-    // --- REALTIME SYNC (POLLING) ---
-    // If we are NOT the creator, periodically check for world state changes
-    const syncTimer = setInterval(async () => {
-      if (!state.isCreator) {
+    // --- REALTIME SYNC (CHANNELS) ---
+    // Listen for world updates instead of polling
+    if (!state.isCreator) {
+      subscribeToWorld(worldId, async () => {
         try {
           const loaded = await loadGameState(worldId);
           if (loaded && (
@@ -332,14 +332,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             loaded.world.status !== state.world.status ||
             Object.keys(loaded.teams).length !== Object.keys(state.teams).length
           )) {
-            console.log('GameContext: World state updated by creator, refreshing local state.');
+            console.log('GameContext: World state updated by creator via Realtime, refreshing local state.');
             setState(loaded);
           }
         } catch (e) {
-          console.error('Polling error:', e);
+          console.error('Realtime sync error:', e);
         }
-      }
-    }, 15000);
+      });
+    }
 
     // --- Main Clock (1s interval) ---
     const interval = setInterval(() => {
@@ -392,7 +392,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, 1000);
 
     return () => {
-      clearInterval(syncTimer);
+      if (!state.isCreator) {
+        unsubscribeFromWorld(worldId);
+      }
       clearInterval(interval);
     };
   }, [isPaused, isInitialLoad, worldId, setState, state.isCreator, state.world.currentDate, state.world.status, state.teams]);

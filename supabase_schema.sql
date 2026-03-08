@@ -31,54 +31,53 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS squad_ids UUID[] DEFAULT '{}';
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS lineup JSONB DEFAULT '{}';
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS inventory JSONB DEFAULT '[]';
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS chemistry INT DEFAULT 50;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS power_cap INT DEFAULT 10000;
 
 -- 3. TABELA DE JOGADORES (PLAYERS)
 CREATE TABLE IF NOT EXISTS players (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
+    nickname VARCHAR(255),
     district VARCHAR(32) NOT NULL,
+    appearance JSONB NOT NULL DEFAULT '{}',
     position VARCHAR(32) NOT NULL,
+    role VARCHAR(8) NOT NULL,
+    pentagon JSONB NOT NULL DEFAULT '{}',
+    fusion JSONB NOT NULL DEFAULT '{}',
+    current_rating INT NOT NULL DEFAULT 500,
+    potential INT NOT NULL DEFAULT 600,
+    current_phase NUMERIC(4,2) NOT NULL DEFAULT 6.0,
+    phase_history JSONB NOT NULL DEFAULT '[]',
+    badges JSONB NOT NULL DEFAULT '{"slot1": null, "slot2": null, "slot3": null}',
+    contract JSONB NOT NULL DEFAULT '{"teamId": null}',
+    history JSONB NOT NULL DEFAULT '{"goals": 0, "assists": 0, "averageRating": 0, "gamesPlayed": 0, "lastMatchRatings": [], "benchGamesCount": 0, "seasonRatingDelta": 0}',
+    satisfaction INT NOT NULL DEFAULT 70,
+    training_progress INT NOT NULL DEFAULT 0,
+    fatigue INT NOT NULL DEFAULT 0,
+    achievements JSONB NOT NULL DEFAULT '[]',
+    team_id UUID REFERENCES teams(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Adicionar colunas faltantes em PLAYERS (Safe Update)
-ALTER TABLE players ADD COLUMN IF NOT EXISTS name VARCHAR(255);
-ALTER TABLE players ADD COLUMN IF NOT EXISTS district VARCHAR(32);
-ALTER TABLE players ADD COLUMN IF NOT EXISTS position VARCHAR(32);
+-- Índices e Alterações Seguras
 ALTER TABLE players ADD COLUMN IF NOT EXISTS nickname VARCHAR(255);
-ALTER TABLE players ADD COLUMN IF NOT EXISTS role VARCHAR(32) DEFAULT 'MEI';
-ALTER TABLE players ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES teams(id);
-ALTER TABLE players ADD COLUMN IF NOT EXISTS appearance JSONB DEFAULT '{"gender": "M", "bodyId": 1, "hairId": 1, "bootId": 1}';
-ALTER TABLE players ADD COLUMN IF NOT EXISTS current_rating INT DEFAULT 400;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS potential_rating INT DEFAULT 600;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS appearance JSONB DEFAULT '{}';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS role VARCHAR(8);
+ALTER TABLE players ADD COLUMN IF NOT EXISTS pentagon JSONB DEFAULT '{}';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion JSONB DEFAULT '{}';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS current_rating INT DEFAULT 500;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS potential INT DEFAULT 600;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS current_phase NUMERIC(4,2) DEFAULT 6.0;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS phase_history JSONB DEFAULT '[]';
-ALTER TABLE players ADD COLUMN IF NOT EXISTS badges JSONB DEFAULT '{"slot1": null, "slot2": null, "slot3": null}';
-ALTER TABLE players ADD COLUMN IF NOT EXISTS training_progress INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS for_attr INT DEFAULT 50;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS agi_attr INT DEFAULT 50;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS int_attr INT DEFAULT 50;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS tat_attr INT DEFAULT 50;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS tec_attr INT DEFAULT 50;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_det INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_pas INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_dri INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_fin INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_mov INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_ref INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_def INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS fusion_pos INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS contract_value NUMERIC(15,2) DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS salary NUMERIC(15,2) DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS goals INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS assists INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS games_played INT DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS average_rating NUMERIC(4,2) DEFAULT 0;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS last_match_ratings JSONB DEFAULT '[]';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS badges JSONB DEFAULT '{}';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS contract JSONB DEFAULT '{}';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '{}';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS satisfaction INT DEFAULT 70;
-ALTER TABLE players ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now());
+ALTER TABLE players ADD COLUMN IF NOT EXISTS training_progress INT DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS fatigue INT DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS achievements JSONB DEFAULT '[]';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES teams(id);
 
--- Índices para Players
 CREATE INDEX IF NOT EXISTS idx_players_team_id ON players (team_id);
 CREATE INDEX IF NOT EXISTS idx_players_current_rating ON players (current_rating);
 CREATE INDEX IF NOT EXISTS idx_players_position ON players (position);
@@ -90,10 +89,16 @@ CREATE TABLE IF NOT EXISTS managers (
     district VARCHAR(32) NOT NULL,
     reputation INT DEFAULT 10,
     attributes JSONB NOT NULL DEFAULT '{"evolution": 50, "negotiation": 50, "scout": 50}',
-    career JSONB NOT NULL DEFAULT '{"titlesWon": 0, "currentTeamId": null, "historyTeamIds": []}',
+    career JSONB NOT NULL DEFAULT '{"titlesWon": 0, "totalLeagueTitles": 0, "totalCupTitles": 0, "hallOfFameEntries": 0, "consecutiveTitles": 0, "currentTeamId": null, "historyTeamIds": []}',
+    achievements JSONB NOT NULL DEFAULT '[]',
     user_id UUID REFERENCES auth.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Alterações Seguras em MANAGERS
+ALTER TABLE managers ADD COLUMN IF NOT EXISTS achievements JSONB DEFAULT '[]';
+-- Garante que o JSONB de career tenha os novos campos (opcional, mas bom para clareza)
+-- ALTER TABLE managers ALTER COLUMN career SET DEFAULT '{"titlesWon": 0, "totalLeagueTitles": 0, "totalCupTitles": 0, "hallOfFameEntries": 0, "consecutiveTitles": 0, "currentTeamId": null, "historyTeamIds": []}';
 
 -- 5. TABELA DE TRANSFERÊNCIAS (TRANSFERS)
 CREATE TABLE IF NOT EXISTS transfers (
@@ -167,14 +172,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_active_season ON seasons (is_active) WHERE
 -- 10. TABELA DE ESTADO GLOBAL (GLOBAL_GAME_STATE)
 CREATE TABLE IF NOT EXISTS global_game_state (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    world_id TEXT NOT NULL DEFAULT 'default',
     current_season_id UUID REFERENCES seasons(id),
     current_game_date DATE NOT NULL DEFAULT '2050-01-01',
     is_market_open BOOLEAN NOT NULL DEFAULT true,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Garantir apenas uma linha no estado global
-CREATE UNIQUE INDEX IF NOT EXISTS one_row_only ON global_game_state ((true));
+-- Garantir uma linha de estado global por mundo
+CREATE UNIQUE INDEX IF NOT EXISTS one_row_per_world ON global_game_state (world_id);
 
 -- 11. TABELA DE PARTIDAS (MATCHES)
 CREATE TABLE IF NOT EXISTS matches (
@@ -244,6 +250,9 @@ BEGIN
     ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS "Leitura pública de partidas" ON matches;
     CREATE POLICY "Leitura pública de partidas" ON matches FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Usuários podem gerenciar partidas de seus mundos" ON matches;
+    -- Consideramos que quem criou o registro do mundo (ou quem está participando) pode atualizar partidas
+    CREATE POLICY "Usuários podem gerenciar partidas de seus mundos" ON matches FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- 13. DADOS INICIAIS

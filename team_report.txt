@@ -1,0 +1,30 @@
+--- ELITE 2050 TEAM COMPOSITION REPORT ---
+
+--- ELITE TEAMS (8) ---
+Neon NFC        | Avg: 713.3 | Max: 992 | Top 3: [992, 971, 970] | Cap: 10700
+Cyber NFC       | Avg: 712.9 | Max: 961 | Top 3: [961, 956, 938] | Cap: 10700
+Aero NFC        | Avg: 713.3 | Max: 918 | Top 3: [918, 916, 916] | Cap: 10700
+Pulse NFC       | Avg: 713.2 | Max: 909 | Top 3: [909, 899, 898] | Cap: 10700
+Zenith NFC      | Avg: 713.3 | Max: 895 | Top 3: [895, 893, 891] | Cap: 10700
+Glacier NFC     | Avg: 713.3 | Max: 886 | Top 3: [886, 881, 879] | Cap: 10700
+Astro NFC       | Avg: 713.3 | Max: 878 | Top 3: [878, 876, 875] | Cap: 10700
+Nova NFC        | Avg: 713.3 | Max: 870 | Top 3: [870, 870, 869] | Cap: 10700
+
+--- AVERAGE TEAMS (16) --- (Sample 4)
+Solar SFC       | Avg: 633.3 | Max: 799 | Top 3: [799, 626, 626] | Cap: 9500
+Forge SFC       | Avg: 631.9 | Max: 798 | Top 3: [798, 632, 630] | Cap: 9500
+Magma SFC       | Avg: 633.3 | Max: 798 | Top 3: [798, 746, 632] | Cap: 9500
+Iron SFC        | Avg: 633.3 | Max: 798 | Top 3: [798, 711, 709] | Cap: 9500
+
+--- REBUILD TEAMS (8) ---
+Bio WFC         | Avg: 436.9 | Max: 440 | Top 3: [440, 439, 439] | Cap: 9000
+Terra WFC       | Avg: 430.7 | Max: 433 | Top 3: [433, 432, 432] | Cap: 9000
+Viper WFC       | Avg: 424.3 | Max: 428 | Top 3: [428, 427, 426] | Cap: 9000
+Eco WFC         | Avg: 413.9 | Max: 421 | Top 3: [421, 420, 417] | Cap: 9000
+Venom WFC       | Avg: 404.9 | Max: 408 | Top 3: [408, 407, 407] | Cap: 9000
+Nexus WFC       | Avg: 440.9 | Max: 447 | Top 3: [447, 446, 446] | Cap: 9000
+Toxic WFC       | Avg: 451.7 | Max: 454 | Top 3: [454, 454, 454] | Cap: 9000
+Grove WFC       | Avg: 458.1 | Max: 461 | Top 3: [461, 460, 460] | Cap: 9000
+
+Total Active Players in Teams: 480
+FA / Exiled Players: 520

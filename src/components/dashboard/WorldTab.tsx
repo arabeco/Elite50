@@ -14,7 +14,7 @@ import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, Team, GameNotification } from '../../types';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket } = LucideIcons;
 
 
 export const WorldTab = (props: any) => {
@@ -523,7 +523,7 @@ export const WorldTab = (props: any) => {
 
                             return (
                               <tr
-                                key={row.teamId}
+                                key={`league-standing-${row.teamId}-${idx}`}
                                 onClick={() => setSelectedTeamView(row.teamId)}
                                 className={`group transition-all cursor-pointer ${isUserTeam ? 'bg-emerald-500/10' : 'hover:bg-white/5'}`}
                               >
@@ -1097,6 +1097,23 @@ export const WorldTab = (props: any) => {
       {
         activeWorldTab === 'market' && (
           <div className="space-y-4 animate-in fade-in duration-500">
+            {state.world.status === 'LOBBY' && (
+              <div className="glass-card-neon border-cyan-500/30 p-4 rounded-2xl flex items-center justify-between bg-cyan-500/5 group hover:bg-cyan-500/10 transition-all cursor-pointer mb-6"
+                onClick={() => props.onTabChange?.('draft')}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500 flex items-center justify-center text-black shadow-[0_0_20px_rgba(34,211,238,0.4)] group-hover:scale-110 transition-transform">
+                    <Rocket size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white uppercase italic">Draft Genesis em Aberto</h4>
+                    <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-tighter">Clique aqui para ir ao HUB DE DRAFT e montar seu elenco</p>
+                  </div>
+                </div>
+                <ChevronRight size={20} className="text-cyan-500 group-hover:translate-x-1 transition-transform" />
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex items-center justify-between gap-3 sm:gap-4 w-full">
                 <div className="flex-1 relative group">
@@ -1212,7 +1229,7 @@ export const WorldTab = (props: any) => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
               {players
                 .filter(p => {
                   const isExiled = !p.contract.teamId;
@@ -1228,7 +1245,7 @@ export const WorldTab = (props: any) => {
                 })
                 .slice(0, marketLimit)
                 .map(player => (
-                  <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} />
+                  <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} variant="micro" />
                 ))}
             </div>
           </div>

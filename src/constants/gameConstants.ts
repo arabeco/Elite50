@@ -38,7 +38,7 @@ export const COMMENTARY_COUNT = 25;
 
 // --- Team Composition ---
 export const SQUAD_SIZE_MIN = 15;
-export const SQUAD_SIZE_MAX = 30;
+export const SQUAD_SIZE_MAX = 15;
 export const LINEUP_SIZE = 11;
 
 // --- Training ---

@@ -22,17 +22,40 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
 
   const isCreator = state.isCreator === true;
 
+  // Optimization: Only save the data that this user "owns" or has modified.
+  // This reduces JSON size and avoids accidental overwrites of other players' data.
+  const userTeamId = state.userTeamId;
+  const userManagerId = state.userManagerId;
+
+  const filteredTeams: Record<string, any> = {};
+  if (userTeamId && state.teams[userTeamId]) {
+    filteredTeams[userTeamId] = state.teams[userTeamId];
+  }
+
+  const filteredPlayers: Record<string, any> = {};
+  if (userTeamId && state.teams[userTeamId]) {
+    const squadIds = state.teams[userTeamId].squad || [];
+    squadIds.forEach(id => {
+      if (state.players[id]) {
+        filteredPlayers[id] = state.players[id];
+      }
+    });
+  }
+
+  // Also include any players that might have been recently modified (e.g. transfer targets)
+  // For now, squad-only is a good balance for performance.
+
   const { data, error } = await supabase
     .from('games')
     .upsert({
       user_id: user.id,
       world_id: worldId,
-      world_state: isCreator ? state.world : undefined, // Only creator updates master world state
-      teams_data: state.teams,
-      players_data: state.players,
-      managers_data: state.managers,
-      user_team_id: state.userTeamId,
-      user_manager_id: state.userManagerId,
+      world_state: isCreator ? state.world : undefined, // Only creator updates master world clock/state
+      teams_data: filteredTeams,
+      players_data: filteredPlayers,
+      managers_data: userManagerId && state.managers[userManagerId] ? { [userManagerId]: state.managers[userManagerId] } : {},
+      user_team_id: userTeamId,
+      user_manager_id: userManagerId,
       notifications: state.notifications,
       last_headline: state.lastHeadline,
       training_data: state.training,
@@ -113,6 +136,7 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   if (!user) return null;
 
   // 1. Fetch ALL records for this world_id to reconstruct shared state
+  // We sort by updated_at ASC so later records (newer) can overwrite older ones in the loop
   const { data: allWorldRecords, error: worldError } = await supabase
     .from('games')
     .select('*')
@@ -124,11 +148,11 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     return null;
   }
 
-  // 2. The first record (oldest) is the "Master" (Creator)
+  // 2. The first record (oldest) is considered the "Master" (Creator) base
   const masterRecord = allWorldRecords[0];
   const userRecord = allWorldRecords.find(r => r.user_id === user.id);
 
-  if (!userRecord) return null; // Should not happen if loadGameState is called correctly
+  if (!userRecord) return null;
 
   const isCreator = masterRecord.user_id === user.id;
 
@@ -138,17 +162,18 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   const mergedManagers = { ...(masterRecord.managers_data as any) };
 
   allWorldRecords.forEach(record => {
-    // We only merge data from other players (not the master itself, which is already the base)
+    // Skip if it's the master record (already used as base)
     if (record.user_id === masterRecord.user_id) return;
 
     // Merge Team updates (Tactics, Lineup, etc.)
+    // RULE: If a record matches a user who owns a team, that user's version of the team is the truth.
     const recordUserTeamId = record.user_team_id;
     if (recordUserTeamId && record.teams_data && (record.teams_data as any)[recordUserTeamId]) {
       mergedTeams[recordUserTeamId] = (record.teams_data as any)[recordUserTeamId];
     }
 
-    // Merge Player updates (Individual Focus, Transfers, etc.)
-    // We look for players that belong to this user's team or have been modified
+    // Merge Player updates
+    // RULE: If a player's stats or contract changed in a newer record, we accept it.
     if (record.players_data) {
       const recordPlayers = record.players_data as any;
       Object.keys(recordPlayers).forEach(playerId => {
@@ -160,13 +185,10 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
           return;
         }
 
-        // If the player's team changed (transfer) or they have more training/different rating
-        // we take the version from the user who "owns" or modified them.
-        const teamChanged = p.contract?.teamId !== masterP.contract?.teamId;
-        const statsChanged = p.totalRating !== masterP.totalRating || p.trainingProgress !== masterP.trainingProgress;
-
-        if (teamChanged || statsChanged) {
-          // Simple rule: if it's different and newer (implied by loop order), we take it
+        // Check if this user had a reason to update this player (e.g. training, transfer)
+        // Since records are sorted by time, the newer ones naturally win in this loop.
+        const isDifferent = JSON.stringify(p) !== JSON.stringify(masterP);
+        if (isDifferent) {
           mergedPlayers[playerId] = p;
         }
       });
@@ -180,7 +202,7 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   });
 
   const gameState: GameState = {
-    world: masterRecord.world_state as any, // Always use master world clock/results
+    world: masterRecord.world_state as any, // Master defines the world clock
     worldId: masterRecord.world_id,
     isCreator,
     teams: mergedTeams,
@@ -191,7 +213,6 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     notifications: userRecord.notifications || [],
     lastHeadline: userRecord.last_headline,
     training: userRecord.training_data || {
-      chemistryBoostLastUsed: undefined,
       cardLaboratory: { slots: [] },
       individualFocus: { evolutionSlot: null, stabilizationSlot: null },
       playstyleTraining: { currentStyle: null, understanding: {} }
@@ -267,3 +288,26 @@ export const listPublicWorlds = async () => {
     name: (d.world_state as any).name || `Mundo ${d.world_id}`
   }));
 };
+
+// --- Realtime Sync ---
+export const subscribeToWorld = (worldId: string, onUpdate: () => void) => {
+  const channelName = `world:${worldId}`;
+  const channel = supabase.channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'games', filter: `world_id=eq.${worldId}` },
+      (payload) => {
+        console.log('Realtime update received for world:', worldId, payload);
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return channel;
+};
+
+export const unsubscribeFromWorld = async (worldId: string) => {
+  const channelName = `world:${worldId}`;
+  await supabase.removeChannel(supabase.channel(channelName));
+};
+

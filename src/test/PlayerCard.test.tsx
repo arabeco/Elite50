@@ -33,17 +33,21 @@ const mockPlayer: Player = {
     potential: 850,
     currentPhase: 7.5,
     phaseHistory: [7.5, 7.5, 7.5],
-    badges: { slot1: null, slot2: null, slot3: null },
+    badges: { slot1: null, slot2: null, slot3: null, slot4: null, slot3Hidden: true },
     contract: { teamId: null },
     history: {
         goals: 10,
         assists: 5,
         averageRating: 7.5,
         gamesPlayed: 20,
-        lastMatchRatings: [7.5, 7.5, 7.5]
+        lastMatchRatings: [7.5, 7.5, 7.5],
+        benchGamesCount: 0,
+        seasonRatingDelta: 0
     },
     satisfaction: 90,
-    trainingProgress: 50
+    trainingProgress: 50,
+    fatigue: 0,
+    achievements: []
 };
 
 describe('PlayerCard Component', () => {

@@ -1,16 +1,17 @@
 import React from 'react';
 import { Player, TeamLogoMetadata } from '../types';
-import { Star, Zap, Trophy, Venus, Mars } from 'lucide-react';
+import { Star, Zap, Trophy, Venus, Mars, Clock, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
 import { useGame } from '../store/GameContext';
+import { useTransfers } from '../hooks/useTransfers';
 
 interface PlayerCardProps {
   player: Player;
   onClick: (player: Player) => void;
   onProposta?: (player: Player) => void;
-  variant?: 'full' | 'compact' | 'banner' | 'block';
+  variant?: 'full' | 'compact' | 'banner' | 'block' | 'micro';
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent, player: Player) => void;
   teamLogo?: TeamLogoMetadata;
@@ -19,6 +20,9 @@ interface PlayerCardProps {
 
 const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onProposta, variant = 'full', draggable, onDragStart, teamLogo, onTeamClick }) => {
   const { state } = useGame();
+  const { handleCancelDraftProposal } = useTransfers(null, 0, 0);
+  const isDraftPending = state.world.status === 'LOBBY' &&
+    state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
 
@@ -158,6 +162,34 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     );
   }
 
+  if (variant === 'micro') {
+    return (
+      <motion.div
+        layoutId={`player-card-${player.id}`}
+        onClick={() => onClick(player)}
+        className={`w-full bg-black/60 backdrop-blur-md border border-white/10 rounded-lg p-1.5 flex flex-col justify-between cursor-pointer hover:bg-white/10 transition-colors shadow-lg overflow-hidden min-h-[50px]`}
+      >
+        <div className="flex justify-between items-start">
+          <span className={`text-[10px] font-black leading-none ${style.text}`}>{player.totalRating}</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[6px] font-bold text-white/40 uppercase">{player.role}</span>
+            {isDraftPending && <Clock size={6} className="text-amber-500 animate-pulse" />}
+          </div>
+        </div>
+        <div className="flex flex-col truncate">
+          <div className="flex items-center gap-1">
+            <h3 className="text-[9px] font-black text-white truncate uppercase tracking-tighter">{player.nickname}</h3>
+            {player.appearance.gender === 'F' ? (
+              <Venus size={6} className="text-pink-400" />
+            ) : (
+              <Mars size={6} className="text-blue-400" />
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (variant === 'compact') {
     return (
       <motion.div
@@ -205,6 +237,12 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         {/* Bottom Section */}
         <div className="relative z-30 flex flex-col gap-0.5">
           <div className="text-center">
+            {isDraftPending && (
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <Clock size={8} className="text-amber-400 animate-pulse" />
+                <span className="text-[6px] font-black text-amber-500 uppercase">Pendente</span>
+              </div>
+            )}
             <div className="flex items-center justify-center gap-1">
               <h3 className="text-[7px] sm:text-[8px] font-black leading-tight uppercase tracking-tight text-white drop-shadow-md truncate">{player.nickname}</h3>
               {player.appearance.gender === 'F' ? (
@@ -240,6 +278,27 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} 
         hover:scale-[1.05] hover:-translate-y-2 transition-all duration-500 shadow-2xl`}
     >
+      {isDraftPending && (
+        <div className="absolute inset-0 bg-amber-500/10 backdrop-blur-[2px] z-[60] flex flex-col items-center justify-center p-4 text-center">
+          <div className="bg-black/80 p-4 rounded-2xl border border-amber-500/30 flex flex-col items-center gap-3 shadow-2xl">
+            <Clock size={32} className="text-amber-400 animate-pulse" />
+            <div>
+              <p className="text-xs font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Escolha Pendente</p>
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">AGUARDANDO RESOLUÇÃO</p>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCancelDraftProposal(player.id);
+              }}
+              className="bg-red-500/20 text-red-400 border border-red-500/30 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+            >
+              <X size={12} /> Cancelar Proposta
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Holographic Shine Effect */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-30 transition-opacity duration-700 bg-gradient-to-tr from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full z-30" />
 

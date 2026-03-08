@@ -17,6 +17,7 @@ import {
   LogoPattern,
 } from '../types';
 import { generateCalendar } from './CalendarGenerator';
+import { seedUniverse } from './seed_universe';
 
 // --- Seeded Random Engine (Fixed Base) ---
 let _seed = 1234567; // Fixed seed for "Base Fixa"
@@ -84,10 +85,43 @@ const lastNames = [
 ];
 const districts: District[] = ['NORTE', 'SUL', 'LESTE', 'OESTE'];
 
-const technicalTraits = ['Chute Forte', 'Drible Curto', 'Passe Longo', 'Cabeceio', 'Desarme Preciso', 'Velocista', 'Maestro', 'Muralha', 'Goleador', 'Motorzinho'];
-const negativeProfileTraits = ['Preciosista', 'Individualista', 'Desatento', 'Instável', 'Preguiçoso', 'Pavio Curto'];
-const positiveProfileTraits = ['Referência', 'Combativo', 'Vertical', 'Cadenciador', 'Líder', 'Inspirador'];
-const specialTraits = ['Dono do Jogo', 'Passo à Frente', 'Gênio', 'Destreza Máxima', 'Frieza Absoluta'];
+// --- DNA ELITE 2050 TRAITS ---
+const TRAITS_BRONZE = ['Ofensivo', 'Folego', 'Passe Bronze', 'Finaliz Bronze', 'Def Bronze'];
+const TRAITS_PRATA = ['Consistência', 'Versatilidade', 'Defesa Prata', 'Finaliz Prata', 'Passe Prata'];
+const TRAITS_OURO = ['Finaliz Ouro', 'Passe Ouro', 'Defesa Ouro', 'Liderança', 'Folego Ouro'];
+const TRAITS_LENDARIO_S3 = ['Finaliz Lendária', 'Passe Lendária', 'Defesa Lendária', 'Gênio', 'Clutch', 'Protagonista'];
+const TRAITS_EPICO_S3 = ['Máquina', 'Catalisador'];
+const TRAITS_FARDOS = ['Displicente', 'Pavio Curto', 'Preguiçoso', 'Vidro', 'Inconstante', 'Estático', 'Individualista', 'Boêmio'];
+
+export const regenerateDNA = (player: Player): Badges => {
+  const pRand = mulberry32(Array.from(player.id).reduce((a, b) => a + b.charCodeAt(0), 0));
+
+  const getRand = (pool: string[]) => pool[Math.floor(pRand() * pool.length)];
+
+  // SLOT 1 (BASE): 70% Bronze, 30% Prata
+  const s1 = pRand() < 0.7 ? getRand(TRAITS_BRONZE) : getRand(TRAITS_PRATA);
+
+  // SLOT 2 (ELITE): 60% Prata, 40% Ouro
+  const s2 = pRand() < 0.6 ? getRand(TRAITS_PRATA) : getRand(TRAITS_OURO);
+
+  // SLOT 3 (POTENCIAL): 70% Ouro (Raro), 25% Épico, 5% Lendário
+  const s3Roll = pRand();
+  let s3 = '';
+  if (s3Roll < 0.7) s3 = getRand(TRAITS_OURO);
+  else if (s3Roll < 0.95) s3 = getRand(TRAITS_EPICO_S3);
+  else s3 = getRand(TRAITS_LENDARIO_S3);
+
+  // SLOT 4 (LEGADO): 25% chance of Fardo
+  const s4 = pRand() < 0.25 ? getRand(TRAITS_FARDOS) : null;
+
+  return {
+    slot1: s1,
+    slot2: s2,
+    slot3: s3,
+    slot4: s4,
+    slot3Hidden: player.totalRating < 800
+  };
+};
 
 const generateName = () => {
   const gender = Math.random() < 0.5 ? 'M' : 'F';
@@ -193,23 +227,16 @@ const calculateFusions = (p: Pentagon, pos: PositionType): { fusions: FusionSkil
 };
 
 export const generateBadges = (totalRating: number): Badges => {
-  const badges: Badges = {
-    slot1: technicalTraits[randomInt(0, technicalTraits.length - 1)],
+  // We use a dummy player object or just rating to trigger the new DNA logic
+  // But actually, regenerateDNA needs a player ID for deterministic seeding.
+  // Let's refactor generatePlayer to call regenerateDNA directly.
+  return {
+    slot1: null,
     slot2: null,
     slot3: null,
+    slot4: null,
+    slot3Hidden: true
   };
-
-  if (totalRating < 500) {
-    badges.slot2 = negativeProfileTraits[randomInt(0, negativeProfileTraits.length - 1)];
-  } else if (totalRating > 750) {
-    badges.slot2 = positiveProfileTraits[randomInt(0, positiveProfileTraits.length - 1)];
-  }
-
-  if (totalRating >= 850) {
-    badges.slot3 = specialTraits[randomInt(0, specialTraits.length - 1)];
-  }
-
-  return badges;
 };
 
 export const generatePlayer = (id: string, district: District, ratingOverride?: number, forcedRole?: PlayerRole): Player => {
@@ -244,7 +271,7 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
     lastMatchRatings.push(Number((Math.random() * 5.5 + 4.0).toFixed(1)));
   }
 
-  return {
+  const player: Player = {
     id,
     name,
     nickname,
@@ -258,7 +285,7 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
     potential,
     currentPhase: 6.0,
     phaseHistory: lastMatchRatings.slice(0, 3),
-    badges,
+    badges: { slot1: null, slot2: null, slot3: null, slot4: null, slot3Hidden: true }, // Placeholder
     contract: {
       teamId: null,
     },
@@ -268,10 +295,17 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
       averageRating: 0,
       gamesPlayed: 0,
       lastMatchRatings,
+      benchGamesCount: 0,
+      seasonRatingDelta: 0
     },
     satisfaction: randomInt(50, 100),
     trainingProgress: 0,
+    fatigue: 0,
+    achievements: []
   };
+
+  player.badges = regenerateDNA(player);
+  return player;
 };
 
 const teamNames = [
@@ -430,14 +464,20 @@ export const generateManager = (id: string, district: District): Manager => {
       scout: randomInt(10, 100),
     },
     career: {
-      titlesWon: randomInt(0, 10),
+      titlesWon: randomInt(0, 5),
+      totalLeagueTitles: 0,
+      totalCupTitles: 0,
+      hallOfFameEntries: 0,
+      consecutiveTitles: 0,
       currentTeamId: null,
       historyTeamIds: [],
     },
+    achievements: []
   };
 };
 
 export const generateInitialState = (): GameState => {
+
   resetGeneratorSeed(); // FIXED BASE: Ensure every new game starts the same way
   const players: Record<string, Player> = {};
   const teams: Record<string, Team> = {};
@@ -506,39 +546,12 @@ export const generateInitialState = (): GameState => {
     managers[managerId].career.currentTeamId = teamId;
   });
 
-  const ratingPool = generateRatingPool();
-  let ratingIndex = 0;
-  const nextRating = () => ratingPool[ratingIndex++] ?? randomInt(400, 1000);
+  // Use the new seedUniverse script to handle 1000 players and Cap-based distribution
+  const { players: seededPlayers, teams: seededTeams } = seedUniverse(Object.values(teams), _seed);
 
-  const initialRoles: PlayerRole[] = [
-    'GOL', 'GOL', 'GOL',
-    'ZAG', 'ZAG', 'ZAG', 'ZAG', 'ZAG', 'ZAG', 'ZAG', 'ZAG',
-    'MEI', 'MEI', 'MEI', 'MEI', 'MEI', 'MEI', 'MEI',
-    'ATA', 'ATA', 'ATA', 'ATA', 'ATA'
-  ];
-
-  let playerIndex = 1;
-  Object.keys(teams).forEach((teamId) => {
-    const team = teams[teamId];
-    for (let i = 0; i < 25; i++) {
-      const playerId = `p_${playerIndex}`;
-      const forcedRole = i < initialRoles.length ? initialRoles[i] : undefined;
-      players[playerId] = generatePlayer(playerId, team.district, nextRating(), forcedRole);
-      teams[teamId].squad.push(playerId);
-      players[playerId].contract.teamId = teamId;
-      playerIndex++;
-    }
-    const target = teamTargets[team.name];
-    if (target) normalizeTeamSquadRating(team, players, target);
-  });
-
-  for (let i = 0; i < 20; i++) {
-    for (let j = 0; j < 10; j++) {
-      const playerId = `p_${playerIndex}`;
-      players[playerId] = generatePlayer(playerId, 'EXILADO', nextRating());
-      playerIndex++;
-    }
-  }
+  // Merge seeded data back into the state structures
+  Object.keys(seededPlayers).forEach(id => { players[id] = seededPlayers[id]; });
+  Object.keys(seededTeams).forEach(id => { teams[id] = seededTeams[id]; });
 
   // Setup Leagues
   const teamList = Object.values(teams);
@@ -630,12 +643,17 @@ export const generateInitialState = (): GameState => {
         final: null,
         winnerId: null
       },
+      phase: 'REGULAR_SEASON',
+      news: [],
+      history: [],
       transferWindowOpen: true,
       rank1000PlayerId: null,
       currentSeason: 2050,
+      currentDay: -1,
       currentRound: 1,
       currentDate: gameNow.toISOString(),
       seasonStartReal: seasonStartReal,
+      isInitialSeed: true, // Marker for first run
     },
     worldId: 'default',
     userTeamId: null,

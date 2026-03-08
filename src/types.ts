@@ -22,13 +22,27 @@ export interface FusionSkills {
 }
 
 export interface Badges {
-  slot1: string | null; // Traço Técnico
-  slot2: string | null; // Traço de Perfil (Negativo < 500, Positivo > 750)
-  slot3: string | null; // Especial (850+)
+  slot1: string | null; // DNA BASE: 70% Bronze, 30% Prata
+  slot2: string | null; // DNA ELITE: 60% Prata, 40% Ouro
+  slot3: string | null; // DNA POTENCIAL: 70% Ouro, 25% Épico, 5% Lendário
+  slot4: string | null; // DNA LEGADO: Fardos (25% chance) ou Aprendizado
+  slot3Hidden: boolean; // Revela no Rating 800
+  trainingSlot4?: {
+    trait: string;
+    daysLeft: number;
+    type: 'CURE' | 'LEARN';
+    targetRarity: 'Bronze' | 'Prata' | 'Ouro' | 'Épico' | 'Lendário';
+  };
 }
 
 export interface Contract {
   teamId: string | null;
+}
+
+export interface Achievement {
+  season: number;
+  title: string;
+  type: 'Clube' | 'Distrito' | 'Individual';
 }
 
 export interface PlayerHistory {
@@ -37,6 +51,8 @@ export interface PlayerHistory {
   averageRating: number;
   gamesPlayed: number;
   lastMatchRatings: number[]; // Array of last 5 match ratings (0.0 - 10.0)
+  benchGamesCount: number; // For satisfaction logic
+  seasonRatingDelta: number; // Cap at +/- 90
 }
 
 export interface Player {
@@ -63,6 +79,8 @@ export interface Player {
   history: PlayerHistory;
   satisfaction: number; // 0-100
   trainingProgress: number; // 0-100
+  fatigue: number; // 0-100 (New for District Cup)
+  achievements: Achievement[];
 }
 
 export type LeagueColor = 'Cyan' | 'Orange' | 'Green' | 'Purple';
@@ -132,9 +150,14 @@ export interface Manager {
   };
   career: {
     titlesWon: number;
+    totalLeagueTitles: number;
+    totalCupTitles: number;
+    hallOfFameEntries: number;
+    consecutiveTitles: number;
     currentTeamId: string | null;
     historyTeamIds: string[];
   };
+  achievements: Achievement[];
 }
 
 export type MatchStatus = 'SCHEDULED' | 'LOCKED' | 'PLAYING' | 'FINISHED';
@@ -297,12 +320,31 @@ export interface LeagueState {
 }
 
 export type WorldStatus = 'DRAFT' | 'LOBBY' | 'ACTIVE' | 'FINISHED';
+export type SeasonPhase = 'REGULAR_SEASON' | 'ELITE_CUP' | 'DISTRICT_CUP' | 'OFFSEASON';
+
+export interface NewsItem {
+  id: string;
+  date: string;
+  title: string;
+  content: string;
+  type: 'TRANSFER' | 'EXILE' | 'CHAMPION' | 'CUP' | 'MIGRATION' | 'SYSTEM';
+  importance: 1 | 2 | 3; // 3 is highest
+}
+
+export interface SeasonReport {
+  season: number;
+  finalStandings: Record<string, LeagueTeamStats[]>;
+  reallocatedTeams: { teamId: string; from: District; to: District }[];
+  profitWinner: { teamId: string; capGain: number };
+  mvpRating: { playerId: string; ratingGain: number };
+}
 
 export interface WorldState {
   id?: string;
   name?: string;
   status: WorldStatus;
   currentDate: string;
+  currentDay: number;
   currentRound: number;
   currentSeason?: number;
   totalRounds?: number;
@@ -312,6 +354,11 @@ export interface WorldState {
   leagues: Record<string, LeagueState>;
   eliteCup: EliteCupState;
   districtCup: DistrictCupState;
+  phase: SeasonPhase;
+  news: NewsItem[];
+  history: SeasonReport[];
+  isInitialSeed?: boolean;
+  draftProposals?: { playerId: string; managerId: string; teamId: string; priority: number }[];
 }
 
 export interface TrainingState {

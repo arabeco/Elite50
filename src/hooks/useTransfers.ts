@@ -1,6 +1,8 @@
 import { useGame, useGameDispatch } from '../store/GameContext';
 import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
+import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/gameLogic';
+import { SQUAD_SIZE_MAX } from '../constants/gameConstants';
 
 export const useTransfers = (userTeamId: string | null, totalPoints: number, powerCap: number) => {
     const { state, setState, isOnline } = useGame();
@@ -8,54 +10,55 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
 
     const handleMakeProposal = async (player: Player) => {
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
-        const isDraft = (state.world as any).status === 'DRAFT';
+        const isLobby = state.world.status === 'LOBBY';
+        const isDraftDay = isLobby && (state.world.currentDay === 0 || state.world.currentDay === 1 || state.world.currentDay === 2);
 
         if (!userTeam) {
             addToast('Você precisa estar em um time para fazer uma proposta!', 'error');
             return;
         }
 
-        if (userTeam.squad.length >= 25) {
-            addToast('Seu elenco já está cheio (máximo 25 jogadores)!', 'error');
+        // Check if already proposed to prevent double clicks/duplicates
+        const isAlreadyProposed = state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
+        if (isDraftDay && isAlreadyProposed) {
+            return; // Already in wishlist
+        }
+
+        if (userTeam.squad.length >= SQUAD_SIZE_MAX) {
+            addToast(`Seu elenco já está cheio (máximo ${SQUAD_SIZE_MAX} jogadores)!`, 'error');
             return;
         }
 
-        if (!isDraft && (player.satisfaction || 70) >= 80) {
+        if (!isDraftDay && (player.satisfaction || 70) >= 80) {
             addToast(`${player.nickname} está muito feliz no clube atual e não tem interesse em sair agora. (Satisfação: ${player.satisfaction}%)`, 'warning');
             return;
         }
 
         const currentPower = userTeam.squad.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
-        const nextTotalPoints = currentPower + player.totalRating;
+        // Also account for pending proposals in the power cap check
+        const pendingPower = (state.world.draftProposals || [])
+            .filter(p => p.managerId === state.userManagerId)
+            .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
+
+        const nextTotalPoints = currentPower + pendingPower + player.totalRating;
 
         if (nextTotalPoints > powerCap) {
             addToast(`A vinda de ${player.nickname} excederia o limite de ${powerCap} pts de Score!`, 'error');
             return;
         }
 
-        const confirmMsg = isDraft
-            ? `Deseja contratar ${player.nickname} para o seu novo elenco por ${player.totalRating} pts?`
-            : `Deseja enviar uma proposta de roubo para ${player.nickname} por ${player.totalRating} pts? A IA responderá no próximo dia.`;
-
-        if (window.confirm(confirmMsg)) {
-            try {
-                if (isDraft) {
-                    // Instant transfer during draft
-                    setState(prev => {
-                        const newState = { ...prev };
-                        const myTeam = newState.teams[userTeam.id];
-                        const targetId = player.contract.teamId;
-
-                        if (targetId) {
-                            newState.teams[targetId].squad = newState.teams[targetId].squad.filter(id => id !== player.id);
-                        }
-                        myTeam.squad.push(player.id);
-                        newState.players[player.id].contract.teamId = userTeam.id;
-                        newState.players[player.id].satisfaction = 100; // High satisfaction on join
-                        return newState;
-                    });
-                    addToast(`${player.nickname} contratado para o elenco!`, 'success');
-                } else {
+        if (isDraftDay) {
+            if (!state.userManagerId) {
+                addToast('User Manager ID não encontrado!', 'error');
+                return;
+            }
+            // Genesis Draft Day 0, 1 or 2 wishlisting - No confirmation for draft to make it feel like "shopping"
+            setState(prev => submitProposals(prev, state.userManagerId!, [player.id]));
+            addToast(`${player.nickname} adicionado à Wishlist de Contratação!`, 'success');
+        } else {
+            const confirmMsg = `Deseja enviar uma proposta de roubo para ${player.nickname} por ${player.totalRating} pts? A IA responderá no próximo dia.`;
+            if (window.confirm(confirmMsg)) {
+                try {
                     const newProposal: any = {
                         id: `prop_${Date.now()}`,
                         playerId: player.id,
@@ -72,11 +75,20 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     }));
 
                     addToast(`Proposta de roubo enviada para ${player.nickname}! Aguarde a resposta da IA.`, 'success');
+                } catch (error) {
+                    console.error('Erro na transferência:', error);
+                    addToast('Erro ao processar transferência.', 'error');
                 }
-            } catch (error) {
-                console.error('Erro na transferência:', error);
-                addToast('Erro ao processar transferência.', 'error');
             }
+        }
+    };
+
+    const handleCancelDraftProposal = (playerId: string) => {
+        if (!state.userManagerId) return;
+        setState(prev => cancelDraftProposal(prev, state.userManagerId!, playerId));
+        const player = state.players[playerId];
+        if (player) {
+            addToast(`${player.nickname} removido da sua Wishlist.`, 'info');
         }
     };
 
@@ -269,5 +281,5 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         }
     };
 
-    return { handleMakeProposal, handleSellPlayer, handleSendTradeOffer };
+    return { handleMakeProposal, handleSellPlayer, handleSendTradeOffer, handleCancelDraftProposal };
 };

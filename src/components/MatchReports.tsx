@@ -65,13 +65,19 @@ export const LiveReport: React.FC<LiveReportProps> = ({
           {/* Home Team */}
           <div className="flex flex-col items-center flex-1">
             <div className="mb-2">
-              <TeamLogo
-                primaryColor={homeTeam.logo.primary}
-                secondaryColor={homeTeam.logo.secondary}
-                patternId={homeTeam.logo.patternId as any}
-                symbolId={homeTeam.logo.symbolId}
-                size={48}
-              />
+              {homeTeam.logo ? (
+                <TeamLogo
+                  primaryColor={homeTeam.logo.primary}
+                  secondaryColor={homeTeam.logo.secondary}
+                  patternId={homeTeam.logo.patternId as any}
+                  symbolId={homeTeam.logo.symbolId}
+                  size={48}
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                  <span className="text-[10px] font-black text-white/20 tracking-tighter uppercase italic">Club</span>
+                </div>
+              )}
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{homeTeam.name}</span>
           </div>
@@ -88,13 +94,19 @@ export const LiveReport: React.FC<LiveReportProps> = ({
           {/* Away Team */}
           <div className="flex flex-col items-center flex-1">
             <div className="mb-2">
-              <TeamLogo
-                primaryColor={awayTeam.logo.primary}
-                secondaryColor={awayTeam.logo.secondary}
-                patternId={awayTeam.logo.patternId as any}
-                symbolId={awayTeam.logo.symbolId}
-                size={48}
-              />
+              {awayTeam.logo ? (
+                <TeamLogo
+                  primaryColor={awayTeam.logo.primary}
+                  secondaryColor={awayTeam.logo.secondary}
+                  patternId={awayTeam.logo.patternId as any}
+                  symbolId={awayTeam.logo.symbolId}
+                  size={48}
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                  <span className="text-[10px] font-black text-white/20 tracking-tighter uppercase italic">Club</span>
+                </div>
+              )}
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{awayTeam.name}</span>
           </div>
@@ -263,13 +275,19 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 
           <div className="flex items-center gap-12">
             <div className="flex flex-col items-center gap-2">
-              <TeamLogo
-                primaryColor={homeTeam.logo.primary}
-                secondaryColor={homeTeam.logo.secondary}
-                patternId={homeTeam.logo.patternId as any}
-                symbolId={homeTeam.logo.symbolId}
-                size={64}
-              />
+              {homeTeam.logo ? (
+                <TeamLogo
+                  primaryColor={homeTeam.logo.primary}
+                  secondaryColor={homeTeam.logo.secondary}
+                  patternId={homeTeam.logo.patternId as any}
+                  symbolId={homeTeam.logo.symbolId}
+                  size={64}
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                  <span className="text-xs font-black text-white/20 tracking-tighter uppercase italic">Club</span>
+                </div>
+              )}
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
                 {isRevealed ? result.homeScore : '0'}
               </span>
@@ -288,13 +306,19 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
             </div>
 
             <div className="flex flex-col items-center gap-2">
-              <TeamLogo
-                primaryColor={awayTeam.logo.primary}
-                secondaryColor={awayTeam.logo.secondary}
-                patternId={awayTeam.logo.patternId as any}
-                symbolId={awayTeam.logo.symbolId}
-                size={64}
-              />
+              {awayTeam.logo ? (
+                <TeamLogo
+                  primaryColor={awayTeam.logo.primary}
+                  secondaryColor={awayTeam.logo.secondary}
+                  patternId={awayTeam.logo.patternId as any}
+                  symbolId={awayTeam.logo.symbolId}
+                  size={64}
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                  <span className="text-xs font-black text-white/20 tracking-tighter uppercase italic">Club</span>
+                </div>
+              )}
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
                 {isRevealed ? result.awayScore : '0'}
               </span>

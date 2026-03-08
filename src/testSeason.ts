@@ -40,8 +40,13 @@ async function runSeasonSimulation() {
             career: {
                 currentTeamId: m.teamId,
                 historyTeamIds: [],
-                titlesWon: 0
-            }
+                titlesWon: 0,
+                totalLeagueTitles: 0,
+                totalCupTitles: 0,
+                hallOfFameEntries: 0,
+                consecutiveTitles: 0
+            },
+            achievements: []
         };
     });
 

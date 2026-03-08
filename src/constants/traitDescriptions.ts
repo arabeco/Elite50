@@ -1,34 +1,40 @@
 export const TRAIT_DESCRIPTIONS: Record<string, string> = {
-    // Technical
-    'Chute Forte': 'Aumenta a precisão e força em finalizações de longa distância.',
-    'Drible Curto': 'Melhora o controle de bola em espaços reduzidos.',
-    'Passe Longo': 'Aumenta a chance de acerto em lançamentos em profundidade.',
-    'Cabeceio': 'Especialista em jogadas aéreas ofensivas e defensivas.',
-    'Desarme Preciso': 'Reduz a chance de falta ao tentar roubar a bola.',
-    'Velocista': 'Explosão física superior em contra-ataques.',
-    'Maestro': 'Visão de jogo privilegiada, aumenta bônus de passes para o time.',
-    'Muralha': 'Aumenta consideravelmente a defesa em chutes cara-a-cara.',
-    'Goleador': 'Instinto de posicionamento letal dentro da área.',
-    'Motorzinho': 'Estamina superior, mantém o ritmo alto até o fim do jogo.',
+    // DNA BASE (Bronze)
+    'Ofensivo': 'Aumenta a agressividade e presença na área adversária (+1%).',
+    'Folego': 'Melhora a resistência física básica em corridas curtas (+1%).',
+    'Passe Bronze': 'Precisão técnica em passes curtos de conexão (+1%).',
+    'Finaliz Bronze': 'Capacidade básica de conclusão de jogadas (+1%).',
+    'Def Bronze': 'Senso de cobertura e bote básico defensivo (+1%).',
 
-    // Profile (Negative/Positive)
-    'Preciosista': 'Tende a segurar muito a bola, perdendo o tempo do passe.',
-    'Individualista': 'Prefere o chute mesmo quando há companheiros melhor posicionados.',
-    'Desatento': 'Pode cometer erros bobos em passes curtos sob pressão.',
-    'Instável': 'O rating pode oscilar muito durante a partida.',
-    'Preguiçoso': 'Pode deixar de acompanhar marcações em transições defensivas.',
-    'Pavio Curto': 'Maior probabilidade de receber cartões por reclamação ou faltas.',
-    'Referência': 'Segura a bola no ataque, permitindo a subida do time.',
-    'Combativo': 'Não desiste de nenhuma dividida, intimida o adversário.',
-    'Vertical': 'Busca sempre o passe para frente, acelerando o jogo.',
-    'Cadenciador': 'Dita o ritmo, acalmando o jogo quando necessário.',
-    'Líder': 'Aumenta a moral e satisfação dos companheiros ao redor.',
-    'Inspirador': 'Capaz de jogadas improváveis que elevam o Hype do time.',
+    // DNA ELITE (Prata/Ouro)
+    'Consistência': 'Mantém a performance estável independente da fadiga (+3%).',
+    'Versatilidade': 'Capacidade de atuar bem em diferentes setores (+3%).',
+    'Defesa Prata': 'Intercepções eficientes e botes precisos (+3%).',
+    'Finaliz Prata': 'Poder de chute e precisão em ângulos difíceis (+3%).',
+    'Passe Prata': 'Visão de jogo para passes em profundidade (+3%).',
+    'Finaliz Ouro': 'Finalizador letal com alta precisão sob pressão (+5%).',
+    'Passe Ouro': 'Mestre das assistências e passes que quebram linhas (+5%).',
+    'Defesa Ouro': 'Muralha intransponível com botes cirúrgicos (+5%).',
+    'Liderança': 'Eleva a moral dos companheiros e reduz a pressão (+5%).',
+    'Folego Ouro': 'Pulmão extra para manter alta intensidade o jogo todo (+5%).',
 
-    // Special
-    'Dono do Jogo': 'Assume a responsabilidade em momentos críticos da partida.',
-    'Passo à Frente': 'Sempre bem posicionado para interceptar passes.',
-    'Gênio': 'Atributos técnicos recebem bônus massivo em jogadas decisivas.',
-    'Destreza Máxima': 'Inimputável no 1 contra 1 defensivo.',
-    'Frieza Absoluta': 'Nunca erra pênaltis ou finalizações decisivas no último minuto.'
+    // DNA POTENCIAL (Lendário/Épico)
+    'Finaliz Lendária': 'Instinto de gol absoluto. Quase infalível na área (+8%).',
+    'Passe Lendária': 'Precisão cirúrgica. Encontra brechas impossíveis (+8%).',
+    'Defesa Lendária': 'O defensor definitivo. Antecipação perfeita (+8%).',
+    'Máquina': 'Performance sobre-humana e dreno de fôlego reduzido (+4% Geral, -10% Dreno).',
+    'Catalisador': 'Aura de bônus que potencializa o seu setor (+3% Setorial).',
+    'Gênio': 'A evolução não é limitada pelo teto de elite (Sem redutor pós-800).',
+    'Clutch': 'Aumenta consideravelmente o poder em jogos decisivos (+7%).',
+    'Protagonista': 'Poder máximo quando a intensidade do jogo é alta (+10%).',
+
+    // DNA LEGADO (Fardos)
+    'Displicente': 'Pode errar jogadas fáceis por excesso de confiança (-4%).',
+    'Pavio Curto': 'Propensão a cartões e descontrole emocional (-4%).',
+    'Preguiçoso': 'Baixo empenho defensivo em momentos de transição (-4%).',
+    'Vidro': 'Maior sensibilidade a choques físicos e fadiga (-4%).',
+    'Inconstante': 'Performance que oscila drasticamente entre tempos (-4%).',
+    'Estático': 'Dificuldade de movimentação sem a bola (-4%).',
+    'Individualista': 'Dificulta a fluidez do jogo coletivo (-4%).',
+    'Boêmio': 'Recuperação de stamina mais lenta entre jogos (-4%).',
 };

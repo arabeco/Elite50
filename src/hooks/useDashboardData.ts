@@ -13,7 +13,11 @@ export const useDashboardData = () => {
     const { state } = useGame();
 
     const userManager = state.userManagerId ? state.managers[state.userManagerId] : null;
-    const userTeam = userManager?.career.currentTeamId ? state.teams[userManager.career.currentTeamId] : null;
+    let userTeam = userManager?.career.currentTeamId ? state.teams[userManager.career.currentTeamId] : null;
+
+    if (!userTeam && state.userTeamId) {
+        userTeam = state.teams[state.userTeamId] || null;
+    }
 
     const baseDate = new Date(state.world.currentDate || new Date().toISOString());
     const seasonStartReal = state.world.seasonStartReal ? new Date(state.world.seasonStartReal) : null;
@@ -41,18 +45,14 @@ export const useDashboardData = () => {
     const seasonDaysTotal = SEASON_DAYS;
     const msPerDay = 1000 * 60 * 60 * 24;
 
-    let daysPassed = 0;
-    let seasonProgress = 0;
+    let daysPassed = state.world.currentDay || 0;
+    let seasonProgress = Math.min(100, Math.round((daysPassed / seasonDaysTotal) * 100));
 
-    if (seasonStartReal) {
+    if (daysPassed === 0 && seasonStartReal) {
         const diffMs = baseDate.getTime() - seasonStartReal.getTime();
         if (diffMs > 0) {
             daysPassed = Math.floor(diffMs / msPerDay) + 1;
             seasonProgress = Math.min(100, Math.round((daysPassed / seasonDaysTotal) * 100));
-        } else {
-            // Day 0
-            daysPassed = 0;
-            seasonProgress = 0;
         }
     }
 

@@ -8,8 +8,6 @@ export const WorldSelector: React.FC = () => {
   const { worlds, publicWorlds, setWorldId, loadGame, joinGame, setState, saveGame, refreshWorlds, deleteWorld, logout } = useGame();
   const [isCreating, setIsCreating] = useState(false);
   const [newWorldName, setNewWorldName] = useState('');
-  const [tempInitialState, setTempInitialState] = useState<any | null>(null);
-  const [selectingTeam, setSelectingTeam] = useState(false);
   const [activeTab, setActiveTab] = useState<'my-worlds' | 'community'>('my-worlds');
 
   const handleSelectWorld = async (id: string, isPublic: boolean = false) => {
@@ -23,53 +21,26 @@ export const WorldSelector: React.FC = () => {
   const handleCreateWorld = async () => {
     if (!newWorldName.trim()) return;
 
+    const id = Date.now().toString();
     const initialState = generateInitialState();
     (initialState.world as any).name = newWorldName;
 
-    setTempInitialState(initialState);
-    setSelectingTeam(true);
-    setIsCreating(false);
-  };
-
-  const handleConfirmTeam = async (teamId: string) => {
-    if (!tempInitialState) return;
-
-    const id = Date.now().toString();
-    const finalState = { ...tempInitialState };
-
-    // Set User Team
-    finalState.userTeamId = teamId;
-
-    // Clear the selected team's squad for the 10,000pt draft
-    const team = finalState.teams[teamId];
-    if (team) {
-      // Free current players of this team
-      team.squad.forEach((pId: string) => {
-        if (finalState.players[pId]) {
-          finalState.players[pId].contract.teamId = null;
-        }
-      });
-      team.squad = [];
-      team.lineup = {};
-      team.managerId = finalState.userTeamId; // Assuming user is the manager
-    }
-
-    // Set status to DRAFT
-    finalState.world.status = 'DRAFT';
-    finalState.world.transferWindowOpen = true;
+    // Set status to LOBBY to trigger onboarding via Dashboard -> NewGameFlow
+    initialState.world.status = 'LOBBY';
+    initialState.userTeamId = null; // No team selected yet
 
     // Set local state
-    setState(finalState);
+    setState(initialState);
     setWorldId(id);
 
     // Save to supabase
-    await saveGame(finalState);
+    await saveGame(initialState);
     await refreshWorlds();
 
-    setTempInitialState(null);
-    setSelectingTeam(false);
+    setIsCreating(false);
     setNewWorldName('');
   };
+
 
   const handleLogout = async () => {
     await logout();
@@ -117,35 +88,7 @@ export const WorldSelector: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {selectingTeam && tempInitialState ? (
-            <div className="col-span-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="mb-6 text-center">
-                <h2 className="text-xl font-black text-cyan-400 uppercase tracking-widest mb-2">Selecione seu Time</h2>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Você assumirá o controle deste clube e reconstruirá o elenco com 10.000 pts</p>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2 slim-scrollbar p-1">
-                {Object.values(tempInitialState.teams as Record<string, any>).filter(t => t.district !== 'EXILADO' && !t.name.startsWith('Seleção')).map((team: any) => (
-                  <button
-                    key={team.id}
-                    onClick={() => handleConfirmTeam(team.id)}
-                    className="group flex flex-col items-center p-4 bg-black/40 border border-white/5 hover:border-cyan-500/50 rounded-2xl transition-all hover:scale-105"
-                  >
-                    <div className="w-12 h-12 rounded-xl mb-3 flex items-center justify-center bg-black/40 border border-white/10 group-hover:border-cyan-500/30 overflow-hidden">
-                      <span className="text-lg font-black italic text-white/20 group-hover:text-cyan-400 transition-colors">{team.name[0]}</span>
-                    </div>
-                    <span className="text-[9px] font-black text-white uppercase tracking-tighter text-center line-clamp-1">{team.name}</span>
-                    <span className="text-[7px] font-bold text-slate-500 uppercase tracking-widest mt-1">{team.district}</span>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setSelectingTeam(false)}
-                className="mt-6 w-full py-3 bg-white/5 hover:bg-white/10 text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all"
-              >
-                Voltar
-              </button>
-            </div>
-          ) : activeTab === 'my-worlds' ? (
+          {activeTab === 'my-worlds' ? (
             <>
               {worlds.map((world) => (
                 <div

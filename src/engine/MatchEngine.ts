@@ -1,6 +1,7 @@
 import { Player, MatchEvent, MatchResult as MatchResultType, PlayStyle, Mentality, TacticalCard } from '../types';
 import { COMMENTARY_COUNT, COMMENTARY_INTERVAL_SECONDS, MATCH_DURATION_MINUTES, MATCH_REAL_TIME_SECONDS } from '../constants/gameConstants';
 import { calculateMatchEvent, SectorInput } from './simulation';
+import { regenerateDNA } from './generator';
 
 export interface TeamStats {
   id: string;
@@ -142,6 +143,44 @@ const COMMENTARY_TEMPLATES = [
   { title: "FIM DE PAPO", desc: "Apito final do árbitro cibernético! Batalha encerrada." }
 ];
 
+const calculateDNAEffect = (player: Player, sector: 'attack' | 'midfield' | 'defense' | 'goalkeeper', matchIntensity: number = 50, isDecisiveMatch: boolean = false): { multiplier: number, staminaBonus: number } => {
+  let multiplier = 1.0;
+  let staminaBonus = 1.0;
+
+  const badges = player.badges || regenerateDNA(player);
+  const slots = [badges.slot1, badges.slot2, badges.slot3, badges.slot4];
+
+  slots.forEach(trait => {
+    if (!trait) return;
+
+    // Bronze (+1%)
+    if (trait.includes('Bronze')) multiplier *= 1.01;
+    // Prata (+3%)
+    if (trait.includes('Prata')) multiplier *= 1.03;
+    // Ouro (+5%)
+    if (trait.includes('Ouro')) multiplier *= 1.05;
+    // Lendário (Slot 3) (+8%)
+    if (trait.includes('Lendária')) multiplier *= 1.08;
+
+    // Épicos
+    if (trait === 'Máquina') {
+      multiplier *= 1.04;
+      staminaBonus *= 0.90; // -10% dreno
+    }
+    if (trait === 'Catalisador') multiplier *= 1.03; // Aura simple boost for self now, logic can be expanded
+
+    // Especiais
+    if (trait === 'Clutch' && isDecisiveMatch) multiplier *= 1.07;
+    if (trait === 'Protagonista' && matchIntensity > 80) multiplier *= 1.10;
+
+    // Fardos (-4%)
+    const fardos = ['Displicente', 'Pavio Curto', 'Preguiçoso', 'Vidro', 'Inconstante', 'Estático', 'Individualista', 'Boêmio'];
+    if (fardos.includes(trait)) multiplier *= 0.96;
+  });
+
+  return { multiplier, staminaBonus };
+};
+
 export function simulateMatch(
   home: TeamStats,
   away: TeamStats,
@@ -179,6 +218,11 @@ export function simulateMatch(
 
   const defaultSector = { chemistry: 100, phase: 6, stamina: 100, tacticalBonus: 1.0, chaosMax: 10 };
 
+  // Initialize match-only stamina for all participating players
+  const playerStamina: Record<string, number> = {};
+  homePlayers.forEach(p => playerStamina[p.id] = 100);
+  awayPlayers.forEach(p => playerStamina[p.id] = 100);
+
   // Sectors initialized below with full tactical calculation
 
   const homeEffect = PLAYSTYLE_EFFECTS[home.playStyle] || PLAYSTYLE_EFFECTS['Equilibrado'];
@@ -211,6 +255,29 @@ export function simulateMatch(
     return { att, mid, def, gk, chaos };
   };
 
+  // --- DNA SECTOR AGGREGATION ---
+  const getSectorDNA = (players: Player[], sector: 'attack' | 'midfield' | 'defense' | 'goalkeeper') => {
+    let mult = 1.0;
+    let stam = 1.0;
+    if (!players || players.length === 0) return { mult, stam };
+
+    players.forEach(p => {
+      const effect = calculateDNAEffect(p, sector);
+      mult *= effect.multiplier;
+      stam *= effect.staminaBonus;
+    });
+
+    // Smooth the multiplier to prevent too much power creep when 11 players have it
+    // We take the cube root of the product of modifiers to normalize it
+    const normalizedMult = Math.pow(mult, 1 / Math.max(1, players.length / 3));
+    return { mult: normalizedMult, stam };
+  };
+
+  const homeAttDNA = getSectorDNA(homePlayers.filter(p => p.role === 'ATA'), 'attack');
+  const homeDefDNA = getSectorDNA(homePlayers.filter(p => p.role === 'ZAG'), 'defense');
+  const awayAttDNA = getSectorDNA(awayPlayers.filter(p => p.role === 'ATA'), 'attack');
+  const awayDefDNA = getSectorDNA(awayPlayers.filter(p => p.role === 'ZAG'), 'defense');
+
   const homeCards = getCardEffects(home.slots);
   const awayCards = getCardEffects(away.slots);
 
@@ -219,14 +286,14 @@ export function simulateMatch(
     averageAttribute: home.attack,
     chemistry: home.chemistry,
     chaosMax: 10 + homeCards.chaos,
-    tacticalBonus: (homeEffect.att || 1.0) * (homeCards.att || 1.0) * (1 + ((home.linePosition || 50) - 50) / 200) + (homeMentality.attBonus || 0) + (home.aggressiveness / 500)
+    tacticalBonus: (homeEffect.att || 1.0) * (homeCards.att || 1.0) * (1 + ((home.linePosition || 50) - 50) / 200) + (homeMentality.attBonus || 0) + (home.aggressiveness / 500) * homeAttDNA.mult
   };
   const homeDefenseSector: SectorInput = {
     ...defaultSector,
     averageAttribute: home.defense,
     chemistry: home.chemistry,
     chaosMax: 10 + homeCards.chaos,
-    tacticalBonus: (homeEffect.def || 1.0) * (homeCards.def || 1.0) * (1 + (50 - (home.linePosition || 50)) / 200) - (homeMentality.defPenalty || 0) + (home.aggressiveness / 500)
+    tacticalBonus: (homeEffect.def || 1.0) * (homeCards.def || 1.0) * (1 + (50 - (home.linePosition || 50)) / 200) - (homeMentality.defPenalty || 0) + (home.aggressiveness / 500) * homeDefDNA.mult
   };
 
   const awayAttackSector: SectorInput = {
@@ -234,14 +301,14 @@ export function simulateMatch(
     averageAttribute: away.attack,
     chemistry: away.chemistry,
     chaosMax: 10 + awayCards.chaos,
-    tacticalBonus: (awayEffect.att || 1.0) * (awayCards.att || 1.0) * (1 + ((away.linePosition || 50) - 50) / 200) + (awayMentality.attBonus || 0) + (away.aggressiveness / 500)
+    tacticalBonus: (awayEffect.att || 1.0) * (awayCards.att || 1.0) * (1 + ((away.linePosition || 50) - 50) / 200) + (awayMentality.attBonus || 0) + (away.aggressiveness / 500) * awayAttDNA.mult
   };
   const awayDefenseSector: SectorInput = {
     ...defaultSector,
     averageAttribute: away.defense,
     chemistry: away.chemistry,
     chaosMax: 10 + awayCards.chaos,
-    tacticalBonus: (awayEffect.def || 1.0) * (awayCards.def || 1.0) * (1 + (50 - (away.linePosition || 50)) / 200) - (awayMentality.defPenalty || 0) + (away.aggressiveness / 500)
+    tacticalBonus: (awayEffect.def || 1.0) * (awayCards.def || 1.0) * (1 + (50 - (away.linePosition || 50)) / 200) - (awayMentality.defPenalty || 0) + (away.aggressiveness / 500) * awayDefDNA.mult
   };
 
   // --- INJECT COMMENTARY CARDS (Distributed across the match) ---
@@ -277,6 +344,18 @@ export function simulateMatch(
     const totalMid = homeMid + awayMid;
     const possessionRoll = Math.random() * totalMid;
     const hasPossession = possessionRoll < homeMid ? 'home' : 'away';
+
+    // Update Stamina Drain for all players
+    homePlayers.forEach(p => {
+      const effect = calculateDNAEffect(p, 'midfield'); // Generic check
+      const drain = (homeEffect.staminaDrain || 1.0) * (homeMentality.staminaPenalty ? 1.2 : 1.0) * effect.staminaBonus;
+      playerStamina[p.id] = Math.max(10, (playerStamina[p.id] || 100) - (drain / 45)); // Drain over 90 mins
+    });
+    awayPlayers.forEach(p => {
+      const effect = calculateDNAEffect(p, 'midfield');
+      const drain = (awayEffect.staminaDrain || 1.0) * (awayMentality.staminaPenalty ? 1.2 : 1.0) * effect.staminaBonus;
+      playerStamina[p.id] = Math.max(10, (playerStamina[p.id] || 100) - (drain / 45));
+    });
 
     if (hasPossession === 'home') {
       homePossessionWon++;
@@ -334,7 +413,13 @@ export function simulateMatch(
       const activeHome = pickWeightedRandom(homePlayers, 3);
       const activeAway = pickWeightedRandom(awayPlayers, 3);
 
-      const result = calculateMatchEvent(minute, homeAttackSector, awayDefenseSector, activeHome, activeAway);
+      const avgHomeStamina = activeHome.reduce((sum, p) => sum + (playerStamina[p.id] || 100), 0) / 3;
+      const avgAwayStamina = activeAway.reduce((sum, p) => sum + (playerStamina[p.id] || 100), 0) / 3;
+
+      const currentHomeAttack = { ...homeAttackSector, stamina: avgHomeStamina / 100 };
+      const currentAwayDefense = { ...awayDefenseSector, stamina: avgAwayStamina / 100 };
+
+      const result = calculateMatchEvent(minute, currentHomeAttack, currentAwayDefense, activeHome, activeAway);
       addRatings(result.ratings);
 
       const mainAttacker = activeHome[0];
@@ -454,7 +539,13 @@ export function simulateMatch(
       const activeAway = pickWeightedRandom(awayPlayers, 3);
       const activeHome = pickWeightedRandom(homePlayers, 3);
 
-      const result = calculateMatchEvent(minute, awayAttackSector, homeDefenseSector, activeAway, activeHome);
+      const avgAwayStamina = activeAway.reduce((sum, p) => sum + (playerStamina[p.id] || 100), 0) / 3;
+      const avgHomeStamina = activeHome.reduce((sum, p) => sum + (playerStamina[p.id] || 100), 0) / 3;
+
+      const currentAwayAttack = { ...awayAttackSector, stamina: avgAwayStamina / 100 };
+      const currentHomeDefense = { ...homeDefenseSector, stamina: avgHomeStamina / 100 };
+
+      const result = calculateMatchEvent(minute, currentAwayAttack, currentHomeDefense, activeAway, activeHome);
       addRatings(result.ratings);
 
       const mainAttacker = activeAway[0];
@@ -520,6 +611,8 @@ export function simulateMatch(
         }
       } else {
         const turnoverRoll = Math.random();
+        if (!mainAttacker || !defender) continue;
+
         if (turnoverRoll < 0.10) {
           events.push({
             id: `off_${away.id}_${minute}_${Date.now()}`, minute, realTimeSecond: currentEventSecond, type: 'OFFSIDE',

@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Briefcase, 
-  Globe, 
-  ChevronRight, 
-  AlertCircle, 
-  Zap, 
-  Search, 
-  CheckCircle2, 
+import {
+  Briefcase,
+  Globe,
+  ChevronRight,
+  AlertCircle,
+  Zap,
+  Search,
+  CheckCircle2,
   Trash2,
   Users,
   Trophy,
@@ -21,7 +21,7 @@ import { Player, Team, PlayerRole, District, LeagueColor, GameState } from '../t
 import { PlayerCard } from './PlayerCard';
 import { refillTeamRoster } from '../engine/generator';
 
-type Step = 'path-selection' | 'heir-choice' | 'founder-identity' | 'founder-draft';
+type Step = 'path-selection' | 'heir-choice' | 'founder-identity';
 
 export const NewGameFlow: React.FC = () => {
   const { state, setState, saveGame, isSyncing, userId } = useGame();
@@ -29,7 +29,7 @@ export const NewGameFlow: React.FC = () => {
   const [selectedHeirTeamId, setSelectedHeirTeamId] = useState('');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [managerName, setManagerName] = useState('');
-  
+
   // Founder Data
   const [founderData, setFounderData] = useState({
     name: '',
@@ -60,8 +60,8 @@ export const NewGameFlow: React.FC = () => {
       const fromNpcTeam = !playerTeam || !playerTeam.managerId;
       if (!fromNpcTeam) return false;
 
-      const matchesSearch = p.nickname.toLowerCase().includes(draftSearch.toLowerCase()) || 
-                           p.name.toLowerCase().includes(draftSearch.toLowerCase());
+      const matchesSearch = p.nickname.toLowerCase().includes(draftSearch.toLowerCase()) ||
+        p.name.toLowerCase().includes(draftSearch.toLowerCase());
       const matchesRole = draftRoleFilter === 'ALL' || p.role === draftRoleFilter;
       const matchesDistrict = draftDistrictFilter === 'ALL' || p.district === draftDistrictFilter;
       const notSelected = !selectedPlayerIds.includes(p.id);
@@ -101,7 +101,7 @@ export const NewGameFlow: React.FC = () => {
     return selectedPlayerIds.filter(id => (state.players[id]?.totalRating || 0) >= 900).length;
   }, [selectedPlayerIds, state.players]);
 
-  const isDraftValid = 
+  const isDraftValid =
     selectedPlayerIds.length === 15 &&
     currentScore <= draftScoreLimit &&
     eliteCount <= 3 &&
@@ -127,9 +127,14 @@ export const NewGameFlow: React.FC = () => {
       },
       career: {
         titlesWon: 0,
+        totalLeagueTitles: 0,
+        totalCupTitles: 0,
+        hallOfFameEntries: 0,
+        consecutiveTitles: 0,
         currentTeamId: selectedHeirTeamId,
         historyTeamIds: []
-      }
+      },
+      achievements: []
     };
 
     // Auto-generate initial lineup
@@ -147,12 +152,12 @@ export const NewGameFlow: React.FC = () => {
       { id: 'ATA2', role: 'ATA' },
       { id: 'ATA3', role: 'ATA' }
     ];
-    
+
     const availablePlayers = [...team.squad];
-    
+
     formationSlots.forEach(slot => {
       if (availablePlayers.length === 0) return;
-      
+
       // Sort available players by adjusted rating for this slot
       availablePlayers.sort((a, b) => {
         const playerA = state.players[a];
@@ -185,7 +190,8 @@ export const NewGameFlow: React.FC = () => {
       },
       world: {
         ...state.world,
-        status: 'LOBBY'
+        status: 'LOBBY' as const,
+        currentDay: 0 // Start at Day 0 (Genesis Day 0)
       },
       userTeamId: selectedHeirTeamId,
       userManagerId: managerId
@@ -196,50 +202,9 @@ export const NewGameFlow: React.FC = () => {
   };
 
   const handleFinishFounder = () => {
-    if (!isDraftValid) return;
-
-    // 1. Create the new team
     const newTeamId = `t_founder_${Date.now()}`;
-    
-    // Auto-generate initial lineup for founder team
-    const newLineup: Record<string, string> = {};
-    const formationSlots = [
-      { id: 'GOL', role: 'GOL' },
-      { id: 'ZAG1', role: 'ZAG' },
-      { id: 'ZAG2', role: 'ZAG' },
-      { id: 'ZAG3', role: 'ZAG' },
-      { id: 'ZAG4', role: 'ZAG' },
-      { id: 'MEI1', role: 'MEI' },
-      { id: 'MEI2', role: 'MEI' },
-      { id: 'MEI3', role: 'MEI' },
-      { id: 'ATA1', role: 'ATA' },
-      { id: 'ATA2', role: 'ATA' },
-      { id: 'ATA3', role: 'ATA' }
-    ];
-    
-    const availablePlayers = [...selectedPlayerIds];
-    
-    formationSlots.forEach(slot => {
-      if (availablePlayers.length === 0) return;
-      
-      // Sort available players by adjusted rating for this slot
-      availablePlayers.sort((a, b) => {
-        const playerA = state.players[a];
-        const playerB = state.players[b];
-        const ratingA = (playerA?.totalRating || 0) * (playerA?.role === slot.role ? 1.0 : 0.6);
-        const ratingB = (playerB?.totalRating || 0) * (playerB?.role === slot.role ? 1.0 : 0.6);
-        return ratingB - ratingA;
-      });
-
-      const bestPlayerId = availablePlayers.shift();
-      if (bestPlayerId) {
-        newLineup[slot.id] = bestPlayerId;
-      }
-    });
-
-    // 5. Create or update user manager
     const managerId = userId || 'm_user';
-    
+
     const newTeam: Team = {
       id: newTeamId,
       name: `${founderData.name} ${founderData.prefix}`,
@@ -255,53 +220,34 @@ export const NewGameFlow: React.FC = () => {
         preferredFormation: '4-3-3'
       },
       managerId: managerId,
-      squad: selectedPlayerIds,
-      lineup: newLineup
+      squad: [],
+      lineup: {}
     };
 
-    // 2. Update players to point to new team and handle original teams
+    // 2. Clear old team squad and set them to Free Agents
     const updatedPlayers = { ...state.players };
     const updatedTeams = { ...state.teams };
-    
-    // Identify teams that lost players and remove them from their squads
-    selectedPlayerIds.forEach(pid => {
-      const player = updatedPlayers[pid];
-      const oldTeamId = player.contract.teamId;
-      
-      if (oldTeamId && updatedTeams[oldTeamId]) {
-        updatedTeams[oldTeamId] = {
-          ...updatedTeams[oldTeamId],
-          squad: updatedTeams[oldTeamId].squad.filter(id => id !== pid)
-        };
-      }
-      
-      updatedPlayers[pid] = {
-        ...player,
-        contract: { ...player.contract, teamId: newTeamId }
-      };
-    });
 
-    // 3. Refill teams that lost players (NPC Coherent Recruitment)
-    // We target a power level around 9000-11000 for refilled teams
-    Object.keys(updatedTeams).forEach(tid => {
-      const team = updatedTeams[tid];
-      // Only refill club teams that are not the user team and have fewer than 18 players
-      if (tid.startsWith('t_') && tid !== newTeamId && team.squad.length < 18) {
-        const targetPower = team.powerCap || 10000;
-        const newSignings = refillTeamRoster(team, targetPower, updatedPlayers, team.district);
-        
-        newSignings.forEach(p => {
-          updatedPlayers[p.id] = p;
-          team.squad.push(p.id);
-        });
-      }
-    });
+    const oldTeam = updatedTeams[founderData.replacedTeamId];
+    if (oldTeam && oldTeam.squad) {
+      oldTeam.squad.forEach(pid => {
+        if (updatedPlayers[pid]) {
+          updatedPlayers[pid] = {
+            ...updatedPlayers[pid],
+            contract: { ...updatedPlayers[pid].contract, teamId: null }
+          };
+        }
+      });
+    }
+
+    // Add new team
+    updatedTeams[newTeamId] = newTeam;
 
     // 4. Update world state to replace the team in leagues
     const updatedLeagues = { ...state.world.leagues };
     Object.keys(updatedLeagues).forEach(key => {
       const league = updatedLeagues[key as keyof typeof updatedLeagues];
-      league.standings = league.standings.map(s => 
+      league.standings = league.standings.map(s =>
         s.teamId === founderData.replacedTeamId ? { ...s, teamId: newTeamId } : s
       );
       league.matches = league.matches.map(m => ({
@@ -326,9 +272,14 @@ export const NewGameFlow: React.FC = () => {
       },
       career: {
         titlesWon: 0,
+        totalLeagueTitles: 0,
+        totalCupTitles: 0,
+        hallOfFameEntries: 0,
+        consecutiveTitles: 0,
         currentTeamId: newTeamId,
         historyTeamIds: []
-      }
+      },
+      achievements: []
     };
 
     const newState: GameState = {
@@ -343,7 +294,7 @@ export const NewGameFlow: React.FC = () => {
       world: {
         ...state.world,
         leagues: updatedLeagues,
-        status: 'LOBBY' // Set to lobby on creation
+        currentDay: -1 // Start at Day -1 (Lobby Phase)
       },
       userTeamId: newTeamId,
       userManagerId: managerId
@@ -380,7 +331,7 @@ export const NewGameFlow: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full max-w-5xl relative z-10 px-4">
         {/* Path A: Heir */}
-        <button 
+        <button
           onClick={() => setStep('heir-choice')}
           className="group relative min-h-[280px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-cyan-500/40 hover:bg-cyan-500/[0.02] overflow-hidden shadow-2xl"
         >
@@ -391,12 +342,12 @@ export const NewGameFlow: React.FC = () => {
 
           {/* Glow Effect on Hover */}
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 via-transparent to-cyan-500/0 group-hover:from-cyan-500/[0.05] transition-all duration-700" />
-          
+
           <div className="relative z-10 h-full flex flex-col">
             <div className="w-12 h-12 sm:w-14 sm:h-14 xl:w-16 xl:h-16 bg-black/40 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6 xl:mb-8 group-hover:scale-110 group-hover:border-cyan-400 transition-all duration-500 shadow-lg shadow-cyan-500/10">
               <Briefcase size={24} className="text-cyan-400 sm:size-7 xl:size-8" />
             </div>
-            
+
             <div className="space-y-1 sm:space-y-2 mb-3 sm:mb-4 xl:mb-6">
               <h2 className="text-xl sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O HERDEIRO</h2>
               <div className="flex items-center gap-2">
@@ -406,17 +357,17 @@ export const NewGameFlow: React.FC = () => {
             </div>
 
             <p className="text-slate-400 text-[11px] sm:text-xs xl:text-sm leading-relaxed font-medium mb-auto">
-              Assuma o comando de um clube estabelecido. Gerencie ídolos, lide com a pressão da torcida e mantenha a tradição viva ou revolucione a estrutura de dentro para fora.
+              Assuma o comando de uma equipe que já está pronta. Você entrará num clube fechado e jogará com o elenco atual dele, sem precisar recrutar ou montar o time.
             </p>
 
             <div className="pt-4 sm:pt-6 xl:pt-8 border-t border-white/5 mt-4">
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-2 sm:gap-3 text-cyan-400 font-black text-[9px] sm:text-[10px] xl:text-[11px] uppercase tracking-[0.2em] group-hover:gap-5 transition-all">
-                  Explorar Vagas
+                  Escolher Time Pronto
                   <ArrowRight size={14} className="sm:size-4" />
                 </div>
                 <div className="flex gap-1">
-                  {[1,2,3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-cyan-500/20" />)}
+                  {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-cyan-500/20" />)}
                 </div>
               </div>
             </div>
@@ -424,7 +375,7 @@ export const NewGameFlow: React.FC = () => {
         </button>
 
         {/* Path B: Founder */}
-        <button 
+        <button
           onClick={() => setStep('founder-identity')}
           className="group relative min-h-[280px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-amber-500/40 hover:bg-amber-500/[0.02] overflow-hidden shadow-2xl"
         >
@@ -445,12 +396,12 @@ export const NewGameFlow: React.FC = () => {
               <h2 className="text-xl sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O FUNDADOR</h2>
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
-                <p className="text-amber-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">CRIAÇÃO ABSOLUTA</p>
+                <p className="text-amber-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">CRIAR TIME E DRAFTAR</p>
               </div>
             </div>
 
             <p className="text-slate-400 text-[11px] sm:text-xs xl:text-sm leading-relaxed font-medium mb-auto">
-              Crie uma nova potência do zero. Escolha seu nome, cores e monte seu elenco através de um Draft estratégico. O mercado é seu para conquistar.
+              Crie uma potência do zero e roube o lugar de um time da liga. Você começará de mãos vazias e montará seu elenco escolhendo atletas no Draft inicial.
             </p>
 
             <div className="pt-4 sm:pt-6 xl:pt-8 border-t border-white/5 mt-4">
@@ -460,14 +411,14 @@ export const NewGameFlow: React.FC = () => {
                   <ArrowRight size={14} className="sm:size-4" />
                 </div>
                 <div className="flex gap-1">
-                  {[1,2,3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-amber-500/20" />)}
+                  {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-amber-500/20" />)}
                 </div>
               </div>
             </div>
           </div>
         </button>
       </div>
-      
+
       {/* Bottom Technical Info */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-8 opacity-20 hover:opacity-50 transition-opacity">
         <div className="flex flex-col items-center">
@@ -505,8 +456,8 @@ export const NewGameFlow: React.FC = () => {
         {/* Header Section */}
         <div className="flex items-end justify-between mb-6 xl:mb-10 shrink-0">
           <div className="space-y-4">
-            <button 
-              onClick={() => setStep('path-selection')} 
+            <button
+              onClick={() => setStep('path-selection')}
               className="group flex items-center gap-2 text-slate-500 hover:text-cyan-400 transition-all duration-300"
             >
               <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-cyan-500/50 group-hover:bg-cyan-500/10">
@@ -514,7 +465,7 @@ export const NewGameFlow: React.FC = () => {
               </div>
               <span className="font-black text-[9px] xl:text-[10px] uppercase tracking-[0.3em]">Retornar</span>
             </button>
-            
+
             <div className="space-y-1">
               <h2 className="text-3xl xl:text-5xl font-black text-white uppercase tracking-tighter italic leading-none">
                 MERCADO DE <span className="text-cyan-400">VAGAS</span>
@@ -532,11 +483,10 @@ export const NewGameFlow: React.FC = () => {
                 <button
                   key={league}
                   onClick={() => setSelectedLeagueFilter(league)}
-                  className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                    selectedLeagueFilter === league 
-                      ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' 
-                      : 'text-slate-500 hover:text-white hover:bg-white/5'
-                  }`}
+                  className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${selectedLeagueFilter === league
+                    ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
+                    : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    }`}
                 >
                   {league === 'all' ? 'Todas' : league}
                 </button>
@@ -552,48 +502,45 @@ export const NewGameFlow: React.FC = () => {
               {filteredTeams.map(team => {
                 const teamRating = team.squad.reduce((sum, pid) => sum + (state.players[pid]?.totalRating || 0), 0);
                 const isSelected = selectedHeirTeamId === team.id;
-                
+
                 return (
-                  <button 
+                  <button
                     key={team.id}
                     onClick={() => setSelectedHeirTeamId(team.id)}
-                    className={`group relative p-4 sm:p-6 xl:p-8 rounded-[1.25rem] sm:rounded-[2rem] xl:rounded-[2.5rem] border transition-all duration-500 text-left overflow-hidden min-h-[160px] sm:min-h-[280px] xl:min-h-[320px] flex flex-col justify-between ${
-                      isSelected 
-                        ? 'bg-cyan-500/[0.07] border-cyan-500/50 shadow-[0_0_40px_rgba(34,211,238,0.15)] scale-[1.02]' 
-                        : 'bg-white/[0.02] border-white/5 hover:border-cyan-500/30 hover:bg-white/[0.04]'
-                    }`}
+                    className={`group relative p-4 sm:p-6 xl:p-8 rounded-[1.25rem] sm:rounded-[2rem] xl:rounded-[2.5rem] border transition-all duration-500 text-left overflow-hidden min-h-[160px] sm:min-h-[280px] xl:min-h-[320px] flex flex-col justify-between ${isSelected
+                      ? 'bg-cyan-500/[0.07] border-cyan-500/50 shadow-[0_0_40px_rgba(34,211,238,0.15)] scale-[1.02]'
+                      : 'bg-white/[0.02] border-white/5 hover:border-cyan-500/30 hover:bg-white/[0.04]'
+                      }`}
                   >
                     {/* Background Effects */}
-                    <div className={`absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] transition-opacity duration-700 ${
-                      isSelected ? 'bg-cyan-500/20 opacity-100' : 'bg-cyan-500/10 opacity-0 group-hover:opacity-100'
-                    }`} />
+                    <div className={`absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] transition-opacity duration-700 ${isSelected ? 'bg-cyan-500/20 opacity-100' : 'bg-cyan-500/10 opacity-0 group-hover:opacity-100'
+                      }`} />
                     <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 via-transparent to-cyan-500/0 group-hover:from-cyan-500/[0.02] transition-all duration-700" />
 
                     <div className="relative z-10">
                       <div className="flex items-start justify-between mb-2 sm:mb-4 xl:mb-6">
                         <div className="relative">
-                          <div className={`w-9 h-9 sm:w-12 sm:h-12 xl:w-16 xl:h-16 rounded-lg sm:rounded-2xl flex items-center justify-center border transition-all duration-500 ${
-                            isSelected ? 'border-cyan-400 bg-black/40 shadow-lg shadow-cyan-500/20' : 'border-white/10 bg-black/20 group-hover:border-white/30'
-                          }`} style={{ backgroundColor: isSelected ? undefined : team.colors.primary + '15' }}>
-                          <div className="flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
-                            {team.logo ? (
-                              <TeamLogo 
-                                primaryColor={team.logo.primary}
-                                secondaryColor={team.logo.secondary}
-                                patternId={team.logo.patternId as any}
-                                symbolId={team.logo.symbolId}
-                                size={isSelected ? (window.innerWidth < 640 ? 24 : 32) : (window.innerWidth < 640 ? 20 : 28)}
-                              />
-                            ) : (
-                              <TeamLogo 
-                                primaryColor={isSelected ? '#22d3ee' : team.colors.primary}
-                                secondaryColor={team.colors.secondary}
-                                patternId="none"
-                                symbolId="Shield"
-                                size={isSelected ? (window.innerWidth < 640 ? 18 : 24) : (window.innerWidth < 640 ? 16 : 20)}
-                              />
-                            )}
-                          </div>
+                          <div className={`w-9 h-9 sm:w-12 sm:h-12 xl:w-16 xl:h-16 rounded-lg sm:rounded-2xl flex items-center justify-center border transition-all duration-500 ${isSelected ? 'border-cyan-400 bg-black/40 shadow-lg shadow-cyan-500/20' : 'border-white/10 bg-black/20 group-hover:border-white/30'
+                            }`} style={{ backgroundColor: isSelected ? undefined : team.colors.primary + '15' }}>
+                            <div className="flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                              {team.logo ? (
+                                <TeamLogo
+                                  primaryColor={team.logo.primary}
+                                  secondaryColor={team.logo.secondary}
+                                  patternId={team.logo.patternId as any}
+                                  symbolId={team.logo.symbolId}
+                                  size={isSelected ? (window.innerWidth < 640 ? 24 : 32) : (window.innerWidth < 640 ? 20 : 28)}
+                                />
+                              ) : (
+                                <TeamLogo
+                                  primaryColor={isSelected ? '#22d3ee' : team.colors.primary}
+                                  secondaryColor={team.colors.secondary}
+                                  patternId="none"
+                                  symbolId="Shield"
+                                  size={isSelected ? (window.innerWidth < 640 ? 18 : 24) : (window.innerWidth < 640 ? 16 : 20)}
+                                />
+                              )}
+                            </div>
                           </div>
                           {isSelected && (
                             <div className="absolute -top-1.5 -right-1.5 w-5 h-5 sm:w-6 sm:h-6 bg-cyan-500 rounded-full flex items-center justify-center border-2 border-[#02040a] shadow-lg animate-bounce">
@@ -603,9 +550,8 @@ export const NewGameFlow: React.FC = () => {
                         </div>
                         <div className="text-right">
                           <p className="text-[6px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">Status</p>
-                          <span className={`text-[7px] sm:text-[9px] font-black uppercase px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full border ${
-                            isSelected ? 'bg-cyan-500 text-black border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                          }`}>
+                          <span className={`text-[7px] sm:text-[9px] font-black uppercase px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full border ${isSelected ? 'bg-cyan-500 text-black border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                            }`}>
                             Disponível
                           </span>
                         </div>
@@ -635,7 +581,7 @@ export const NewGameFlow: React.FC = () => {
                         <p className="text-[5px] sm:text-[7px] text-slate-500 font-black uppercase tracking-widest mb-1 sm:mb-1.5">Divisão</p>
                         <p className="text-[8px] sm:text-[10px] font-black text-cyan-400 uppercase tracking-tight truncate">{team.league}</p>
                         <div className="mt-1.5 sm:mt-2 flex gap-0.5">
-                          {[1,2,3,4,5].map(i => <div key={i} className={`w-0.5 sm:w-1 h-0.5 sm:h-1 rounded-full ${i <= 3 ? 'bg-cyan-500/50' : 'bg-white/5'}`} />)}
+                          {[1, 2, 3, 4, 5].map(i => <div key={i} className={`w-0.5 sm:w-1 h-0.5 sm:h-1 rounded-full ${i <= 3 ? 'bg-cyan-500/50' : 'bg-white/5'}`} />)}
                         </div>
                       </div>
                     </div>
@@ -643,7 +589,7 @@ export const NewGameFlow: React.FC = () => {
                     <div className="relative z-10 pt-3 sm:pt-6 border-t border-white/5 flex items-center justify-between group-hover:border-cyan-500/20 transition-colors">
                       <div className="flex items-center gap-2 xl:gap-3">
                         <div className="flex -space-x-1.5 sm:-space-x-2">
-                          {[1,2,3].map(i => (
+                          {[1, 2, 3].map(i => (
                             <div key={i} className="w-4 h-4 sm:w-6 sm:h-6 rounded-full border border-[#02040a] bg-slate-800 flex items-center justify-center overflow-hidden">
                               <Users size={8} className="text-slate-500 sm:size-[10px]" />
                             </div>
@@ -670,7 +616,7 @@ export const NewGameFlow: React.FC = () => {
                 <h3 className="text-lg xl:text-xl font-black text-white uppercase tracking-widest italic">Nenhuma vaga detectada</h3>
                 <p className="text-slate-500 text-[9px] xl:text-[10px] uppercase font-black tracking-[0.3em]">O mercado de treinadores está estagnado no momento.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setStep('path-selection')}
                 className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[8px] xl:text-[9px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
               >
@@ -689,7 +635,7 @@ export const NewGameFlow: React.FC = () => {
                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Seu Nome de Treinador</span>
                 <span className="text-[7px] font-mono text-cyan-500/30">ID_MANAGER</span>
               </label>
-              <input 
+              <input
                 type="text"
                 placeholder="NOME DO MANAGER..."
                 value={managerName}
@@ -712,15 +658,14 @@ export const NewGameFlow: React.FC = () => {
               </div>
             </div>
           </div>
-          
-          <button 
+
+          <button
             disabled={!selectedHeirTeamId || !managerName}
             onClick={handleFinishHeir}
-            className={`relative group px-10 xl:px-14 py-3 xl:py-4 rounded-xl xl:rounded-2xl font-black text-[10px] xl:text-[11px] uppercase tracking-[0.3em] transition-all duration-500 ${
-              selectedHeirTeamId 
-                ? 'bg-cyan-500 text-black shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:scale-105 hover:shadow-cyan-500/50' 
-                : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
-            }`}
+            className={`relative group px-10 xl:px-14 py-3 xl:py-4 rounded-xl xl:rounded-2xl font-black text-[10px] xl:text-[11px] uppercase tracking-[0.3em] transition-all duration-500 ${selectedHeirTeamId
+              ? 'bg-cyan-500 text-black shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:scale-105 hover:shadow-cyan-500/50'
+              : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
+              }`}
           >
             <span className="relative z-10 flex items-center gap-3">
               Finalizar Protocolo
@@ -748,8 +693,8 @@ export const NewGameFlow: React.FC = () => {
         {/* Header Section */}
         <div className="flex items-end justify-between mb-6 xl:mb-10 shrink-0">
           <div className="space-y-4">
-            <button 
-              onClick={() => setStep('path-selection')} 
+            <button
+              onClick={() => setStep('path-selection')}
               className="group flex items-center gap-2 text-slate-500 hover:text-amber-400 transition-all duration-300"
             >
               <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-amber-500/50 group-hover:bg-amber-500/10">
@@ -757,7 +702,7 @@ export const NewGameFlow: React.FC = () => {
               </div>
               <span className="font-black text-[9px] xl:text-[10px] uppercase tracking-[0.3em]">Retornar</span>
             </button>
-            
+
             <div className="space-y-1">
               <h2 className="text-3xl xl:text-5xl font-black text-white uppercase tracking-tighter italic leading-none">
                 REGISTRO DE <span className="text-amber-400">FUNDAÇÃO</span>
@@ -788,7 +733,7 @@ export const NewGameFlow: React.FC = () => {
             {/* Identity Section */}
             <div className="bg-white/[0.02] border border-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] p-5 sm:p-8 space-y-4 sm:space-y-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-              
+
               <div className="flex items-center gap-3 relative z-10">
                 <div className="w-1 h-5 sm:w-1.5 sm:h-6 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
                 <h3 className="text-[9px] sm:text-[11px] font-black text-white uppercase tracking-[0.3em]">Identidade Corporativa</h3>
@@ -800,7 +745,7 @@ export const NewGameFlow: React.FC = () => {
                     <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Seu Nome de Treinador</span>
                     <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">ID_MANAGER</span>
                   </label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="EX: ALEX FERGUSON"
                     value={managerName}
@@ -814,7 +759,7 @@ export const NewGameFlow: React.FC = () => {
                     <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Nome do Clube</span>
                     <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">ID_PRIMARY</span>
                   </label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="EX: NOVA"
                     value={founderData.name}
@@ -828,7 +773,7 @@ export const NewGameFlow: React.FC = () => {
                     <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Sufixo / Sigla</span>
                     <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">TAG_SUFFIX</span>
                   </label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="EX: UNITED, FC"
                     value={founderData.prefix}
@@ -846,7 +791,7 @@ export const NewGameFlow: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div className="bg-black/40 border border-white/10 rounded-lg sm:rounded-xl p-2.5 sm:p-4 flex items-center gap-3 sm:gap-4 transition-all hover:border-amber-500/30">
                     <div className="relative w-8 h-8 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-white/10 shrink-0 shadow-lg">
-                      <input 
+                      <input
                         type="color"
                         value={founderData.primaryColor}
                         onChange={e => setFounderData(prev => ({ ...prev, primaryColor: e.target.value }))}
@@ -861,7 +806,7 @@ export const NewGameFlow: React.FC = () => {
 
                   <div className="bg-black/40 border border-white/10 rounded-lg sm:rounded-xl p-2.5 sm:p-4 flex items-center gap-3 sm:gap-4 transition-all hover:border-amber-500/30">
                     <div className="relative w-8 h-8 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-white/10 shrink-0 shadow-lg">
-                      <input 
+                      <input
                         type="color"
                         value={founderData.secondaryColor}
                         onChange={e => setFounderData(prev => ({ ...prev, secondaryColor: e.target.value }))}
@@ -880,7 +825,7 @@ export const NewGameFlow: React.FC = () => {
             {/* Substitution Section */}
             <div className="bg-white/[0.02] border border-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] p-5 sm:p-8 space-y-4 sm:space-y-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-red-500/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-              
+
               <div className="flex items-center gap-3 relative z-10">
                 <div className="w-1 h-5 sm:w-1.5 sm:h-6 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
                 <h3 className="text-[9px] sm:text-[11px] font-black text-white uppercase tracking-[0.3em]">Alvo de Desativação</h3>
@@ -890,15 +835,15 @@ export const NewGameFlow: React.FC = () => {
                 <p className="text-[8px] sm:text-[9px] text-slate-500 font-black uppercase tracking-widest leading-relaxed italic opacity-60">
                   Toda nova franquia deve ocupar a vaga de uma instituição obsoleta.
                 </p>
-                
+
                 <div className="relative group">
-                  <select 
+                  <select
                     value={founderData.replacedTeamId}
                     onChange={e => {
                       const team = state.teams[e.target.value];
                       if (team) {
-                        setFounderData(prev => ({ 
-                          ...prev, 
+                        setFounderData(prev => ({
+                          ...prev,
                           replacedTeamId: e.target.value,
                           district: team.district
                         }));
@@ -943,22 +888,22 @@ export const NewGameFlow: React.FC = () => {
             </div>
 
             {/* Dynamic Glow */}
-            <div 
+            <div
               className="absolute w-[90%] h-[90%] opacity-10 blur-[150px] transition-colors duration-1000"
               style={{ backgroundColor: founderData.primaryColor }}
             />
-            
+
             {/* Crest Preview */}
             <div className="relative group/crest scale-90 xl:scale-100 transition-transform duration-700">
-              <div 
+              <div
                 className="w-56 h-56 xl:w-64 xl:h-64 rounded-[3.5rem] xl:rounded-[4rem] flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.5)] relative z-10 border border-white/10 overflow-hidden transition-all duration-700 group-hover/crest:scale-105 group-hover/crest:border-white/20"
-                style={{ 
+                style={{
                   background: `linear-gradient(135deg, ${founderData.primaryColor}15, ${founderData.secondaryColor}30)`,
                 }}
               >
                 <div className="absolute inset-0 bg-black/40" />
                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.4)_0%,transparent_70%)]" />
-                <TeamLogo 
+                <TeamLogo
                   primaryColor={founderData.primaryColor}
                   secondaryColor={founderData.secondaryColor}
                   patternId="none"
@@ -967,7 +912,7 @@ export const NewGameFlow: React.FC = () => {
                   className="relative z-10 drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] xl:size-[130px] transition-transform duration-700 group-hover/crest:scale-110"
                 />
               </div>
-              
+
               {/* Decorative Tech Rings */}
               <div className="absolute inset-0 -m-6 border border-amber-500/10 rounded-[4.5rem] animate-spin-slow pointer-events-none" />
               <div className="absolute inset-0 -m-12 border border-white/5 rounded-[5.5rem] animate-reverse-spin-slow pointer-events-none opacity-50" />
@@ -1030,19 +975,18 @@ export const NewGameFlow: React.FC = () => {
               )}
             </div>
           </div>
-          
-          <button 
+
+          <button
             disabled={!founderData.name || !founderData.prefix || !founderData.replacedTeamId || !managerName}
-            onClick={() => setStep('founder-draft')}
-            className={`relative group px-12 xl:px-16 py-4 xl:py-5 rounded-2xl font-black text-[10px] xl:text-[11px] uppercase tracking-[0.4em] transition-all duration-500 ${
-              founderData.name && founderData.replacedTeamId && managerName
-                ? 'bg-amber-500 text-black shadow-[0_0_40px_rgba(245,158,11,0.3)] hover:scale-105 hover:shadow-amber-500/60' 
-                : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
-            }`}
+            onClick={handleFinishFounder}
+            className={`relative group px-12 xl:px-16 py-4 xl:py-5 rounded-2xl font-black text-[10px] xl:text-[11px] uppercase tracking-[0.4em] transition-all duration-500 ${founderData.name && founderData.replacedTeamId && managerName
+              ? 'bg-amber-500 text-black shadow-[0_0_40px_rgba(245,158,11,0.3)] hover:scale-105 hover:shadow-amber-500/60'
+              : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
+              }`}
           >
             <span className="relative z-10 flex items-center gap-3">
-              Iniciar Draft
-              <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+              Entrar na Gênese
+              <CheckCircle2 size={18} className="transition-transform group-hover:scale-110" />
             </span>
             {founderData.name && founderData.replacedTeamId && (
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
@@ -1052,370 +996,6 @@ export const NewGameFlow: React.FC = () => {
       </div>
     </div>
   );
-
-  const renderFounderDraft = () => {
-    return (
-      <div className="min-h-screen bg-[#02040a] flex flex-col h-screen overflow-hidden relative">
-        {/* Background Decorative Elements */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-          <div className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-amber-500/[0.03] blur-[120px] rounded-full" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.01)_0%,transparent_70%)]" />
-        </div>
-
-        {/* Header Superior - Score & Estatísticas */}
-        <div className="bg-black/60 backdrop-blur-2xl border-b border-white/5 p-4 z-20 shrink-0 shadow-2xl">
-          <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-8">
-            <div className="flex items-center gap-6">
-              <button 
-                onClick={() => setStep('founder-identity')} 
-                className="group w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-amber-400 hover:border-amber-500/50 hover:bg-amber-500/10 transition-all duration-300"
-              >
-                <ChevronRight size={18} className="rotate-180 transition-transform group-hover:-translate-x-0.5" />
-              </button>
-              
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <h2 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-2">
-                    Mercado de <span className="text-amber-400">Expansão</span>
-                  </h2>
-                </div>
-                <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.4em]">Protocolo de Recrutamento Ativo • 2050</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6">
-              {/* Draft Status Summary */}
-              <div className="hidden xl:flex items-center gap-4 px-6 border-r border-white/10">
-                <div className="flex flex-col items-end">
-                  <span className="text-[7px] font-black text-slate-500 uppercase tracking-[0.3em]">Status do Draft</span>
-                  <div className="flex gap-1.5 mt-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${selectedPlayerIds.length === 15 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} />
-                    <div className={`w-1.5 h-1.5 rounded-full ${currentScore <= draftScoreLimit ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
-                    <div className={`w-1.5 h-1.5 rounded-full ${eliteCount <= 3 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Score Monitor */}
-              <div className="bg-black/40 border border-white/10 rounded-2xl px-5 py-3 flex items-center gap-5 min-w-[240px] relative overflow-hidden group">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all duration-500 ${
-                  currentScore > draftScoreLimit 
-                    ? 'bg-red-500/10 border-red-500/50 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
-                    : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                }`}>
-                  <Zap size={18} className={currentScore > draftScoreLimit ? 'animate-bounce' : ''} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-baseline mb-1.5">
-                    <span className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Score do Time</span>
-                    <span className={`text-[12px] font-mono font-black tabular-nums ${currentScore > draftScoreLimit ? 'text-red-500' : 'text-emerald-400'}`}>
-                      {currentScore.toLocaleString('pt-BR')} <span className="text-[9px] text-slate-600">/ {draftScoreLimit.toLocaleString('pt-BR')}</span>
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-700 ease-out ${
-                        currentScore > draftScoreLimit 
-                          ? 'bg-red-500' 
-                          : 'bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-                      }`}
-                      style={{ width: `${Math.min(100, (currentScore / draftScoreLimit) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Elite Tracker */}
-              <div className="bg-black/40 border border-white/10 rounded-2xl px-5 py-3 flex flex-col items-center justify-center min-w-[120px]">
-                <span className="text-[8px] text-slate-500 font-black uppercase tracking-widest mb-2.5">Slots Elite</span>
-                <div className="flex gap-2">
-                  {[1, 2, 3].map(i => (
-                    <div 
-                      key={i}
-                      className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-all duration-500 ${
-                        i <= eliteCount 
-                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] scale-110' 
-                          : 'border-white/5 text-white/5 bg-white/[0.02]'
-                      }`}
-                    >
-                      <Trophy size={10} fill={i <= eliteCount ? 'currentColor' : 'none'} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Role Tracker */}
-              <div className="bg-black/40 border border-white/10 rounded-2xl px-5 py-3 flex flex-col items-center justify-center min-w-[180px]">
-                <span className="text-[8px] text-slate-500 font-black uppercase tracking-widest mb-2.5">Composição Mínima</span>
-                <div className="flex gap-3">
-                  {[
-                    { role: 'GOL', min: 1, current: selectedPlayersByRole.GOL },
-                    { role: 'ZAG', min: 4, current: selectedPlayersByRole.ZAG },
-                    { role: 'MEI', min: 3, current: selectedPlayersByRole.MEI },
-                    { role: 'ATA', min: 2, current: selectedPlayersByRole.ATA }
-                  ].map(item => (
-                    <div key={item.role} className="flex flex-col items-center gap-1">
-                      <div className={`w-7 h-5 rounded-lg flex items-center justify-center border transition-all duration-500 ${
-                        item.current >= item.min 
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
-                          : 'bg-red-500/10 border-red-500/30 text-red-400 opacity-60'
-                      }`}>
-                        <span className="text-[8px] font-black">{item.role}</span>
-                      </div>
-                      <span className={`text-[7px] font-mono ${item.current >= item.min ? 'text-emerald-400' : 'text-slate-600'}`}>
-                        {item.current}/{item.min}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Confirm Button */}
-              <button
-                disabled={!isDraftValid}
-                onClick={handleFinishFounder}
-                className={`relative group h-14 px-10 rounded-2xl font-black text-[11px] uppercase tracking-[0.3em] transition-all duration-500 overflow-hidden ${
-                  isDraftValid 
-                    ? 'bg-amber-500 text-black shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:scale-105 active:scale-95' 
-                    : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
-                }`}
-              >
-                <span className="relative z-10 flex items-center gap-3">
-                  Registrar Elenco
-                  <CheckCircle2 size={18} className={isDraftValid ? 'animate-pulse' : ''} />
-                </span>
-                {isDraftValid && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 flex overflow-hidden relative z-10">
-          {/* Sidebar - Filtros e Lista de Selecionados */}
-          <div className="w-72 xl:w-80 bg-black/40 backdrop-blur-xl border-r border-white/5 flex flex-col shrink-0">
-            {/* Search & Filters */}
-            <div className="p-4 xl:p-6 space-y-4 border-b border-white/5">
-              <div className="relative group">
-                <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-amber-400 transition-colors" />
-                <input 
-                  type="text"
-                  placeholder="PROCURAR NO MERCADO..."
-                  value={draftSearch}
-                  onChange={e => setDraftSearch(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-[10px] xl:text-[11px] text-white font-bold focus:border-amber-500/50 focus:bg-amber-500/5 outline-none transition-all placeholder:text-slate-700 uppercase"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 xl:gap-3">
-                <div className="relative group">
-                  <select 
-                    value={draftRoleFilter}
-                    onChange={e => setDraftRoleFilter(e.target.value as any)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 xl:px-4 py-2.5 text-[8px] xl:text-[9px] text-white font-black uppercase outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="ALL">POSIÇÃO</option>
-                    <option value="GOL">GOL</option>
-                    <option value="ZAG">ZAG</option>
-                    <option value="MEI">MEI</option>
-                    <option value="ATA">ATA</option>
-                  </select>
-                  <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-slate-500 pointer-events-none group-hover:text-amber-400 transition-colors" />
-                </div>
-                <div className="relative group">
-                  <select 
-                    value={draftDistrictFilter}
-                    onChange={e => setDraftDistrictFilter(e.target.value as any)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 xl:px-4 py-2.5 text-[8px] xl:text-[9px] text-white font-black uppercase outline-none focus:border-amber-500/50 focus:bg-amber-500/5 transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="ALL">DISTRITO</option>
-                    <option value="NORTE">NORTE</option>
-                    <option value="SUL">SUL</option>
-                    <option value="LESTE">LESTE</option>
-                    <option value="OESTE">OESTE</option>
-                  </select>
-                  <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-slate-500 pointer-events-none group-hover:text-amber-400 transition-colors" />
-                </div>
-              </div>
-            </div>
-
-            {/* Requirements Checklist */}
-            <div className="p-4 xl:p-6 bg-amber-500/[0.02] border-b border-white/5 space-y-3">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertCircle size={12} className="text-amber-500" />
-                <span className="text-[9px] text-amber-500/80 font-black uppercase tracking-widest">Requisitos de Registro</span>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase">Total de Atletas</span>
-                  <span className={`text-[9px] font-mono font-bold ${selectedPlayerIds.length === 15 ? 'text-emerald-500' : 'text-slate-400'}`}>
-                    {selectedPlayerIds.length}/15
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase">Teto de Score</span>
-                  <span className={`text-[9px] font-mono font-bold ${currentScore <= draftScoreLimit ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {currentScore.toLocaleString()} / {draftScoreLimit.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase">Vagas Elite (900+)</span>
-                  <span className={`text-[9px] font-mono font-bold ${eliteCount <= 3 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {eliteCount}/3
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Selected Summary */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-4 px-6 flex items-center justify-between bg-white/[0.02] border-b border-white/5 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Users size={12} className="text-slate-500" />
-                  <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">ELENCO ({selectedPlayerIds.length}/15)</span>
-                </div>
-                {selectedPlayerIds.length > 0 && (
-                  <button 
-                    onClick={() => setSelectedPlayerIds([])}
-                    className="group flex items-center gap-1.5 text-[8px] text-red-500/40 hover:text-red-500 font-black uppercase tracking-tighter transition-all"
-                  >
-                    <Trash2 size={10} className="transition-transform group-hover:scale-110" />
-                    LIMPAR
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex-1 overflow-y-auto px-4 py-4 xl:py-6 space-y-4 xl:space-y-6 custom-scrollbar">
-                {[
-                  { role: 'GOL', min: 1 },
-                  { role: 'ZAG', min: 4 },
-                  { role: 'MEI', min: 3 },
-                  { role: 'ATA', min: 2 }
-                ].map(({ role, min }) => {
-                  const rolePlayers = selectedPlayers.filter(p => p.role === role);
-                  const isComplete = rolePlayers.length >= min;
-                  
-                  return (
-                    <div key={role} className="space-y-2 xl:space-y-3">
-                      <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${isComplete ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} />
-                          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{role}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-mono font-black ${isComplete ? 'text-emerald-500' : 'text-slate-600'}`}>
-                            {rolePlayers.length}/{min}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="space-y-1 xl:space-y-1.5">
-                        {rolePlayers.map(player => (
-                          <div 
-                            key={player.id}
-                            className="group relative bg-white/[0.02] border border-white/5 rounded-xl p-2 xl:p-2.5 pl-3 flex items-center justify-between hover:border-red-500/30 hover:bg-red-500/[0.02] transition-all cursor-pointer overflow-hidden"
-                            onClick={() => togglePlayerSelection(player)}
-                          >
-                            <div className="relative z-10 flex items-center gap-3 min-w-0">
-                              <span className="text-[10px] xl:text-[11px] font-black text-white truncate group-hover:text-red-400 transition-colors italic uppercase">{player.nickname}</span>
-                              <span className="text-[8px] xl:text-[9px] font-mono text-slate-600 shrink-0">{player.totalRating}</span>
-                            </div>
-                            <div className="relative z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Trash2 size={12} className="text-red-500" />
-                            </div>
-                            {/* Hover Background Effect */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/[0.05] to-red-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                          </div>
-                        ))}
-                        {rolePlayers.length === 0 && (
-                          <div className="border border-dashed border-white/5 rounded-xl p-3 xl:p-4 flex flex-col items-center justify-center space-y-2 opacity-20">
-                            <Users size={14} className="text-slate-500" />
-                            <span className="text-[7px] xl:text-[8px] text-slate-500 font-black uppercase tracking-[0.3em]">Vagas Disponíveis</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content - Player Grid */}
-          <div className="flex-1 bg-black/20 overflow-y-auto p-4 xl:p-8 custom-scrollbar relative">
-            {/* Background Grid Lines */}
-            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 xl:gap-6 relative z-10">
-              {filteredDraftPlayers.slice(0, 100).map(player => {
-                const isElite = player.totalRating >= 850;
-                const isSelected = selectedPlayerIds.includes(player.id);
-                
-                return (
-                  <div key={player.id} className="relative group perspective-1000">
-                    <div className={`transition-all duration-500 transform-gpu ${isSelected ? 'scale-95' : 'group-hover:scale-[1.02] group-hover:-translate-y-1'}`}>
-                      <PlayerCard 
-                        player={player} 
-                        onClick={() => togglePlayerSelection(player)} 
-                        variant="compact"
-                      />
-                    </div>
-                    
-                    {/* Elite Badge Overlay */}
-                    {isElite && (
-                      <div className="absolute -top-2 -right-2 z-20 pointer-events-none">
-                        <div className="bg-cyan-500 text-black p-1.5 rounded-lg shadow-[0_0_15px_rgba(34,211,238,0.4)] animate-pulse">
-                          <Trophy size={10} fill="currentColor" />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Selection Overlay */}
-                    <div 
-                      className={`absolute inset-0 transition-all duration-500 rounded-[2rem] cursor-pointer flex flex-col items-center justify-center border-2 ${
-                        isSelected 
-                          ? 'bg-amber-500/[0.07] border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.2)]' 
-                          : 'bg-transparent border-transparent group-hover:bg-amber-500/[0.03] group-hover:border-white/10'
-                      }`}
-                      onClick={() => togglePlayerSelection(player)}
-                    >
-                      {!isSelected && (
-                        <div className="bg-white text-black px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 shadow-xl">
-                          Recrutar
-                        </div>
-                      )}
-                      {isSelected && (
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="bg-amber-500 text-black p-2 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.5)] animate-in zoom-in duration-300">
-                            <CheckCircle2 size={16} />
-                          </div>
-                          <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">Atleta Alocado</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {filteredDraftPlayers.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-slate-800 space-y-6 opacity-30">
-                <div className="w-24 h-24 rounded-full border-2 border-dashed border-slate-800 flex items-center justify-center">
-                  <Search size={40} />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="font-black text-xl uppercase tracking-[0.3em]">Nenhum Atleta Detectado</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Ajuste os filtros de busca para expandir a database</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#050814]">
@@ -1434,7 +1014,6 @@ export const NewGameFlow: React.FC = () => {
       {step === 'path-selection' && renderPathSelection()}
       {step === 'heir-choice' && renderHeirChoice()}
       {step === 'founder-identity' && renderFounderIdentity()}
-      {step === 'founder-draft' && renderFounderDraft()}
     </div>
   );
 };

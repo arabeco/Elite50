@@ -29,10 +29,10 @@ export const generateCalendar = (teams: Team[], leagueId: string, seasonStartDat
   let rotation = [...teamIds];
 
   for (let roundNum = 1; roundNum <= roundsPerHalf * 2; roundNum++) {
-    // Each round happens 1 day after the previous
-    // Round 1 = seasonStart + 1 day (Day 2 of season)
+    // Each round happens every 2 days
+    // Round 1 = seasonStart + 2 days (Day 3 of season)
     const roundDate = new Date(baseDate);
-    roundDate.setDate(roundDate.getDate() + roundNum);
+    roundDate.setDate(roundDate.getDate() + (roundNum * 2));
     const dateStr = roundDate.toISOString().split('T')[0];
 
     for (let i = 0; i < matchesPerRound; i++) {
