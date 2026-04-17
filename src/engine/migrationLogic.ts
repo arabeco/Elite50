@@ -19,6 +19,10 @@ export const shuffleBottomTeams = (state: GameState): { teamId: string; from: Di
     // 1. Identify Z2 (7th and 8th) from each league
     leagueKeys.forEach((key, index) => {
         const league = state.world.leagues[key];
+        if (!league?.standings?.length) {
+            return;
+        }
+
         const sorted = [...league.standings].sort((a, b) => {
             if (b.points !== a.points) return b.points - a.points;
             const gdA = a.goalsFor - a.goalsAgainst;
@@ -85,7 +89,7 @@ export const shuffleBottomTeams = (state: GameState): { teamId: string; from: Di
 
             newsHeadlines.migration(state, team, newDist);
 
-            state.notifications.unshift({
+            state.notifications?.unshift({
                 id: `migration_${Date.now()}_${team.id}`,
                 date: state.world.currentDate,
                 title: 'Migração Inter-Distrital',
@@ -98,7 +102,7 @@ export const shuffleBottomTeams = (state: GameState): { teamId: string; from: Di
 
     return Object.entries(reallocated).map(([teamId, newDist]) => ({
         teamId,
-        from: migratingTeams.find(mt => mt.teamId === teamId)!.oldDistrict,
+        from: migratingTeams.find(mt => mt.teamId === teamId)?.oldDistrict || 'EXILADO',
         to: newDist
     }));
 };

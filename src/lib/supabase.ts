@@ -21,9 +21,8 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
   if (!user) return null;
 
   const isCreator = state.isCreator === true;
+  const isPublic = state.world.isPublic === true;
 
-  // Optimization: Only save the data that this user "owns" or has modified.
-  // This reduces JSON size and avoids accidental overwrites of other players' data.
   const userTeamId = state.userTeamId;
   const userManagerId = state.userManagerId;
 
@@ -42,23 +41,30 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
     });
   }
 
-  // Also include any players that might have been recently modified (e.g. transfer targets)
-  // For now, squad-only is a good balance for performance.
+  const filteredManagers = userManagerId && state.managers[userManagerId]
+    ? { [userManagerId]: state.managers[userManagerId] }
+    : {};
+
+  const teamsToSave = isCreator ? state.teams : filteredTeams;
+  const playersToSave = isCreator ? state.players : filteredPlayers;
+  const managersToSave = isCreator ? state.managers : filteredManagers;
 
   const { data, error } = await supabase
     .from('games')
     .upsert({
       user_id: user.id,
       world_id: worldId,
-      world_state: isCreator ? state.world : undefined, // Only creator updates master world clock/state
-      teams_data: filteredTeams,
-      players_data: filteredPlayers,
-      managers_data: userManagerId && state.managers[userManagerId] ? { [userManagerId]: state.managers[userManagerId] } : {},
+      world_state: state.world,
+      teams_data: teamsToSave,
+      players_data: playersToSave,
+      managers_data: managersToSave,
       user_team_id: userTeamId,
       user_manager_id: userManagerId,
       notifications: state.notifications,
       last_headline: state.lastHeadline,
       training_data: state.training,
+      is_creator: isCreator,
+      is_public: isCreator && isPublic,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id,world_id' });
 
@@ -74,13 +80,25 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
   if (!user) return null;
 
   // 1. Fetch the master world state (from the creator)
-  const { data: masterGame, error: masterError } = await supabase
+  let { data: masterGame, error: masterError } = await supabase
     .from('games')
     .select('*')
     .eq('world_id', worldId)
-    .order('updated_at', { ascending: true }) // First record is likely the creator
+    .eq('is_creator', true)
     .limit(1)
-    .single();
+    .maybeSingle();
+
+  if (!masterGame) {
+    const fallback = await supabase
+      .from('games')
+      .select('*')
+      .eq('world_id', worldId)
+      .order('updated_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    masterGame = fallback.data;
+    masterError = fallback.error;
+  }
 
   if (masterError || !masterGame) {
     console.error('Error fetching master world state:', masterError);
@@ -111,15 +129,17 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
     .upsert({
       user_id: user.id,
       world_id: worldId,
-      world_state: masterGame.world_state, // Copy master world state
-      teams_data: masterGame.teams_data,
-      players_data: masterGame.players_data,
-      managers_data: masterGame.managers_data || {},
+      world_state: masterGame.world_state,
+      teams_data: {},
+      players_data: {},
+      managers_data: {},
       user_team_id: null,
       user_manager_id: null,
       notifications: [],
       last_headline: {},
       training_data: gameState.training,
+      is_creator: false,
+      is_public: false,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id,world_id' });
 
@@ -148,13 +168,13 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     return null;
   }
 
-  // 2. The first record (oldest) is considered the "Master" (Creator) base
-  const masterRecord = allWorldRecords[0];
+  // 2. The creator row is the master. Fallback to oldest for legacy saves.
+  const masterRecord = allWorldRecords.find(r => r.is_creator) || allWorldRecords[0];
   const userRecord = allWorldRecords.find(r => r.user_id === user.id);
 
   if (!userRecord) return null;
 
-  const isCreator = masterRecord.user_id === user.id;
+  const isCreator = masterRecord.user_id === user.id || masterRecord.is_creator === true;
 
   // 3. Reconstruct State: Start with master data, then merge human player updates
   const mergedTeams = { ...(masterRecord.teams_data as any) };
@@ -227,7 +247,7 @@ export const listUserWorlds = async () => {
 
   const { data, error } = await supabase
     .from('games')
-    .select('world_id, updated_at, world_state, user_id')
+    .select('world_id, updated_at, world_state, user_id, is_public, is_creator')
     .eq('user_id', user.id);
 
   if (error) {
@@ -266,7 +286,9 @@ export const listPublicWorlds = async () => {
   // Fetch all worlds except the user's own (to show as "Community" worlds)
   let query = supabase
     .from('games')
-    .select('world_id, updated_at, world_state, user_id')
+    .select('world_id, updated_at, world_state, user_id, is_public, is_creator')
+    .eq('is_public', true)
+    .eq('is_creator', true)
     .order('updated_at', { ascending: false })
     .limit(10);
 
@@ -310,4 +332,3 @@ export const unsubscribeFromWorld = async (worldId: string) => {
   const channelName = `world:${worldId}`;
   await supabase.removeChannel(supabase.channel(channelName));
 };
-

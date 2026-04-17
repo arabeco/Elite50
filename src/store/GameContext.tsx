@@ -21,7 +21,7 @@ interface GameStateValue {
 
 interface GameDispatchValue {
   setState: React.Dispatch<React.SetStateAction<GameState>>;
-  saveGame: (newState?: GameState) => Promise<void>;
+  saveGame: (newState?: GameState, worldIdOverride?: string) => Promise<void>;
   loadGame: (worldId?: string) => Promise<void>;
   joinGame: (worldId: string) => Promise<void>;
   setIsAuthenticated: (val: boolean) => void;
@@ -129,17 +129,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const saveGame = useCallback(async (newState?: GameState) => {
-    if (!worldId) return;
+  const saveGame = useCallback(async (newState?: GameState, worldIdOverride?: string) => {
+    const targetWorldId = worldIdOverride || worldId;
+    if (!targetWorldId) return;
     setIsSyncing(true);
     try {
       const stateToSave = newState || state;
       console.log('GM: Persistindo estado no Supabase...', {
-        world_id: worldId,
+        world_id: targetWorldId,
         currentDate: stateToSave.world.currentDate,
         matchesCount: Object.values(stateToSave.world.leagues).reduce((acc, l: any) => acc + (l.matches?.length || 0), 0)
       });
-      await saveGameState(stateToSave, worldId);
+      await saveGameState(stateToSave, targetWorldId);
       console.log('Game saved successfully');
       setIsOnline(true);
       // Only show toast if it's a manual save or a major event

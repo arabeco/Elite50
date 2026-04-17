@@ -48,16 +48,16 @@ describe('gameLogic', () => {
         expect(newState).not.toBe(initialState);
     });
 
-    it('advanceGameDay should do nothing if status is LOBBY', () => {
+    it('advanceGameDay should do nothing on the pre-season lobby day', () => {
         const initialState = {
-            world: { status: 'LOBBY', currentDate: new Date().toISOString() },
+            world: { status: 'LOBBY', currentDay: -1, currentDate: new Date().toISOString() },
             leagues: {},
             teams: {},
             players: {}
         } as any;
 
         const newState = advanceGameDay(initialState);
-        expect(newState).toBe(initialState); // Short circuit returns exactly the same reference
+        expect(newState).toBe(initialState); // Pre-season lock returns exactly the same reference
     });
 
     it('startNewSeason should increment season and reset status to LOBBY', () => {

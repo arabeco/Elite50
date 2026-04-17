@@ -1,6 +1,6 @@
-import { simulateMatch } from './src/engine/MatchEngine';
-import { Player, TeamTactics, TeamStats, Team } from './src/types';
-import { generatePlayer } from './src/engine/generator';
+import { simulateMatch } from './MatchEngine';
+import { Player, TeamStats } from '../types';
+import { generatePlayer } from './generator';
 
 // Helper to create a standardized team for testing
 function createStandardTeamStats(name: string, rating: number, playStyle: any = 'Equilibrado'): TeamStats {

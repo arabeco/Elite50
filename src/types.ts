@@ -358,6 +358,7 @@ export interface WorldState {
   phase: SeasonPhase;
   news: NewsItem[];
   history: SeasonReport[];
+  isPublic?: boolean;
   isInitialSeed?: boolean;
   draftProposals?: { playerId: string; managerId: string; teamId: string; priority: number }[];
 }

@@ -8,6 +8,7 @@ export const WorldSelector: React.FC = () => {
   const { worlds, publicWorlds, setWorldId, loadGame, joinGame, setState, saveGame, refreshWorlds, deleteWorld, logout } = useGame();
   const [isCreating, setIsCreating] = useState(false);
   const [newWorldName, setNewWorldName] = useState('');
+  const [isPublicWorld, setIsPublicWorld] = useState(false);
   const [activeTab, setActiveTab] = useState<'my-worlds' | 'community'>('my-worlds');
 
   const handleSelectWorld = async (id: string, isPublic: boolean = false) => {
@@ -27,6 +28,9 @@ export const WorldSelector: React.FC = () => {
 
     // Set status to LOBBY to trigger onboarding via Dashboard -> NewGameFlow
     initialState.world.status = 'LOBBY';
+    initialState.world.isPublic = isPublicWorld;
+    initialState.worldId = id;
+    initialState.isCreator = true;
     initialState.userTeamId = null; // No team selected yet
 
     // Set local state
@@ -34,11 +38,12 @@ export const WorldSelector: React.FC = () => {
     setWorldId(id);
 
     // Save to supabase
-    await saveGame(initialState);
+    await saveGame(initialState, id);
     await refreshWorlds();
 
     setIsCreating(false);
     setNewWorldName('');
+    setIsPublicWorld(false);
   };
 
 
@@ -149,6 +154,15 @@ export const WorldSelector: React.FC = () => {
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:border-cyan-500/50 focus:outline-none transition-all placeholder:text-slate-700 uppercase tracking-widest mb-4"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateWorld()}
                   />
+                  <label className="mb-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={isPublicWorld}
+                      onChange={(e) => setIsPublicWorld(e.target.checked)}
+                      className="h-4 w-4 accent-cyan-400"
+                    />
+                    Mostrar na comunidade
+                  </label>
                   <div className="flex gap-2">
                     <button
                       onClick={handleCreateWorld}

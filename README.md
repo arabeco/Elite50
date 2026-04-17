@@ -1,146 +1,137 @@
-<div align="center">
+# ELITE 2050
 
-# ⚽ ELITE 2050
+Football management in a cyberpunk future.
 
-**Football Management in a Cyberpunk Future**
+ELITE 2050 is a browser-based football management game built with React, TypeScript, Vite and Supabase. You manage a franchise in a futuristic district league: create or join worlds, draft players, tune tactics, train the squad and simulate seasons.
 
-A futuristic football management simulation built with React 19, TypeScript, and Supabase.
+## Current Status
 
-![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-2.97-3ECF8E?logo=supabase&logoColor=white)
-![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-06B6D4?logo=tailwindcss&logoColor=white)
-
-</div>
-
----
-
-## 🎮 About
-
-**ELITE 2050** is a browser-based football management game set in a cyberpunk future. Manage your franchise in a dystopian world where districts compete for supremacy. Draft players, configure tactics, negotiate transfers, and lead your team to glory through a fully simulated match engine.
-
-### Key Features
-
-- **Tick-by-tick Match Engine** — Real-time match simulation with tactical depth (play styles, mentalities, tactical cards)
-- **Procedural Generation** — Every world is unique: players, teams, leagues, and calendars generated on the fly
-- **Pentagon Rating System** — 5-axis player attributes (FOR, AGI, INT, TAT, TEC) with fusion skills and badges
-- **4 District Leagues** — Norte, Sul, Leste, Oeste — each with its own league, cup tournaments, and rankings
-- **Transfer Market** — Scout, bid, and negotiate for talent across all districts
-- **Multiplayer Worlds** — Shared worlds via Supabase where multiple managers can compete
-- **Cyberpunk Aesthetic** — Glassmorphism, neon glows, and premium UI design throughout
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18+)
-- A [Supabase](https://supabase.com/) project (for auth & cloud saves)
-
-### Installation
+The project is runnable locally and has basic automated coverage for the game engine, calendar and player card UI.
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd elite-2050
+cmd /c npm run lint
+cmd /c npm run test
+cmd /c npm run build
+```
 
-# Install dependencies
+All three commands should pass on Windows. Running through `cmd /c` avoids the common PowerShell `npm.ps1` execution policy block.
+
+## Requirements
+
+- Node.js 18 or newer
+- A Supabase project for authentication and cloud saves
+
+## Setup
+
+```bash
 npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your Supabase credentials
+copy .env.example .env
 ```
 
-### Running Locally
+Fill `.env` with your Supabase URL and anon key.
+
+## Development
 
 ```bash
-npm run dev
+cmd /c npm run dev -- --host 127.0.0.1
 ```
 
-The app will be available at `http://localhost:5173`.
+The app runs at:
 
-### Building for Production
+```text
+http://127.0.0.1:3000
+```
+
+The default `dev` script binds to port `3000`.
+
+## Auth And Saves
+
+The app uses Supabase Auth and stores game progress in `public.games`. Game saves do not use localStorage. Supabase Auth may keep the browser session in its own client-side storage for a static Vite app; moving auth sessions to HTTP-only cookies would require a backend/SSR layer.
+
+Supported login methods:
+
+- Email and password
+- New account signup
+- Google OAuth
+- Password recovery email
+
+Required Supabase project settings:
+
+- Enable Email provider in Authentication > Providers.
+- Enable Google provider in Authentication > Providers.
+- Add local and production URLs in Authentication > URL Configuration.
+
+Redirect URLs to add before launch:
+
+```text
+http://localhost:3000/**
+http://127.0.0.1:3000/**
+https://YOUR-VERCEL-DOMAIN.vercel.app/**
+https://YOUR-CUSTOM-DOMAIN/**
+```
+
+Required Vercel environment variables:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
+For Google OAuth, configure the Supabase Google provider with the callback URL shown by Supabase for your project.
+
+## Vercel Deploy
+
+This is a Vite SPA. Vercel should use:
+
+```text
+Build Command: npm run build
+Output Directory: dist
+Install Command: npm install
+```
+
+`vercel.json` rewrites all routes to `index.html`, so direct visits to `/login`, `/worlds`, and `/dashboard` work.
+
+## Production Build
 
 ```bash
-npm run build
+cmd /c npm run build
 ```
 
----
+The generated files are written to `dist/`.
 
-## 🏗️ Project Structure
-
-```
-elite-2050/
-├── src/
-│   ├── components/           # React UI components
-│   │   ├── dashboard/        # Dashboard tab components (Home, Squad, Tactics, etc.)
-│   │   ├── ErrorBoundary.tsx  # Global error handling
-│   │   ├── Dashboard.tsx      # Main dashboard orchestrator
-│   │   ├── Login.tsx          # Authentication flow
-│   │   ├── LineupBuilder.tsx  # Tactical lineup editor
-│   │   ├── MatchReports.tsx   # Post-match analysis
-│   │   ├── NewGameFlow.tsx    # World creation wizard
-│   │   └── WorldSelector.tsx  # World/save management
-│   ├── constants/             # Centralized game constants
-│   ├── docs/                  # Technical documentation
-│   ├── engine/                # Core game engine
-│   │   ├── gameLogic.ts       # Day advancement, standings, safety net
-│   │   ├── generator.ts       # Procedural world generation
-│   │   ├── MatchEngine.ts     # Match simulation engine
-│   │   ├── CalendarGenerator.ts # Round-robin calendar generation
-│   │   └── simulation.ts      # Match event calculations & evolution
-│   ├── hooks/                 # Custom React hooks
-│   ├── lib/                   # External service integrations (Supabase)
-│   ├── store/                 # State management (Context + Reducer)
-│   ├── types.ts               # TypeScript type definitions
-│   └── utils/                 # Utility functions
-├── supabase/
-│   ├── functions/             # Edge Functions (server-side logic)
-│   └── migrations/            # Database schema migrations
-└── public/                    # Static assets
-```
-
----
-
-## 🧪 Testing
+## Useful Scripts
 
 ```bash
-# Run unit & component tests
-npm run test
-
-# Type checking
-npx tsc --noEmit
+cmd /c npm run dev
+cmd /c npm run lint
+cmd /c npm run test
+cmd /c npm run build
+cmd /c npm run clean
 ```
 
----
+## Project Map
 
-## 📖 Documentation
+```text
+src/
+  components/          React UI components
+  components/dashboard Dashboard tabs
+  constants/           Game constants and trait descriptions
+  docs/                Architecture and game design notes
+  engine/              Match engine, generation, calendar and season logic
+  hooks/               Feature hooks for dashboard flows
+  lib/                 Supabase integration
+  store/               Game context and reducer
+  test/                Vitest tests
+  types.ts            Shared TypeScript types
+supabase/
+  functions/           Supabase Edge Functions
+  migrations/          Database migrations
+public/
+  assetas/             Avatar and static visual assets
+```
 
-- [`src/docs/ARCHITECTURE.md`](src/docs/ARCHITECTURE.md) — System architecture overview
-- [`src/docs/GAME_DESIGN.md`](src/docs/GAME_DESIGN.md) — Game rules, rating system, and mechanics
-- [`src/docs/UI_PATTERNS.md`](src/docs/UI_PATTERNS.md) — UI design system and patterns
+## Known Cleanup Targets
 
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Framework** | React 19 |
-| **Build Tool** | Vite 6.2 |
-| **Language** | TypeScript 5.8 |
-| **Styling** | TailwindCSS 4 |
-| **Animation** | Framer Motion 12 |
-| **Charts** | Recharts 3.7 |
-| **Icons** | Lucide React |
-| **Backend** | Supabase (Auth, Database, Edge Functions) |
-| **Testing** | Vitest + React Testing Library |
-
----
-
-## 📄 License
-
-This project is private and not licensed for distribution.
+- Several old audit and simulation output files still live in the repository root.
+- Some UI strings in source files are mojibake from a past encoding issue.
+- The production bundle is large and would benefit from route or tab-level code splitting.
