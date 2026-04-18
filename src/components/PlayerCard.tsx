@@ -225,6 +225,8 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
                 <TeamLogo
                   primaryColor={teamLogo.primary}
                   secondaryColor={teamLogo.secondary}
+                  accentColor={teamLogo.accent}
+                  shapeId={teamLogo.shapeId}
                   patternId={teamLogo.patternId as any}
                   symbolId={teamLogo.symbolId}
                   size={window.innerWidth < 640 ? 10 : 12}

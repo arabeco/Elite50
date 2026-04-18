@@ -13,11 +13,10 @@ import {
   LeagueColor,
   LeagueTeamStats,
   District,
-  TeamLogoMetadata,
-  LogoPattern,
 } from '../types';
 import { generateCalendar } from './CalendarGenerator';
 import { seedUniverse } from './seed_universe';
+import { generateTeamStyle } from '../utils/logoUtils';
 
 // --- Seeded Random Engine (Fixed Base) ---
 let _seed = 1234567; // Fixed seed for "Base Fixa"
@@ -352,44 +351,6 @@ const teamTargets: Record<string, number> = {
 
 const cities = ['Neo-Tokyo', 'Cyber-SP', 'New London', 'Mega-York', 'Neo-Paris', 'Tech-Berlin', 'Aero-Madrid', 'Synth-Rome', 'Nova-Rio', 'Apex-City'];
 
-const getColorsForDistrict = (district: District) => {
-  switch (district) {
-    case 'NORTE': return { primary: '#00f2ff', secondary: '#7000ff' }; // Cyber Cyan / Electric Purple
-    case 'SUL': return { primary: '#ff4d00', secondary: '#2e2e2e' }; // Neon Orange / Carbon Gray
-    case 'LESTE': return { primary: '#00ff6a', secondary: '#5c3a21' }; // Matrix Green / Dark Wood
-    case 'OESTE': return { primary: '#bf00ff', secondary: '#e2e2e2' }; // Deep Violet / Silver Chrome
-    default: return { primary: '#ffffff', secondary: '#000000' };
-  }
-};
-
-const logoPatterns: LogoPattern[] = [
-  'none', 'stripes-v', 'stripes-h', 'diagonal', 'half-v', 'half-h', 'cross', 'circle',
-  'checkered', 'waves', 'diamond', 'sunburst'
-];
-const logoSymbols = [
-  'Shield', 'Star', 'Sword', 'Zap', 'Flame', 'Crown', 'Target', 'Anchor', 'Award',
-  'Compass', 'Crosshair', 'Feather', 'Flag', 'Heart', 'Key', 'Leaf', 'Lightning',
-  'Moon', 'Mountain', 'Rocket', 'Sun', 'Trophy', 'Wind', 'Gem', 'Skull', 'Ghost',
-  'Fingerprint', 'Cpu', 'Activity', 'ShieldAlert', 'ShieldCheck', 'Radio', 'Telescope'
-];
-
-const generateLogo = (primary: string, secondary: string): TeamLogoMetadata => {
-  const patternId = logoPatterns[randomInt(0, logoPatterns.length - 1)];
-  const symbolId = logoSymbols[randomInt(0, logoSymbols.length - 1)];
-
-  // 30% chance of having a secondary symbol
-  const hasSecondary = Math.random() < 0.3;
-  const secondarySymbolId = hasSecondary ? logoSymbols[randomInt(0, logoSymbols.length - 1)] : undefined;
-
-  return {
-    primary,
-    secondary,
-    patternId,
-    symbolId,
-    secondarySymbolId,
-  };
-};
-
 const getLeagueForDistrict = (district: District): LeagueColor => {
   switch (district) {
     case 'NORTE': return 'Cyan';
@@ -401,15 +362,21 @@ const getLeagueForDistrict = (district: District): LeagueColor => {
 };
 
 export const generateTeam = (id: string, index: number, district: District): Team => {
-  const colors = getColorsForDistrict(district);
+  const name = teamNames[index] || `Team ${index}`;
+  const logo = generateTeamStyle(name, district);
+  const colors = {
+    primary: logo.primary,
+    secondary: logo.secondary,
+  };
+
   return {
     id,
-    name: teamNames[index] || `Team ${index}`,
+    name,
     city: cities[randomInt(0, cities.length - 1)],
     district,
     league: getLeagueForDistrict(district),
     colors,
-    logo: generateLogo(colors.primary, colors.secondary),
+    logo,
     tactics: {
       playStyle: 'Equilibrado',
       mentality: 'Calculista',
@@ -508,7 +475,11 @@ export const generateInitialState = (): GameState => {
 
   districts.forEach(district => {
     const id = `d_${district.toLowerCase()}`;
-    const colors = getColorsForDistrict(district);
+    const logo = generateTeamStyle(districtTeams[district], district);
+    const colors = {
+      primary: logo.primary,
+      secondary: logo.secondary,
+    };
     teams[id] = {
       id,
       name: districtTeams[district],
@@ -516,7 +487,7 @@ export const generateInitialState = (): GameState => {
       district,
       league: getLeagueForDistrict(district),
       colors,
-      logo: generateLogo(colors.primary, colors.secondary),
+      logo,
       tactics: { playStyle: 'Vertical', preferredFormation: '4-3-3' },
       managerId: null,
       squad: [],

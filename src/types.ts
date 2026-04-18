@@ -110,10 +110,38 @@ export interface TeamTactics {
   preferredFormation: string;
 }
 
+export type LogoShape =
+  | 'shield_classic'
+  | 'shield_modern'
+  | 'circle_badge'
+  | 'hex_tech'
+  | 'diamond';
+
+export type LogoPattern =
+  | 'solid'
+  | 'stripes_vertical'
+  | 'stripes_horizontal'
+  | 'diagonal_split'
+  | 'radial'
+  | 'none'
+  | 'stripes-v'
+  | 'stripes-h'
+  | 'diagonal'
+  | 'half-v'
+  | 'half-h'
+  | 'cross'
+  | 'circle'
+  | 'checkered'
+  | 'waves'
+  | 'diamond'
+  | 'sunburst';
+
 export interface TeamLogoMetadata {
   primary: string;
   secondary: string;
-  patternId: string;
+  accent?: string;
+  shapeId?: LogoShape;
+  patternId: LogoPattern;
   symbolId: string;
   secondarySymbolId?: string;
 }
@@ -255,8 +283,6 @@ export interface LeagueScorer {
   goals: number;
   teamId: string;
 }
-
-export type LogoPattern = string;
 
 export interface GameNotification {
   id: string;

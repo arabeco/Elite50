@@ -165,7 +165,27 @@ export const Dashboard: React.FC = () => {
 
   const renderCurrentTab = () => {
     switch (activeTab) {
-      case 'home': return <HomeTab />;
+      case 'home': return (
+        <HomeTab
+          onOpenDraft={() => {
+            setActiveTab('team');
+            setActiveTeamTab('draft');
+          }}
+          onOpenTeam={() => {
+            setActiveTab('team');
+            setActiveTeamTab('squad');
+          }}
+          onOpenLineup={() => {
+            setActiveTab('team');
+            setActiveTeamTab('lineup');
+          }}
+          onOpenTactics={() => {
+            setActiveTab('team');
+            setActiveTeamTab('tactics');
+          }}
+          onOpenLeague={() => setActiveTab('calendar')}
+        />
+      );
       case 'team':
         return (
           <div className="space-y-4 sm:space-y-6">

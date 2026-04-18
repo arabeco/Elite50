@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useGame } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
@@ -11,14 +11,24 @@ import { PlayerModal } from '../PlayerModal';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
-import { getLiveMatchSecond, getMatchStatus } from '../../utils/matchUtils';
+import { getCountdown, getLiveMatchSecond, getMatchDateTime, getNextMatch } from '../../utils/matchUtils';
 import { calculateTeamPower } from '../../engine/gameLogic';
 import { MATCH_REAL_TIME_SECONDS } from '../../constants/gameConstants';
 import { Team, Player, Match } from '../../types';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } = LucideIcons;
+const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket } = LucideIcons;
 
-export const HomeTab = () => {
+interface HomeTabProps {
+  onOpenDraft?: () => void;
+  onOpenTeam?: () => void;
+  onOpenLineup?: () => void;
+  onOpenTactics?: () => void;
+  onOpenLeague?: () => void;
+}
+
+type TodayPhase = 'preseason' | 'season' | 'matchday' | 'postgame';
+
+export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague }: HomeTabProps) => {
   const { state, setState, isSyncing } = useGame();
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches, pastMatches, totalPoints, powerCap, pointsLeft } = dashData;
@@ -52,7 +62,12 @@ export const HomeTab = () => {
         if (match) match.revealed = true;
       });
       // Search in cups
-      const ecMatch = [...(newState.world.eliteCup.bracket.oitavas || []), ...(newState.world.eliteCup.bracket.quartas || []), ...(newState.world.eliteCup.bracket.semis || []), newState.world.eliteCup.bracket.final].find(m => m?.id === matchId);
+      const ecMatch = [
+        ...(newState.world.eliteCup.bracket.round1 || []),
+        ...(newState.world.eliteCup.bracket.quarters || []),
+        ...(newState.world.eliteCup.bracket.semis || []),
+        newState.world.eliteCup.bracket.final
+      ].find(m => m?.id === matchId);
       if (ecMatch) ecMatch.revealed = true;
 
       const dcMatch = newState.world.districtCup.matches.find(m => m.id === matchId);
@@ -63,7 +78,30 @@ export const HomeTab = () => {
     });
   };
 
-  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [clockAnchor, setClockAnchor] = React.useState(() => ({
+    worldMs: new Date(state.world.currentDate).getTime(),
+    realMs: Date.now(),
+  }));
+  const [currentRealMs, setCurrentRealMs] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    setClockAnchor({
+      worldMs: new Date(state.world.currentDate).getTime(),
+      realMs: Date.now(),
+    });
+  }, [state.world.currentDate]);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentRealMs(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const liveWorldNow = React.useMemo(() => {
+    return new Date(clockAnchor.worldMs + (currentRealMs - clockAnchor.realMs));
+  }, [clockAnchor, currentRealMs]);
 
   // Determine Headline based on last match
   const lastMatch = pastMatches?.[0];
@@ -134,119 +172,122 @@ export const HomeTab = () => {
     return feed;
   }, [pastMatches, userTeam]);
 
-  // Better next match logic
-  const nextMatchData = (() => {
-    if (!userTeam || !state.world?.leagues) return null;
-    const leagues = Object.values(state.world.leagues) as any[];
-    const userLeague = leagues.find(l => l.standings.some(s => s.teamId === userTeam.id));
-    if (!userLeague) return null;
+  const userRelevantMatches = React.useMemo(() => {
+    if (!userTeam) return [];
 
-    const userMatches = userLeague.matches.filter(m => (m.homeTeamId === userTeam.id || m.awayTeamId === userTeam.id));
+    const leagueMatches = Object.values(state.world.leagues).flatMap(league => league.matches || []);
+    const eliteMatches = [
+      ...(state.world.eliteCup.bracket.round1 || []),
+      ...(state.world.eliteCup.bracket.quarters || []),
+      ...(state.world.eliteCup.bracket.semis || []),
+      ...(state.world.eliteCup.bracket.final ? [state.world.eliteCup.bracket.final] : []),
+    ];
 
-    // 1. Find a match that is currently PLAYING
-    let match = userMatches.find(m => {
-      // Force correct date for check
-      const seasonStart = state.world.seasonStartReal ? new Date(state.world.seasonStartReal) : new Date('2050-01-01T08:00:00Z');
-      const d = new Date(seasonStart);
-      d.setDate(d.getDate() + (m.round * 2));
-      const correctDate = d.toISOString().split('T')[0];
-      const mCopy = { ...m, date: correctDate };
-      return getMatchStatus(mCopy, state.world.currentDate) === 'PLAYING';
-    });
+    return [...leagueMatches, ...eliteMatches].filter(match =>
+      match && (match.homeTeamId === userTeam.id || match.awayTeamId === userTeam.id)
+    );
+  }, [state.world.leagues, state.world.eliteCup.bracket, userTeam]);
 
-    // 2. If none, find a match that is LOCKED or SCHEDULED (the next one)
-    if (!match) {
-      match = userMatches.find(m => {
-        const seasonStart = state.world.seasonStartReal ? new Date(state.world.seasonStartReal) : new Date('2050-01-01T08:00:00Z');
-        const d = new Date(seasonStart);
-        d.setDate(d.getDate() + (m.round * 2));
-        const correctDate = d.toISOString().split('T')[0];
-        const mCopy = { ...m, date: correctDate };
-        const status = getMatchStatus(mCopy, state.world.currentDate);
-        return status === 'LOCKED' || status === 'SCHEDULED';
-      });
-    }
+  const nextMatchData = React.useMemo(() => {
+    if (!userTeam) return null;
 
-    // 3. If still none, check if there was a match today that is already FINISHED
-    if (!match) {
-      const todayStr = state.world.currentDate.split('T')[0];
-      match = userMatches.find(m => {
-        // Check date logic
-        const seasonStart = state.world.seasonStartReal ? new Date(state.world.seasonStartReal) : new Date('2050-01-01T08:00:00Z');
-        const d = new Date(seasonStart);
-        d.setDate(d.getDate() + (match.round * 2));
-        const correctDate = d.toISOString().split('T')[0];
+    const nextEvent = getNextMatch(userRelevantMatches, liveWorldNow.toISOString());
+    if (!nextEvent) return null;
 
-        // Match finished if played OR if time passed logically
-        const mCopy = { ...m, date: correctDate };
-        const status = getMatchStatus(mCopy, state.world.currentDate);
-
-        return (m.played || status === 'FINISHED') && correctDate === todayStr;
-      });
-    }
-
-    // 4. Fallback to any future match if none of the above
-    if (!match) {
-      match = userMatches.find(m => !m.played);
-    }
-
-    if (!match) return null;
-
-    // Apply correct date to the found match object for display
-    const seasonStart = state.world.seasonStartReal ? new Date(state.world.seasonStartReal) : new Date('2050-01-01T08:00:00Z');
-    const d = new Date(seasonStart);
-    d.setDate(d.getDate() + (match.round));
-    const correctDate = d.toISOString().split('T')[0];
-    const matchWithDate = { ...match, date: correctDate };
-
-    const opponentId = match.homeTeamId === userTeam.id ? match.awayTeamId : match.homeTeamId;
+    const opponentId = nextEvent.match.homeTeamId === userTeam.id ? nextEvent.match.awayTeamId : nextEvent.match.homeTeamId;
     const opponent = state.teams[opponentId];
     const opponentPower = opponent ? calculateTeamPower(opponent, state.players) : 0;
     const userPower = calculateTeamPower(userTeam, state.players);
-    const status = getMatchStatus(matchWithDate, state.world.currentDate);
+    const startDate = nextEvent.startDateTime;
+    const now = liveWorldNow;
+    const isToday = startDate.toDateString() === now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = startDate.toDateString() === tomorrow.toDateString();
+    const datePrefix = isToday
+      ? 'Hoje'
+      : isTomorrow
+        ? 'Amanha'
+        : startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const dateLabel = `${datePrefix} • ${nextEvent.match.time || '16:00'}`;
+
+    let eventTitle = `Próximo jogo vs ${opponent?.name || 'Adversário'}`;
+    let eventBadge = nextEvent.status === 'LOCKED' ? 'Partida próxima' : 'Próximo evento';
+    let countdownLabel = `Começa em ${getCountdown(nextEvent.msUntilStart)}`;
+    let ctaLabel = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000 ? 'Revisar Escalação' : 'Preparar Time';
+    let ctaAction = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000
+      ? (onOpenLineup || onOpenTactics || onOpenTeam || onOpenLeague)
+      : (onOpenTeam || onOpenTactics || onOpenLeague);
+    let ctaIcon = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000 ? Shield : Users;
+
+    if (nextEvent.phase === 'live') {
+      eventTitle = 'EM JOGO AGORA';
+      eventBadge = 'Ao vivo';
+      countdownLabel = `${userTeam.name} x ${opponent?.name || 'Adversário'}`;
+      ctaLabel = 'Acompanhar';
+      ctaAction = () => setSelectedMatchReport(nextEvent.match);
+      ctaIcon = Play;
+    } else if (nextEvent.phase === 'after') {
+      eventTitle = 'Resultado disponível';
+      eventBadge = 'Pós-jogo';
+      countdownLabel = `Relatório liberado há ${getCountdown(nextEvent.msSinceEnd)}`;
+      ctaLabel = 'Ver Resultado';
+      ctaAction = () => setSelectedMatchReport(nextEvent.match);
+      ctaIcon = Trophy;
+    }
 
     return {
-      match: matchWithDate,
+      ...nextEvent,
       opponent,
       opponentPower,
       userPower,
-      isHome: match.homeTeamId === userTeam.id,
-      status
+      isHome: nextEvent.match.homeTeamId === userTeam.id,
+      status: nextEvent.status,
+      dateLabel,
+      eventTitle,
+      eventBadge,
+      countdownLabel,
+      ctaLabel,
+      ctaAction,
+      ctaIcon,
+      countdown: nextEvent.phase === 'before' ? getCountdown(nextEvent.msUntilStart) : null,
     };
-  })();
-
-  React.useEffect(() => {
-    if (!nextMatchData?.match) return;
-
-    const timer = setInterval(() => {
-      const matchDate = new Date(`${nextMatchData.match.date}T${nextMatchData.match.time}`);
-      const now = new Date(state.world.currentDate);
-      const diff = matchDate.getTime() - now.getTime();
-
-      if (diff <= 0) {
-        setTimeLeft('AGORA');
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (days > 0) {
-        setTimeLeft(`${days}D • ${hours}H`);
-      } else {
-        setTimeLeft(`${hours}H • ${minutes}M`);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [nextMatchData?.match, state.world.currentDate]);
+  }, [
+    liveWorldNow,
+    onOpenLeague,
+    onOpenLineup,
+    onOpenTactics,
+    onOpenTeam,
+    setSelectedMatchReport,
+    state.players,
+    state.teams,
+    userRelevantMatches,
+    userTeam
+  ]);
 
   // Remove lastHeadline usage since we now use headlineData
   // const lastHeadline = state.lastHeadline || ...
 
   // Remote redundant mock logic and duplicate state calls
   const isLobby = state.world.status === 'LOBBY';
+  const isPreseason = state.world.status === 'LOBBY' || state.world.currentDay < 3;
+  const isMatchDay = !isPreseason && nextMatchData?.phase === 'live';
+  const isPostGame = !isPreseason && (
+    (!!nextMatchData && nextMatchData.phase === 'after') ||
+    (!!lastMatch && lastMatch.revealed === false)
+  );
+
+  const todayPhase: TodayPhase = isPreseason
+    ? 'preseason'
+    : isMatchDay
+      ? 'matchday'
+      : isPostGame
+        ? 'postgame'
+        : 'season';
+
+  const draftCount = state.world.draftProposals?.filter(p => p.managerId === state.userManagerId).length || 0;
+  const squadSize = userTeam?.squad?.length || 0;
+  const canAdvancePreseason = state.isCreator && state.world.currentDay === -1;
 
   const handleStartSeason = () => {
     if (!state.isCreator) {
@@ -268,6 +309,83 @@ export const HomeTab = () => {
       }
     }));
   };
+
+  const todayCopy = {
+    preseason: {
+      eyebrow: 'PRE-TEMPORADA',
+      title: 'Monte seu elenco inicial',
+      message: draftCount > 0
+        ? `Voce tem ${draftCount} atleta${draftCount === 1 ? '' : 's'} na lista do Draft. Confirme suas escolhas antes de abrir a temporada.`
+        : 'O Draft esta ativo antes da temporada. Escolha atletas suficientes para montar a base do seu time.',
+      status: `${squadSize} no elenco - ${draftCount} na lista`,
+      consequence: 'Conseq.: elenco formado e temporada liberada.',
+    },
+    season: {
+      eyebrow: 'TEMPORADA',
+      title: 'Prepare o proximo compromisso',
+      message: nextMatchData?.opponent
+        ? `${nextMatchData.eventTitle}. ${nextMatchData.phase === 'before' ? 'Organize elenco e tática antes do horário marcado.' : 'O próximo evento do clube já está disponível na central.'}`
+        : 'A temporada roda em tempo real. Use mercado, treino e tatica enquanto o calendario avanca pelo relogio.',
+      status: nextMatchData?.opponent ? `${nextMatchData.isHome ? 'Casa' : 'Fora'} - ${nextMatchData.dateLabel}` : 'Calendario em andamento',
+      consequence: 'Conseq.: quando o relogio chegar, a rodada acontece.',
+    },
+    matchday: {
+      eyebrow: 'DIA DE JOGO',
+      title: 'EM JOGO AGORA',
+      message: nextMatchData?.opponent
+        ? `Acompanhe ${userTeam?.name} contra ${nextMatchData.opponent.name} em tempo real.`
+        : 'A partida do dia esta disponivel para acompanhar.',
+      status: 'Ao vivo',
+      consequence: 'Conseq.: resultado e impacto no elenco.',
+    },
+    postgame: {
+      eyebrow: 'POS-JOGO',
+      title: 'Veja o impacto da rodada',
+      message: 'Existe um resultado recente para revelar. Veja o relatorio antes de seguir para o proximo dia.',
+      status: 'Relatorio pendente',
+      consequence: 'Conseq.: placar revelado e proximo dia liberado.',
+    }
+  }[todayPhase];
+
+  const todayActions = (() => {
+    if (todayPhase === 'preseason') {
+      return [
+        { label: 'Abrir Draft', icon: Rocket, onClick: onOpenDraft, primary: true, disabled: !onOpenDraft },
+        { label: 'Ver Elenco', icon: Users, onClick: onOpenTeam, disabled: !onOpenTeam },
+        ...(canAdvancePreseason ? [{ label: 'Abrir Mundo', icon: Play, onClick: handleStartSeason, disabled: false }] : [])
+      ];
+    }
+
+    if (todayPhase === 'matchday' && nextMatchData?.match) {
+      return [
+        { label: nextMatchData.ctaLabel, icon: nextMatchData.ctaIcon, onClick: nextMatchData.ctaAction, primary: true, disabled: !nextMatchData.ctaAction },
+        { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
+        { label: 'Escalacao', icon: Shield, onClick: onOpenLineup, disabled: !onOpenLineup },
+      ];
+    }
+
+    if (todayPhase === 'postgame' && nextMatchData?.match) {
+      return [
+        { label: nextMatchData.ctaLabel, icon: nextMatchData.ctaIcon, onClick: nextMatchData.ctaAction, primary: true, disabled: !nextMatchData.ctaAction },
+        { label: 'Liga', icon: Calendar, onClick: onOpenLeague, disabled: !onOpenLeague },
+        { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
+      ];
+    }
+
+    if (nextMatchData) {
+      return [
+        { label: nextMatchData.ctaLabel, icon: nextMatchData.ctaIcon, onClick: nextMatchData.ctaAction, primary: true, disabled: !nextMatchData.ctaAction },
+        { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
+        { label: 'Escalacao', icon: Shield, onClick: onOpenLineup, disabled: !onOpenLineup },
+      ];
+    }
+
+    return [
+      { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, primary: true, disabled: !onOpenTactics },
+      { label: 'Escalacao', icon: Shield, onClick: onOpenLineup, disabled: !onOpenLineup },
+      { label: 'Ver Liga', icon: Calendar, onClick: onOpenLeague, disabled: !onOpenLeague },
+    ];
+  })();
 
   if (selectedMatchReport) {
     const homeTeam = state.teams[selectedMatchReport.homeTeamId];
@@ -344,6 +462,193 @@ export const HomeTab = () => {
         </div>
       )}
 
+      {/* CENTRAL DO DIA: game-state driven actions */}
+      <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-card-neon border-cyan-500/25 p-5 sm:p-8 shadow-[0_0_45px_rgba(6,182,212,0.12)]">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-cyan-500/10 blur-[80px]" />
+        <div className="absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-fuchsia-500/10 blur-[80px]" />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
+          <div className="space-y-3 lg:flex-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.3em] text-cyan-300">
+                {todayCopy.eyebrow}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[8px] font-black uppercase tracking-[0.25em] text-slate-400">
+                {todayCopy.status}
+              </span>
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-4xl font-black uppercase italic tracking-tighter text-white">
+                {todayCopy.title}
+              </h2>
+              <p className="mt-2 max-w-2xl text-[11px] sm:text-sm font-bold leading-relaxed text-slate-400">
+                {todayCopy.message}
+              </p>
+              <p className="mt-2 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300/80">
+                {todayCopy.consequence}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:min-w-[420px] lg:max-w-[460px]">
+            <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+                    <Clock size={13} />
+                    Próximo Evento
+                  </div>
+                  {nextMatchData?.opponent ? (
+                    <>
+                      <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
+                        {nextMatchData.eventTitle}
+                      </div>
+                      <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        {nextMatchData.dateLabel}
+                      </div>
+                      <div className="mt-2 text-sm sm:text-base font-black text-cyan-300">
+                        {nextMatchData.phase === 'before'
+                          ? `Começa em ${nextMatchData.countdown}`
+                          : nextMatchData.countdownLabel}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
+                        Nenhum evento carregado
+                      </div>
+                      <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        O calendário real será exibido aqui assim que houver partida
+                      </div>
+                    </>
+                  )}
+                </div>
+                {nextMatchData?.opponent?.logo && (
+                  <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] p-2">
+                    <TeamLogo
+                      primaryColor={nextMatchData.opponent.logo.primary}
+                      secondaryColor={nextMatchData.opponent.logo.secondary}
+                      accentColor={nextMatchData.opponent.logo.accent}
+                      shapeId={nextMatchData.opponent.logo.shapeId}
+                      patternId={nextMatchData.opponent.logo.patternId as any}
+                      symbolId={nextMatchData.opponent.logo.symbolId}
+                      secondarySymbolId={nextMatchData.opponent.logo.secondarySymbolId}
+                      size={52}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {todayActions.slice(0, 3).map((action) => (
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 ${action.primary
+                    ? 'bg-cyan-500 text-black shadow-[0_0_28px_rgba(6,182,212,0.35)] hover:bg-cyan-400'
+                    : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-500/40 hover:text-white'
+                    }`}
+                >
+                  <action.icon size={15} />
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECONDARY CONTEXT: one glance, no command noise */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
+        <button
+          type="button"
+          onClick={nextMatchData?.ctaAction || onOpenLeague}
+          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-cyan-500/40 hover:bg-white/[0.055]"
+        >
+          <div className="absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-12 rounded-full bg-cyan-500/10 blur-[60px]" />
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+                <Calendar size={13} />
+                Proximo Jogo
+              </div>
+              {nextMatchData?.opponent ? (
+                <>
+                  <div className="truncate text-lg font-black uppercase italic tracking-tight text-white">
+                    {nextMatchData.eventTitle}
+                  </div>
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                    {nextMatchData.dateLabel}
+                  </div>
+                  <div className="mt-2 text-xs font-black text-cyan-300">
+                    {nextMatchData.phase === 'before'
+                      ? `Começa em ${nextMatchData.countdown}`
+                      : nextMatchData.countdownLabel}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-lg font-black uppercase italic tracking-tight text-white">
+                    Calendario em preparacao
+                  </div>
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                    Termine a fase atual para gerar o proximo compromisso
+                  </div>
+                </>
+              )}
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-cyan-300 transition-transform group-hover:translate-x-1" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenTeam}
+          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-fuchsia-500/40 hover:bg-white/[0.055]"
+        >
+          <div className="absolute right-0 bottom-0 h-32 w-32 translate-x-12 translate-y-12 rounded-full bg-fuchsia-500/10 blur-[60px]" />
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-fuchsia-300">
+                <Target size={13} />
+                Elenco
+              </div>
+              <div className="text-lg font-black uppercase italic tracking-tight text-white">
+                {totalPoints}<span className="text-sm text-slate-500"> / {powerCap}</span>
+              </div>
+              <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.18em] ${pointsLeft < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                {pointsLeft < 0 ? 'Score acima do teto' : `${pointsLeft} pontos livres`}
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-fuchsia-300 transition-transform group-hover:translate-x-1" />
+          </div>
+        </button>
+      </div>
+
+      {state.isCreator && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-amber-300">
+              <FastForward size={12} />
+              GM / Teste
+            </div>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              O mundo roda em tempo real. Use isto so para testar mecanicas.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleAdvanceDay}
+            className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-[9px] font-black uppercase tracking-[0.22em] text-amber-200 transition-all hover:bg-amber-400/20"
+          >
+            Avancar Dia
+          </button>
+        </div>
+      )}
+
+      {false && (<>
       {/* TOP ROW: Premium Status Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* CARD 1: PRÓXIMO CONFRONTO - FUTURISTIC REDESIGN */}
@@ -395,7 +700,7 @@ export const HomeTab = () => {
                       <span>{nextMatchData.match.awayScore}</span>
                     </div>
                   ) : (
-                    timeLeft || 'Aguardando...'
+                    nextMatchData?.countdown || 'Aguardando...'
                   )}
                 </div>
               </div>
@@ -408,7 +713,7 @@ export const HomeTab = () => {
                     <span className={!nextMatchData.isHome ? 'text-cyan-400' : ''}>{nextMatchData.opponent?.name}</span>
                   </div>
                   <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">
-                    {isLobby ? '--/--' : new Date(`${nextMatchData.match.date}T${nextMatchData.match.time}`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()} • {isLobby ? '--:--' : nextMatchData.match.time}
+                    {isLobby ? '--/--' : getMatchDateTime(nextMatchData.match).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()} • {isLobby ? '--:--' : nextMatchData.match.time}
                   </p>
                 </div>
               ) : (
@@ -426,6 +731,8 @@ export const HomeTab = () => {
                     <TeamLogo
                       primaryColor={userTeam.logo.primary}
                       secondaryColor={userTeam.logo.secondary}
+                      accentColor={userTeam.logo.accent}
+                      shapeId={userTeam.logo.shapeId}
                       patternId={userTeam.logo.patternId as any}
                       symbolId={userTeam.logo.symbolId}
                       size={window.innerWidth < 640 ? 32 : 40}
@@ -440,6 +747,8 @@ export const HomeTab = () => {
                     <TeamLogo
                       primaryColor={nextMatchData.opponent.logo.primary}
                       secondaryColor={nextMatchData.opponent.logo.secondary}
+                      accentColor={nextMatchData.opponent.logo.accent}
+                      shapeId={nextMatchData.opponent.logo.shapeId}
                       patternId={nextMatchData.opponent.logo.patternId as any}
                       symbolId={nextMatchData.opponent.logo.symbolId}
                       size={window.innerWidth < 640 ? 32 : 40}
@@ -647,6 +956,8 @@ export const HomeTab = () => {
                               <TeamLogo
                                 primaryColor={homeTeam.logo.primary}
                                 secondaryColor={homeTeam.logo.secondary}
+                                accentColor={homeTeam.logo.accent}
+                                shapeId={homeTeam.logo.shapeId}
                                 patternId={homeTeam.logo.patternId as any}
                                 symbolId={homeTeam.logo.symbolId}
                                 size={10}
@@ -664,6 +975,8 @@ export const HomeTab = () => {
                               <TeamLogo
                                 primaryColor={awayTeam.logo.primary}
                                 secondaryColor={awayTeam.logo.secondary}
+                                accentColor={awayTeam.logo.accent}
+                                shapeId={awayTeam.logo.shapeId}
                                 patternId={awayTeam.logo.patternId as any}
                                 symbolId={awayTeam.logo.symbolId}
                                 size={10}
@@ -713,6 +1026,7 @@ export const HomeTab = () => {
           </div>
         </div>
       </div>
+      </>)}
       {/* Match Report Modal */}
       {selectedMatchReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">

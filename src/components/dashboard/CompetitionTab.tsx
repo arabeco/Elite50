@@ -194,6 +194,8 @@ export const CompetitionTab = (props: any) => {
                   <TeamLogo
                     primaryColor={homeTeam.logo.primary}
                     secondaryColor={homeTeam.logo.secondary}
+                    accentColor={homeTeam.logo.accent}
+                    shapeId={homeTeam.logo.shapeId}
                     patternId={homeTeam.logo.patternId as any}
                     symbolId={homeTeam.logo.symbolId}
                     size={window.innerWidth < 640 ? 28 : 64}
@@ -213,6 +215,8 @@ export const CompetitionTab = (props: any) => {
                   <TeamLogo
                     primaryColor={awayTeam.logo.primary}
                     secondaryColor={awayTeam.logo.secondary}
+                    accentColor={awayTeam.logo.accent}
+                    shapeId={awayTeam.logo.shapeId}
                     patternId={awayTeam.logo.patternId as any}
                     symbolId={awayTeam.logo.symbolId}
                     size={window.innerWidth < 640 ? 28 : 64}
@@ -280,6 +284,8 @@ export const CompetitionTab = (props: any) => {
                             <TeamLogo
                               primaryColor={homeTeam.logo.primary}
                               secondaryColor={homeTeam.logo.secondary}
+                              accentColor={homeTeam.logo.accent}
+                              shapeId={homeTeam.logo.shapeId}
                               patternId={homeTeam.logo.patternId as any}
                               symbolId={homeTeam.logo.symbolId}
                               size={window.innerWidth < 640 ? 16 : 28}
@@ -308,6 +314,8 @@ export const CompetitionTab = (props: any) => {
                             <TeamLogo
                               primaryColor={awayTeam.logo.primary}
                               secondaryColor={awayTeam.logo.secondary}
+                              accentColor={awayTeam.logo.accent}
+                              shapeId={awayTeam.logo.shapeId}
                               patternId={awayTeam.logo.patternId as any}
                               symbolId={awayTeam.logo.symbolId}
                               size={window.innerWidth < 640 ? 16 : 28}

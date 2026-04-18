@@ -527,6 +527,8 @@ export const NewGameFlow: React.FC = () => {
                                 <TeamLogo
                                   primaryColor={team.logo.primary}
                                   secondaryColor={team.logo.secondary}
+                                  accentColor={team.logo.accent}
+                                  shapeId={team.logo.shapeId}
                                   patternId={team.logo.patternId as any}
                                   symbolId={team.logo.symbolId}
                                   size={isSelected ? (window.innerWidth < 640 ? 24 : 32) : (window.innerWidth < 640 ? 20 : 28)}
@@ -535,6 +537,8 @@ export const NewGameFlow: React.FC = () => {
                                 <TeamLogo
                                   primaryColor={isSelected ? '#22d3ee' : team.colors.primary}
                                   secondaryColor={team.colors.secondary}
+                                  accentColor={team.colors.accent}
+                                  shapeId={team.colors.shapeId}
                                   patternId="none"
                                   symbolId="Shield"
                                   size={isSelected ? (window.innerWidth < 640 ? 18 : 24) : (window.innerWidth < 640 ? 16 : 20)}

@@ -80,6 +80,8 @@ export const WorldTab = (props: any) => {
                 <TeamLogo
                   primaryColor={team.logo.primary}
                   secondaryColor={team.logo.secondary}
+                  accentColor={team.logo.accent}
+                  shapeId={team.logo.shapeId}
                   patternId={team.logo.patternId as any}
                   symbolId={team.logo.symbolId}
                   size={window.innerWidth < 640 ? 44 : 64}
@@ -254,6 +256,8 @@ export const WorldTab = (props: any) => {
                         <TeamLogo
                           primaryColor={team.logo.primary}
                           secondaryColor={team.logo.secondary}
+                          accentColor={team.logo.accent}
+                          shapeId={team.logo.shapeId}
                           patternId={team.logo.patternId as any}
                           symbolId={team.logo.symbolId}
                           size={window.innerWidth < 640 ? 20 : 28}
@@ -270,6 +274,8 @@ export const WorldTab = (props: any) => {
                           <TeamLogo
                             primaryColor={team.logo.primary}
                             secondaryColor={team.logo.secondary}
+                            accentColor={team.logo.accent}
+                            shapeId={team.logo.shapeId}
                             patternId={team.logo.patternId as any}
                             symbolId={team.logo.symbolId}
                             size={window.innerWidth < 640 ? 20 : 28}
@@ -539,6 +545,8 @@ export const WorldTab = (props: any) => {
                                         <TeamLogo
                                           primaryColor={team.logo.primary}
                                           secondaryColor={team.logo.secondary}
+                                          accentColor={team.logo.accent}
+                                          shapeId={team.logo.shapeId}
                                           patternId={team.logo.patternId as any}
                                           symbolId={team.logo.symbolId}
                                           size={window.innerWidth < 640 ? 20 : 32}
@@ -632,6 +640,8 @@ export const WorldTab = (props: any) => {
                               <TeamLogo
                                 primaryColor={team.logo.primary}
                                 secondaryColor={team.logo.secondary}
+                                accentColor={team.logo.accent}
+                                shapeId={team.logo.shapeId}
                                 patternId={team.logo.patternId as any}
                                 symbolId={team.logo.symbolId}
                                 size={window.innerWidth < 640 ? 44 : 56}
@@ -704,6 +714,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={hTeam.logo.primary}
                                       secondaryColor={hTeam.logo.secondary}
+                                      accentColor={hTeam.logo.accent}
+                                      shapeId={hTeam.logo.shapeId}
                                       patternId={hTeam.logo.patternId as any}
                                       symbolId={hTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -724,6 +736,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={aTeam.logo.primary}
                                       secondaryColor={aTeam.logo.secondary}
+                                      accentColor={aTeam.logo.accent}
+                                      shapeId={aTeam.logo.shapeId}
                                       patternId={aTeam.logo.patternId as any}
                                       symbolId={aTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -767,6 +781,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={hTeam.logo.primary}
                                       secondaryColor={hTeam.logo.secondary}
+                                      accentColor={hTeam.logo.accent}
+                                      shapeId={hTeam.logo.shapeId}
                                       patternId={hTeam.logo.patternId as any}
                                       symbolId={hTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -787,6 +803,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={aTeam.logo.primary}
                                       secondaryColor={aTeam.logo.secondary}
+                                      accentColor={aTeam.logo.accent}
+                                      shapeId={aTeam.logo.shapeId}
                                       patternId={aTeam.logo.patternId as any}
                                       symbolId={aTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -830,6 +848,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={hTeam.logo.primary}
                                       secondaryColor={hTeam.logo.secondary}
+                                      accentColor={hTeam.logo.accent}
+                                      shapeId={hTeam.logo.shapeId}
                                       patternId={hTeam.logo.patternId as any}
                                       symbolId={hTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -850,6 +870,8 @@ export const WorldTab = (props: any) => {
                                     <TeamLogo
                                       primaryColor={aTeam.logo.primary}
                                       secondaryColor={aTeam.logo.secondary}
+                                      accentColor={aTeam.logo.accent}
+                                      shapeId={aTeam.logo.shapeId}
                                       patternId={aTeam.logo.patternId as any}
                                       symbolId={aTeam.logo.symbolId}
                                       size={window.innerWidth < 640 ? 16 : 20}
@@ -893,6 +915,8 @@ export const WorldTab = (props: any) => {
                                   <TeamLogo
                                     primaryColor={hTeam.logo.primary}
                                     secondaryColor={hTeam.logo.secondary}
+                                    accentColor={hTeam.logo.accent}
+                                    shapeId={hTeam.logo.shapeId}
                                     patternId={hTeam.logo.patternId as any}
                                     symbolId={hTeam.logo.symbolId}
                                     size={window.innerWidth < 640 ? 24 : 32}
@@ -913,6 +937,8 @@ export const WorldTab = (props: any) => {
                                   <TeamLogo
                                     primaryColor={aTeam.logo.primary}
                                     secondaryColor={aTeam.logo.secondary}
+                                    accentColor={aTeam.logo.accent}
+                                    shapeId={aTeam.logo.shapeId}
                                     patternId={aTeam.logo.patternId as any}
                                     symbolId={aTeam.logo.symbolId}
                                     size={window.innerWidth < 640 ? 24 : 32}
@@ -988,6 +1014,8 @@ export const WorldTab = (props: any) => {
                                           <TeamLogo
                                             primaryColor={team.logo.primary}
                                             secondaryColor={team.logo.secondary}
+                                            accentColor={team.logo.accent}
+                                            shapeId={team.logo.shapeId}
                                             patternId={team.logo.patternId as any}
                                             symbolId={team.logo.symbolId}
                                             size={window.innerWidth < 640 ? 16 : 20}
@@ -1036,6 +1064,8 @@ export const WorldTab = (props: any) => {
                                 <TeamLogo
                                   primaryColor={home.logo.primary}
                                   secondaryColor={home.logo.secondary}
+                                  accentColor={home.logo.accent}
+                                  shapeId={home.logo.shapeId}
                                   patternId={home.logo.patternId as any}
                                   symbolId={home.logo.symbolId}
                                   size={window.innerWidth < 640 ? 40 : 64}
@@ -1067,6 +1097,8 @@ export const WorldTab = (props: any) => {
                                 <TeamLogo
                                   primaryColor={away.logo.primary}
                                   secondaryColor={away.logo.secondary}
+                                  accentColor={away.logo.accent}
+                                  shapeId={away.logo.shapeId}
                                   patternId={away.logo.patternId as any}
                                   symbolId={away.logo.symbolId}
                                   size={window.innerWidth < 640 ? 40 : 64}
@@ -1355,6 +1387,8 @@ export const WorldTab = (props: any) => {
                         <TeamLogo
                           primaryColor={team.logo.primary}
                           secondaryColor={team.logo.secondary}
+                          accentColor={team.logo.accent}
+                          shapeId={team.logo.shapeId}
                           patternId={team.logo.patternId as any}
                           symbolId={team.logo.symbolId}
                           size={window.innerWidth < 640 ? 32 : 40}

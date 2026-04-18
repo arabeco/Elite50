@@ -159,6 +159,8 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
                   <TeamLogo
                     primaryColor={team.logo.primary}
                     secondaryColor={team.logo.secondary}
+                    accentColor={team.logo.accent}
+                    shapeId={team.logo.shapeId}
                     patternId={team.logo.patternId as any}
                     symbolId={team.logo.symbolId}
                     size={window.innerWidth < 640 ? 18 : 24}

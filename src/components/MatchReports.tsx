@@ -69,6 +69,8 @@ export const LiveReport: React.FC<LiveReportProps> = ({
                 <TeamLogo
                   primaryColor={homeTeam.logo.primary}
                   secondaryColor={homeTeam.logo.secondary}
+                  accentColor={homeTeam.logo.accent}
+                  shapeId={homeTeam.logo.shapeId}
                   patternId={homeTeam.logo.patternId as any}
                   symbolId={homeTeam.logo.symbolId}
                   size={48}
@@ -98,6 +100,8 @@ export const LiveReport: React.FC<LiveReportProps> = ({
                 <TeamLogo
                   primaryColor={awayTeam.logo.primary}
                   secondaryColor={awayTeam.logo.secondary}
+                  accentColor={awayTeam.logo.accent}
+                  shapeId={awayTeam.logo.shapeId}
                   patternId={awayTeam.logo.patternId as any}
                   symbolId={awayTeam.logo.symbolId}
                   size={48}
@@ -279,6 +283,8 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
                 <TeamLogo
                   primaryColor={homeTeam.logo.primary}
                   secondaryColor={homeTeam.logo.secondary}
+                  accentColor={homeTeam.logo.accent}
+                  shapeId={homeTeam.logo.shapeId}
                   patternId={homeTeam.logo.patternId as any}
                   symbolId={homeTeam.logo.symbolId}
                   size={64}
@@ -310,6 +316,8 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
                 <TeamLogo
                   primaryColor={awayTeam.logo.primary}
                   secondaryColor={awayTeam.logo.secondary}
+                  accentColor={awayTeam.logo.accent}
+                  shapeId={awayTeam.logo.shapeId}
                   patternId={awayTeam.logo.patternId as any}
                   symbolId={awayTeam.logo.symbolId}
                   size={64}
