@@ -8,14 +8,16 @@ import { calculateTeamPower } from '../engine/gameLogic';
 interface ManagerModalProps {
     manager: Manager;
     onClose: () => void;
+    onResign?: () => void;
 }
 
-export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose }) => {
+export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, onResign }) => {
     const { state } = useGame();
 
     const userTeam = manager.career.currentTeamId ? state.teams[manager.career.currentTeamId] : null;
     const teamPower = userTeam ? calculateTeamPower(userTeam, state.players) : 0;
     const powerCap = userTeam?.powerCap || 0;
+    const squadFillPercent = powerCap > 0 ? (teamPower / powerCap) * 100 : 0;
 
     return (
         <div
@@ -76,15 +78,15 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose }) 
                             <div className="absolute top-0 right-0 p-3 opacity-10 text-cyan-400 group-hover:opacity-30 transition-opacity">
                                 <Target size={24} />
                             </div>
-                            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold mb-1">Poder de Influência</p>
+                            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold mb-1">Score do Elenco</p>
                             <div className="flex items-baseline gap-2">
                                 <span className="text-2xl font-black text-white">{teamPower}</span>
-                                <span className="text-[10px] text-slate-500">/ {powerCap} PTS</span>
+                                <span className="text-[10px] text-slate-500">/ {powerCap} Score Max.</span>
                             </div>
                             <div className="mt-3 h-1.5 bg-black/40 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]"
-                                    style={{ width: `${(teamPower / powerCap) * 100}%` }}
+                                    style={{ width: `${squadFillPercent}%` }}
                                 />
                             </div>
                         </div>
@@ -179,12 +181,22 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose }) 
 
                 {/* Footer */}
                 <div className="p-4 bg-slate-950 border-t border-white/5 flex justify-center">
-                    <button
-                        onClick={onClose}
-                        className="px-8 py-2 bg-white text-black text-[10px] font-black uppercase tracking-[0.3em] rounded-full hover:bg-cyan-400 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-                    >
-                        Fechar Dossier
-                    </button>
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {onResign && (
+                            <button
+                                onClick={onResign}
+                                className="px-6 py-2 bg-rose-500/15 border border-rose-500/30 text-rose-200 text-[10px] font-black uppercase tracking-[0.3em] rounded-full hover:bg-rose-500/25 transition-colors"
+                            >
+                                Demitir-se
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="px-8 py-2 bg-white text-black text-[10px] font-black uppercase tracking-[0.3em] rounded-full hover:bg-cyan-400 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                        >
+                            Fechar Dossier
+                        </button>
+                    </div>
                 </div>
             </motion.div>
         </div>

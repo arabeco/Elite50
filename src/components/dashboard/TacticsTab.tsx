@@ -33,7 +33,7 @@ export const TacticsTab = (props: any) => {
   const [isSaving, setIsSaving] = useState(false);
 
   if (!userTeam) return null;
-  const { tactics, inventory } = userTeam;
+  const { tactics: rawTactics, inventory } = userTeam;
 
   const handleSaveTactic = async () => {
     setIsSaving(true);
@@ -49,6 +49,16 @@ export const TacticsTab = (props: any) => {
 
   const playStyles: PlayStyle[] = ['Blitzkrieg', 'Tiki-Taka', 'Retranca Armada', 'Motor Lento', 'Equilibrado', 'Gegenpressing', 'Catenaccio', 'Vertical'];
   const mentalities: Mentality[] = ['Calculista', 'Emocional', 'Predadora'];
+  const tactics = {
+    mentality: 'Calculista' as Mentality,
+    linePosition: 50,
+    aggressiveness: 50,
+    intensity: 50,
+    width: 50,
+    passing: 50,
+    slots: [null, null, null] as (TacticalCard | null)[],
+    ...rawTactics
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 pb-20 px-2 sm:px-0 max-w-5xl mx-auto">

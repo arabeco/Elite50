@@ -120,6 +120,7 @@ export const NewGameFlow: React.FC = () => {
       name: managerName || 'Manager User',
       district: team.district,
       reputation: 50,
+      isNPC: false,
       attributes: {
         evolution: 50,
         negotiation: 50,
@@ -265,6 +266,7 @@ export const NewGameFlow: React.FC = () => {
       name: managerName || 'Manager User',
       district: founderData.district,
       reputation: 50,
+      isNPC: false,
       attributes: {
         evolution: 50,
         negotiation: 50,

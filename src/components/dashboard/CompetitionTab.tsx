@@ -8,10 +8,12 @@ import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
+import { TeamModal } from '../TeamModal';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
+import { Player } from '../../types';
 import * as LucideIcons from 'lucide-react';
 const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } = LucideIcons;
 
@@ -29,6 +31,8 @@ export const CompetitionTab = (props: any) => {
   const { handleUpdateTactics } = useTactics(userTeam?.id || null);
   const { handleSetFocus, handleStartCardLab, handleChemistryBoost } = useTraining(userTeam?.id || null);
   const { handleAdvanceDay } = useGameDay();
+  const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const handleRevealMatch = (matchId: string) => {
     setState(prev => {
@@ -172,9 +176,21 @@ export const CompetitionTab = (props: any) => {
 
             <div className="space-y-4 sm:space-y-6">
               <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-white/80 font-black text-xs sm:text-lg uppercase tracking-tight italic">
-                <span className={`truncate max-w-[100px] sm:max-w-none ${nextMatch.homeId === userTeam?.id ? 'text-cyan-400' : ''}`}>{nextMatch.home}</span>
-                <span className="text-white/20 shrink-0 text-[10px] sm:text-base">VS</span>
-                <span className={`truncate max-w-[100px] sm:max-w-none ${nextMatch.awayId === userTeam?.id ? 'text-cyan-400' : ''}`}>{nextMatch.away}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTeamView(nextMatch.homeId)}
+                          className={`truncate max-w-[100px] text-left transition hover:text-cyan-300 sm:max-w-none ${nextMatch.homeId === userTeam?.id ? 'text-cyan-400' : ''}`}
+                        >
+                          {nextMatch.home}
+                        </button>
+                        <span className="text-white/20 shrink-0 text-[10px] sm:text-base">VS</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTeamView(nextMatch.awayId)}
+                          className={`truncate max-w-[100px] text-left transition hover:text-cyan-300 sm:max-w-none ${nextMatch.awayId === userTeam?.id ? 'text-cyan-400' : ''}`}
+                        >
+                          {nextMatch.away}
+                        </button>
               </div>
               <p className="text-[8px] sm:text-xs text-slate-500 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em]">
                 {state.world.status === 'LOBBY' ? '--/--' : formattedDate} • {state.world.status === 'LOBBY' ? '--:--' : nextMatch.time} • RODADA {nextMatch.id.split('_')[1]}
@@ -187,7 +203,7 @@ export const CompetitionTab = (props: any) => {
             {/* Connection Line */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent hidden sm:block" />
 
-            <div className="relative group/home">
+            <button type="button" onClick={() => setSelectedTeamView(nextMatch.homeId)} className="relative group/home">
               <div className="absolute inset-0 bg-cyan-500/20 blur-2xl rounded-full opacity-0 group-hover/home:opacity-100 transition-opacity duration-500" />
               <div className="w-14 h-14 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden backdrop-blur-md transition-transform duration-500 group-hover/home:scale-110 group-hover/home:border-cyan-500/50">
                 {homeTeam?.logo ? (
@@ -204,11 +220,11 @@ export const CompetitionTab = (props: any) => {
                   <Shield size={window.innerWidth < 640 ? 28 : 40} className="text-white/20 sm:size-[48px]" />
                 )}
               </div>
-            </div>
+            </button>
 
             <div className="text-base sm:text-2xl font-black text-white/10 italic z-10">VS</div>
 
-            <div className="relative group/away">
+            <button type="button" onClick={() => setSelectedTeamView(nextMatch.awayId)} className="relative group/away">
               <div className="absolute inset-0 bg-purple-500/20 blur-2xl rounded-full opacity-0 group-hover/away:opacity-100 transition-opacity duration-500" />
               <div className="w-14 h-14 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden backdrop-blur-md transition-transform duration-500 group-hover/away:scale-110 group-hover/away:border-purple-500/50">
                 {awayTeam?.logo ? (
@@ -225,7 +241,7 @@ export const CompetitionTab = (props: any) => {
                   <Shield size={window.innerWidth < 640 ? 28 : 40} className="text-white/20 sm:size-[48px]" />
                 )}
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -276,9 +292,16 @@ export const CompetitionTab = (props: any) => {
                     <div className="flex-1 flex items-center justify-between gap-1.5 sm:gap-3 min-w-0">
                       {/* Home */}
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end min-w-0">
-                        <span className={`text-[8px] sm:text-[11px] font-bold uppercase truncate text-right ${isHomeUser ? 'text-cyan-400' : 'text-slate-400'}`}>
+                        <button
+                          type="button"
+                          onClick={(eventClick) => {
+                            eventClick.stopPropagation();
+                            setSelectedTeamView(event.data.homeId);
+                          }}
+                          className={`truncate text-right text-[8px] font-bold uppercase transition hover:text-cyan-300 sm:text-[11px] ${isHomeUser ? 'text-cyan-400' : 'text-slate-400'}`}
+                        >
                           {homeTeam?.name || event.data.home}
-                        </span>
+                        </button>
                         <div className="w-4 h-4 sm:w-7 sm:h-7 shrink-0 flex items-center justify-center">
                           {homeTeam?.logo ? (
                             <TeamLogo
@@ -324,9 +347,16 @@ export const CompetitionTab = (props: any) => {
                             <div className="w-3 h-3 sm:w-5 sm:h-5 rounded-full bg-slate-700" />
                           )}
                         </div>
-                        <span className={`text-[8px] sm:text-[11px] font-bold uppercase truncate ${isAwayUser ? 'text-cyan-400' : 'text-slate-400'}`}>
+                        <button
+                          type="button"
+                          onClick={(eventClick) => {
+                            eventClick.stopPropagation();
+                            setSelectedTeamView(event.data.awayId);
+                          }}
+                          className={`truncate text-left text-[8px] font-bold uppercase transition hover:text-cyan-300 sm:text-[11px] ${isAwayUser ? 'text-cyan-400' : 'text-slate-400'}`}
+                        >
                           {awayTeam?.name || event.data.away}
-                        </span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -378,10 +408,32 @@ export const CompetitionTab = (props: any) => {
                 players={state.players}
                 onClose={() => setSelectedMatchReport(null)}
                 onReveal={handleRevealMatch}
+                onTeamClick={setSelectedTeamView}
+                onPlayerClick={setSelectedPlayer}
               />
             </div>
           </div>
         </div>
+      )}
+
+      {selectedTeamView && state.teams[selectedTeamView] && (
+        <TeamModal
+          team={state.teams[selectedTeamView]}
+          players={state.players}
+          onClose={() => setSelectedTeamView(null)}
+          onPlayerClick={(player) => {
+            setSelectedPlayer(player);
+            setSelectedTeamView(null);
+          }}
+          onTeamClick={setSelectedTeamView}
+        />
+      )}
+
+      {selectedPlayer && (
+        <PlayerModal
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+        />
       )}
     </div>
   );

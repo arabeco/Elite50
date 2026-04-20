@@ -1,6 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { GameState } from '../types';
+import { GameState, Manager, TrainingState } from '../types';
+import { applyTeamLogoAssets } from '../utils/teamIdentity';
 
 // Supabase configuration - Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY 
 // are set in your Vercel Environment Variables.
@@ -15,6 +16,32 @@ export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key'
 );
+
+const createDefaultTrainingState = (): TrainingState => ({
+  playstyleTraining: {
+    currentStyle: null,
+    understanding: {
+      'Blitzkrieg': 0,
+      'Tiki-Taka': 0,
+      'Retranca Armada': 0,
+      'Motor Lento': 0,
+      'Equilibrado': 20,
+      'Gegenpressing': 0,
+      'Catenaccio': 0,
+      'Vertical': 0
+    }
+  },
+  cardLaboratory: {
+    slots: [
+      { cardId: null, finishTime: null },
+      { cardId: null, finishTime: null }
+    ]
+  },
+  individualFocus: {
+    evolutionSlot: null,
+    stabilizationSlot: null
+  }
+});
 
 export const saveGameState = async (state: GameState, worldId: string = 'default') => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -110,7 +137,7 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
     world: masterGame.world_state as any,
     worldId: worldId,
     isCreator: false,
-    teams: masterGame.teams_data as any,
+    teams: applyTeamLogoAssets(masterGame.teams_data as any),
     players: masterGame.players_data as any,
     managers: masterGame.managers_data || {},
     userTeamId: null, // Joining user hasn't picked a team yet
@@ -151,6 +178,22 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
   return gameState;
 };
 
+export const joinWorldByCode = async (joinCode: string): Promise<GameState | null> => {
+  const code = joinCode.trim().toUpperCase();
+  if (!code) return null;
+
+  const { data, error } = await supabase.rpc('join_world_by_code', {
+    p_join_code: code
+  });
+
+  if (error || !data) {
+    console.error('Error joining world by code:', error);
+    throw new Error(error?.message || 'INVALID_JOIN_CODE');
+  }
+
+  return loadGameState(String(data));
+};
+
 export const loadGameState = async (worldId: string = 'default'): Promise<GameState | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -174,7 +217,15 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
 
   if (!userRecord) return null;
 
-  const isCreator = masterRecord.user_id === user.id || masterRecord.is_creator === true;
+  const isCreator = masterRecord.user_id === user.id || userRecord.is_creator === true;
+  const participants = allWorldRecords.map(record => ({
+    userId: record.user_id,
+    teamId: record.user_team_id,
+    managerId: record.user_manager_id,
+    isCreator: record.is_creator === true,
+    isObserver: !record.user_team_id,
+    updatedAt: record.updated_at
+  }));
 
   // 3. Reconstruct State: Start with master data, then merge human player updates
   const mergedTeams = { ...(masterRecord.teams_data as any) };
@@ -225,20 +276,185 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     world: masterRecord.world_state as any, // Master defines the world clock
     worldId: masterRecord.world_id,
     isCreator,
-    teams: mergedTeams,
+    participants,
+    teams: applyTeamLogoAssets(mergedTeams),
     players: mergedPlayers,
     managers: mergedManagers,
     userTeamId: userRecord.user_team_id,
     userManagerId: userRecord.user_manager_id,
     notifications: userRecord.notifications || [],
     lastHeadline: userRecord.last_headline,
-    training: userRecord.training_data || {
-      cardLaboratory: { slots: [] },
-      individualFocus: { evolutionSlot: null, stabilizationSlot: null },
-      playstyleTraining: { currentStyle: null, understanding: {} }
-    }
+    training: userRecord.training_data || createDefaultTrainingState()
   };
   return gameState;
+};
+
+export const claimTeamInWorld = async (
+  worldId: string,
+  teamId: string,
+  managerName?: string
+): Promise<GameState | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: allWorldRecords, error } = await supabase
+    .from('games')
+    .select('*')
+    .eq('world_id', worldId)
+    .order('updated_at', { ascending: true });
+
+  if (error || !allWorldRecords || allWorldRecords.length === 0) {
+    console.error('Error fetching world before claiming team:', error);
+    return null;
+  }
+
+  const alreadyClaimedByOther = allWorldRecords.some(record =>
+    record.user_id !== user.id && record.user_team_id === teamId
+  );
+
+  if (alreadyClaimedByOther) {
+    throw new Error('TEAM_ALREADY_CLAIMED');
+  }
+
+  const masterRecord = allWorldRecords.find(record => record.is_creator) || allWorldRecords[0];
+  const teams = { ...(masterRecord.teams_data as any) };
+  const players = { ...(masterRecord.players_data as any) };
+  const selectedTeam = teams[teamId];
+
+  if (!selectedTeam || !String(teamId).startsWith('t_')) {
+    throw new Error('TEAM_NOT_AVAILABLE');
+  }
+
+  const managerId = user.id;
+  const displayName =
+    managerName?.trim() ||
+    user.email?.split('@')[0] ||
+    'Manager Elite';
+
+  const userManager: Manager = {
+    id: managerId,
+    name: displayName,
+    district: selectedTeam.district,
+    reputation: 50,
+    isNPC: false,
+    attributes: {
+      evolution: 50,
+      negotiation: 50,
+      scout: 50
+    },
+    career: {
+      titlesWon: 0,
+      totalLeagueTitles: 0,
+      totalCupTitles: 0,
+      hallOfFameEntries: 0,
+      consecutiveTitles: 0,
+      currentTeamId: teamId,
+      historyTeamIds: [teamId]
+    },
+    achievements: []
+  };
+
+  const updatedTeam = {
+    ...selectedTeam,
+    managerId
+  };
+
+  const filteredPlayers: Record<string, any> = {};
+  (updatedTeam.squad || []).forEach((playerId: string) => {
+    if (players[playerId]) {
+      filteredPlayers[playerId] = players[playerId];
+    }
+  });
+
+  const training = createDefaultTrainingState();
+
+  const { error: upsertError } = await supabase
+    .from('games')
+    .upsert({
+      user_id: user.id,
+      world_id: worldId,
+      world_state: masterRecord.world_state,
+      teams_data: { [teamId]: updatedTeam },
+      players_data: filteredPlayers,
+      managers_data: { [managerId]: userManager },
+      user_team_id: teamId,
+      user_manager_id: managerId,
+      notifications: [],
+      last_headline: {},
+      training_data: training,
+      is_creator: false,
+      is_public: false,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id,world_id' });
+
+  if (upsertError) {
+    console.error('Error claiming team:', upsertError);
+    return null;
+  }
+
+  return loadGameState(worldId);
+};
+
+export const resignFromTeamInWorld = async (worldId: string): Promise<GameState | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: allWorldRecords, error } = await supabase
+    .from('games')
+    .select('*')
+    .eq('world_id', worldId)
+    .order('updated_at', { ascending: true });
+
+  if (error || !allWorldRecords || allWorldRecords.length === 0) {
+    console.error('Error fetching world before resigning:', error);
+    return null;
+  }
+
+  const userRecord = allWorldRecords.find(record => record.user_id === user.id);
+  if (!userRecord?.user_team_id || !userRecord?.user_manager_id) {
+    return loadGameState(worldId);
+  }
+
+  const teamId = userRecord.user_team_id;
+  const managerId = userRecord.user_manager_id;
+  const userTeams = { ...((userRecord.teams_data as any) || {}) };
+  const userManagers = { ...((userRecord.managers_data as any) || {}) };
+  const team = userTeams[teamId];
+  const manager = userManagers[managerId];
+
+  if (team) {
+    userTeams[teamId] = {
+      ...team,
+      managerId: null
+    };
+  }
+
+  if (manager) {
+    userManagers[managerId] = {
+      ...manager,
+      career: {
+        ...manager.career,
+        currentTeamId: null
+      }
+    };
+  }
+
+  const { error: upsertError } = await supabase
+    .from('games')
+    .upsert({
+      ...userRecord,
+      teams_data: userTeams,
+      managers_data: userManagers,
+      user_team_id: null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id,world_id' });
+
+  if (upsertError) {
+    console.error('Error resigning from team:', upsertError);
+    return null;
+  }
+
+  return loadGameState(worldId);
 };
 
 export const listUserWorlds = async () => {

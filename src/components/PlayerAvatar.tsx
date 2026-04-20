@@ -1,7 +1,8 @@
 import React from 'react';
 import { Player, District } from '../types';
+import { getHairAssetPath, getHairOffset, HAIR_FILES_BY_GENDER } from '../constants/avatarAssets';
 
-const TEAM_UNIFORM_FILES = [
+export const TEAM_UNIFORM_FILES = [
   'Cópia_de_Design_sem_nome__6_-removebg-preview.png',
   'Cópia_de_Design_sem_nome__7_-removebg-preview.png',
   'Cópia_de_Design_sem_nome__8_-removebg-preview.png',
@@ -36,10 +37,56 @@ const TEAM_UNIFORM_FILES = [
   'Cópia_de_Design_sem_nome__41_-removebg-preview.png',
 ];
 
+export const getTeamUniformFile = (teamId?: string | null) => {
+  const match = teamId?.match(/^t_(\d+)$/);
+  if (!match) return null;
+
+  const teamNumber = Number(match[1]);
+  if (!Number.isInteger(teamNumber) || teamNumber < 1 || teamNumber > TEAM_UNIFORM_FILES.length) {
+    return null;
+  }
+
+  return TEAM_UNIFORM_FILES[teamNumber - 1];
+};
+
+const MALE_HAIR_FILES = [
+  'hair_1.png',
+  'f6-removebg-preview.png',
+  'f9-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__9_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__10_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__11_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__12_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__13_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__14_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__15_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__18_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__19_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__20_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__21_-removebg-preview.png',
+];
+
+const FEMALE_HAIR_FILES = [
+  'f1-removebg-preview.png',
+  'f2-removebg-preview.png',
+  'f3-removebg-preview.png',
+  'f4-removebg-preview.png',
+  'f7-removebg-preview.png',
+  'f8-removebg-preview.png',
+  'f10-removebg-preview.png',
+  'f11-removebg-preview.png',
+  'f13-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__5_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__6_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__7_-removebg-preview.png',
+  'Cópia_de_Design_sem_nome__8_-removebg-preview.png',
+];
+
 interface PlayerAvatarProps {
   player: Player;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   mode?: 'full' | 'head' | 'no-boots';
+  cropBottomPercent?: number;
   className?: string;
 }
 
@@ -47,9 +94,20 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   player, 
   size = 'md', 
   mode = 'full',
+  cropBottomPercent = 33,
   className = ''
 }) => {
   const { appearance, district } = player;
+  const visualSeed = Math.abs(player.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
+  const isLegacyDefaultAppearance = appearance.bodyId === 1 && appearance.hairId === 1 && appearance.bootId === 1;
+  const visualGender = isLegacyDefaultAppearance ? (visualSeed % 2 === 0 ? 'M' : 'F') : appearance.gender;
+  const visualBodyId = isLegacyDefaultAppearance ? (visualSeed % 3) + 1 : appearance.bodyId;
+  const hairFiles = HAIR_FILES_BY_GENDER[visualGender];
+  const visualHairId = isLegacyDefaultAppearance ? (visualSeed % hairFiles.length) + 1 : appearance.hairId;
+  const hairFile = hairFiles[(visualHairId - 1) % hairFiles.length];
+  const hairOffset = getHairOffset(visualGender, hairFile);
+  const hairOffsetX = `${hairOffset.x}%`;
+  const hairOffsetY = `${hairOffset.y}%`;
   
   // Mapeamento de cores de uniforme por distrito
   const getUniformSuffix = (d: District) => {
@@ -71,24 +129,12 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   };
 
   const uniformSuffix = getUniformSuffix(district);
-  const genderKey = appearance.gender === 'M' ? 'm' : 'f';
+  const genderKey = visualGender === 'M' ? 'm' : 'f';
 
   // Assets paths - usando a pasta 'assetas' conforme solicitado
   const assetsBase = '/assetas/avatars';
-  const bodyPath = `${assetsBase}/bodies/body_${genderKey}_${appearance.bodyId}.png`;
-  const hairPath = `${assetsBase}/hair/hair_${appearance.hairId}.png`;
-  const getTeamUniformFile = (teamId?: string | null) => {
-    const match = teamId?.match(/^t_(\d+)$/);
-    if (!match) return null;
-
-    const teamNumber = Number(match[1]);
-    if (!Number.isInteger(teamNumber) || teamNumber < 1 || teamNumber > TEAM_UNIFORM_FILES.length) {
-      return null;
-    }
-
-    return TEAM_UNIFORM_FILES[teamNumber - 1];
-  };
-
+  const bodyPath = `${assetsBase}/bodies/body_${genderKey}_${visualBodyId}.png`;
+  const hairPath = getHairAssetPath(visualGender, hairFile);
   const teamUniformFile = getTeamUniformFile(player.contract.teamId);
   const uniformPath = teamUniformFile
     ? encodeURI(`${assetsBase}/uniforms/${teamUniformFile}`)
@@ -106,8 +152,19 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
     transformOrigin: 'center 5%',
   } : {};
 
-  const avatarCropStyle: React.CSSProperties = mode === 'head' ? {} : {
-    clipPath: 'inset(0 0 33% 0)',
+  const hairStyle: React.CSSProperties = mode === 'head'
+    ? {
+      ...headStyle,
+      left: hairOffsetX,
+      top: hairOffsetY,
+    }
+    : {
+      left: hairOffsetX,
+      top: hairOffsetY,
+    };
+
+  const avatarCropStyle: React.CSSProperties = mode === 'head' || cropBottomPercent <= 0 ? {} : {
+    clipPath: `inset(0 0 ${cropBottomPercent}% 0)`,
   };
 
   return (
@@ -129,15 +186,13 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
           style={headStyle}
         />
 
-        {/* Camada 3: Cabelo (apenas se hairId for 1, pois só existe esse por enquanto) */}
-        {appearance.hairId === 1 && (
-          <img 
-            src={hairPath} 
-            alt="Hair" 
-            className="absolute inset-0 w-full h-full object-contain z-30"
-            style={headStyle}
-          />
-        )}
+        {/* Camada 3: Cabelo */}
+        <img 
+          src={hairPath} 
+          alt="Hair" 
+          className="absolute w-full h-full object-contain z-30"
+          style={hairStyle}
+        />
 
         {/* Camada 4: Chuteiras */}
         {mode === 'full' && (

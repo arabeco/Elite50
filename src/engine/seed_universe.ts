@@ -1,5 +1,6 @@
 import { Player, Team, District, PlayerRole, PositionType } from '../types';
 import { regenerateDNA } from './generator';
+import { HAIR_COUNT_BY_GENDER } from '../constants/avatarAssets';
 
 // --- Seeded Random Engine (Internal for Seeding) ---
 let _seed = 1234567;
@@ -27,7 +28,6 @@ const TIERS = {
 };
 
 const SHADOW_POOL_COUNT = 300;
-
 const NICKNAMES = [
     'Zeca', 'Manto', 'Faisca', 'Sombra', 'Relâmpago', 'Titã', 'Muralha', 'Falcão', 'Serpente', 'Lobo',
     'Pantera', 'Dragão', 'Fênix', 'Trovão', 'Furacão', 'Vortex', 'Kaiser', 'Czar', 'Duque', 'Barão',
@@ -50,6 +50,7 @@ const generatePlayer = (tier: keyof typeof TIERS | 'EXILED', id?: string): Playe
 
     const nickname = NICKNAMES[Math.floor(rand() * NICKNAMES.length)] + ' ' + (Math.floor(rand() * 99));
     const name = nickname + ' ' + LAST_NAMES[Math.floor(rand() * LAST_NAMES.length)];
+    const gender = rand() < 0.5 ? 'M' : 'F';
 
     const player: Player = {
         id: id || Math.random().toString(36).substring(2, 11),
@@ -57,10 +58,10 @@ const generatePlayer = (tier: keyof typeof TIERS | 'EXILED', id?: string): Playe
         nickname,
         district: isExiled ? 'EXILADO' : (['NORTE', 'SUL', 'LESTE', 'OESTE'][Math.floor(rand() * 4)] as District),
         appearance: {
-            gender: 'M',
-            bodyId: 1,
-            hairId: 1,
-            bootId: 1
+            gender,
+            bodyId: randomInt(1, 3),
+            hairId: randomInt(1, HAIR_COUNT_BY_GENDER[gender]),
+            bootId: randomInt(1, 2)
         },
         position,
         role,

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { useGame } from '../store/GameContext';
-import { Globe, Plus, Calendar, Clock, ChevronRight, LogOut, Users, Trash2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Globe, Plus, Clock, ChevronRight, LogOut, Users, Trash2, KeyRound } from 'lucide-react';
 import { generateInitialState } from '../engine/generator';
 
 export const WorldSelector: React.FC = () => {
-  const { worlds, publicWorlds, setWorldId, loadGame, joinGame, setState, saveGame, refreshWorlds, deleteWorld, logout } = useGame();
+  const { worlds, publicWorlds, setWorldId, loadGame, joinGame, joinGameByCode, setState, saveGame, refreshWorlds, deleteWorld, logout, isSyncing } = useGame();
   const [isCreating, setIsCreating] = useState(false);
   const [newWorldName, setNewWorldName] = useState('');
   const [isPublicWorld, setIsPublicWorld] = useState(false);
   const [activeTab, setActiveTab] = useState<'my-worlds' | 'community'>('my-worlds');
+  const [joinCode, setJoinCode] = useState('');
 
   const handleSelectWorld = async (id: string, isPublic: boolean = false) => {
     if (isPublic) {
@@ -23,12 +23,20 @@ export const WorldSelector: React.FC = () => {
     if (!newWorldName.trim()) return;
 
     const id = Date.now().toString();
+    const joinCode = `ELITE-${id.slice(-6)}`;
     const initialState = generateInitialState();
     (initialState.world as any).name = newWorldName;
 
     // Set status to LOBBY to trigger onboarding via Dashboard -> NewGameFlow
     initialState.world.status = 'LOBBY';
     initialState.world.isPublic = isPublicWorld;
+    initialState.world.access = {
+      visibility: isPublicWorld ? 'PUBLIC' : 'PRIVATE',
+      allowObservers: true,
+      allowMidSeasonJoin: true,
+      allowTakeover: true,
+      joinCode
+    };
     initialState.worldId = id;
     initialState.isCreator = true;
     initialState.userTeamId = null; // No team selected yet
@@ -44,6 +52,11 @@ export const WorldSelector: React.FC = () => {
     setIsCreating(false);
     setNewWorldName('');
     setIsPublicWorld(false);
+  };
+
+  const handleJoinByCode = async () => {
+    if (!joinCode.trim()) return;
+    await joinGameByCode(joinCode);
   };
 
 
@@ -90,6 +103,30 @@ export const WorldSelector: React.FC = () => {
           >
             Comunidade
           </button>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-cyan-500/25 bg-black/45 p-3 shadow-[0_0_24px_rgba(34,211,238,0.08)]">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-300" />
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                onKeyDown={(event) => event.key === 'Enter' && handleJoinByCode()}
+                placeholder="ENTRAR POR CODIGO: ELITE-123456"
+                className="w-full rounded-xl border border-white/10 bg-black/45 py-3 pl-10 pr-4 text-xs font-black uppercase tracking-widest text-white outline-none transition placeholder:text-slate-700 focus:border-cyan-400/60"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={isSyncing || !joinCode.trim()}
+              onClick={handleJoinByCode}
+              className="rounded-xl border border-cyan-400/35 bg-cyan-400 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Entrar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -221,7 +258,7 @@ export const WorldSelector: React.FC = () => {
 
                     <div className="mt-6 flex items-center justify-between">
                       <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
-                        Explorar Mundo
+                        Entrar como observador
                       </span>
                       <ChevronRight size={16} className="text-purple-500 transform group-hover:translate-x-1 transition-transform" />
                     </div>

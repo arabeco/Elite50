@@ -25,6 +25,10 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+  const resolvedTeamLogo = teamLogo || playerTeam?.logo;
+  const visualSeed = Math.abs(player.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
+  const isLegacyDefaultAppearance = player.appearance.bodyId === 1 && player.appearance.hairId === 1 && player.appearance.bootId === 1;
+  const visualGender = isLegacyDefaultAppearance ? (visualSeed % 2 === 0 ? 'M' : 'F') : player.appearance.gender;
 
   const getDistrictStyle = () => {
     switch (player.district) {
@@ -89,7 +93,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           <div className="flex flex-col truncate">
             <div className="flex items-center gap-1">
               <span className="text-xs font-bold text-white truncate">{player.nickname}</span>
-              {player.appearance.gender === 'F' ? (
+              {visualGender === 'F' ? (
                 <Venus size={8} className="text-pink-400" />
               ) : (
                 <Mars size={8} className="text-blue-400" />
@@ -135,7 +139,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         <div className="flex-1 flex flex-col justify-center min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-black text-white truncate">{player.nickname}</h3>
-            {player.appearance.gender === 'F' ? (
+            {visualGender === 'F' ? (
               <Venus size={10} className="text-pink-400" />
             ) : (
               <Mars size={10} className="text-blue-400" />
@@ -147,8 +151,20 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
                   onTeamClick(player.contract.teamId);
                 }
               }}
-              className={`text-[8px] px-1.5 py-0.5 rounded-lg uppercase tracking-widest font-bold border ${style.badge} cursor-pointer hover:white-gradient-sheen transition-all`}
+              className={`inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded-lg uppercase tracking-widest font-bold border ${style.badge} cursor-pointer hover:white-gradient-sheen transition-all`}
             >
+              {resolvedTeamLogo && (
+                <TeamLogo
+                  primaryColor={resolvedTeamLogo.primary}
+                  secondaryColor={resolvedTeamLogo.secondary}
+                  accentColor={resolvedTeamLogo.accent}
+                  shapeId={resolvedTeamLogo.shapeId}
+                  patternId={resolvedTeamLogo.patternId as any}
+                  symbolId={resolvedTeamLogo.symbolId}
+                  secondarySymbolId={resolvedTeamLogo.secondarySymbolId}
+                  size={12}
+                />
+              )}
               {playerTeam ? playerTeam.name : `#${player.district}`}
             </span>
           </div>
@@ -179,7 +195,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         <div className="flex flex-col truncate">
           <div className="flex items-center gap-1">
             <h3 className="text-[9px] font-black text-white truncate uppercase tracking-tighter">{player.nickname}</h3>
-            {player.appearance.gender === 'F' ? (
+            {visualGender === 'F' ? (
               <Venus size={6} className="text-pink-400" />
             ) : (
               <Mars size={6} className="text-blue-400" />
@@ -205,10 +221,12 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
             player={player}
             size="xl"
             mode="full"
-            className="w-full h-full object-cover object-top opacity-60 group-hover:scale-105 transition-transform duration-700"
+            cropBottomPercent={0}
+            className="w-full h-full opacity-85 scale-[1.28] translate-y-5 sm:translate-y-7 group-hover:scale-[1.36] transition-transform duration-700"
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none z-20" />
+        <div className="absolute inset-x-0 bottom-0 h-[58%] bg-gradient-to-t from-black via-black/85 to-transparent pointer-events-none z-20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none z-20" />
 
         {/* Top Section */}
         <div className="relative z-30 flex justify-between items-start">
@@ -220,15 +238,16 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           </div>
           <div className="text-right flex flex-col items-end gap-1">
             <span className="text-[4px] sm:text-[5px] font-mono text-white/50 bg-black/40 px-1 py-0.5 rounded-lg border border-white/10">#{player.id.replace('p_', '')}</span>
-            {teamLogo && (
+            {resolvedTeamLogo && (
               <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
                 <TeamLogo
-                  primaryColor={teamLogo.primary}
-                  secondaryColor={teamLogo.secondary}
-                  accentColor={teamLogo.accent}
-                  shapeId={teamLogo.shapeId}
-                  patternId={teamLogo.patternId as any}
-                  symbolId={teamLogo.symbolId}
+                  primaryColor={resolvedTeamLogo.primary}
+                  secondaryColor={resolvedTeamLogo.secondary}
+                  accentColor={resolvedTeamLogo.accent}
+                  shapeId={resolvedTeamLogo.shapeId}
+                  patternId={resolvedTeamLogo.patternId as any}
+                  symbolId={resolvedTeamLogo.symbolId}
+                  secondarySymbolId={resolvedTeamLogo.secondarySymbolId}
                   size={window.innerWidth < 640 ? 10 : 12}
                 />
               </div>
@@ -247,7 +266,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
             )}
             <div className="flex items-center justify-center gap-1">
               <h3 className="text-[7px] sm:text-[8px] font-black leading-tight uppercase tracking-tight text-white drop-shadow-md truncate">{player.nickname}</h3>
-              {player.appearance.gender === 'F' ? (
+              {visualGender === 'F' ? (
                 <Venus size={5} className="text-pink-400 sm:size-[6px]" />
               ) : (
                 <Mars size={5} className="text-blue-400 sm:size-[6px]" />
@@ -331,13 +350,16 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          {(teamLogo || (playerTeam && playerTeam.logo)) && (
+          {resolvedTeamLogo && (
             <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-1 sm:p-1.5 backdrop-blur-2xl shadow-inner group-hover:border-white/30 transition-all">
               <TeamLogo
-                primaryColor={teamLogo?.primary || playerTeam?.logo?.primary || '#fff'}
-                secondaryColor={teamLogo?.secondary || playerTeam?.logo?.secondary || '#000'}
-                patternId={(teamLogo?.patternId || playerTeam?.logo?.patternId || 'none') as any}
-                symbolId={teamLogo?.symbolId || playerTeam?.logo?.symbolId || 'Shield'}
+                primaryColor={resolvedTeamLogo.primary}
+                secondaryColor={resolvedTeamLogo.secondary}
+                accentColor={resolvedTeamLogo.accent}
+                shapeId={resolvedTeamLogo.shapeId}
+                patternId={resolvedTeamLogo.patternId as any}
+                symbolId={resolvedTeamLogo.symbolId}
+                secondarySymbolId={resolvedTeamLogo.secondarySymbolId}
                 size={window.innerWidth < 640 ? 16 : 20}
               />
             </div>
@@ -353,10 +375,22 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
             {player.nickname}
           </h3>
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className={`text-[6px] sm:text-[8px] font-black uppercase tracking-widest ${style.text} px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded sm:rounded-lg bg-white/5 border border-white/10 backdrop-blur-md`}>
+            <span className={`inline-flex max-w-[75%] items-center gap-1 text-[6px] sm:text-[8px] font-black uppercase tracking-widest ${style.text} px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded sm:rounded-lg bg-white/5 border border-white/10 backdrop-blur-md`}>
+              {resolvedTeamLogo && (
+                <TeamLogo
+                  primaryColor={resolvedTeamLogo.primary}
+                  secondaryColor={resolvedTeamLogo.secondary}
+                  accentColor={resolvedTeamLogo.accent}
+                  shapeId={resolvedTeamLogo.shapeId}
+                  patternId={resolvedTeamLogo.patternId as any}
+                  symbolId={resolvedTeamLogo.symbolId}
+                  secondarySymbolId={resolvedTeamLogo.secondarySymbolId}
+                  size={window.innerWidth < 640 ? 11 : 14}
+                />
+              )}
               {playerTeam ? playerTeam.name : player.district}
             </span>
-            {player.appearance.gender === 'F' ? (
+            {visualGender === 'F' ? (
               <Venus size={8} className="text-pink-400 drop-shadow-[0_0_5px_rgba(244,114,182,0.5)] sm:size-3" />
             ) : (
               <Mars size={8} className="text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.5)] sm:size-3" />

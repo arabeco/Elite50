@@ -8,13 +8,14 @@ import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
+import { TeamModal } from '../TeamModal';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player } from '../../types';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, LayoutGrid, Rows3 } = LucideIcons;
 
 
 export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) => {
@@ -26,6 +27,8 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
   const { handleSetFocus, handleStartCardLab, handleChemistryBoost } = useTraining(userTeam?.id || null);
   const { handleAdvanceDay } = useGameDay();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [rosterViewMode, setRosterViewMode] = useState<'cards' | 'list'>('cards');
 
   const isLocked = React.useMemo(() => {
     if (!upcomingMatches || upcomingMatches.length === 0) return false;
@@ -85,7 +88,10 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
       )}
 
       {/* Team Power Dashboard */}
-      <div className="bg-black/40 border border-white/10 rounded-2xl p-4 sm:p-6 mb-6 shadow-xl backdrop-blur-md relative overflow-hidden group">
+      <div
+        data-onboarding="squad-power"
+        className="bg-black/40 border border-white/10 rounded-2xl p-4 sm:p-6 mb-6 shadow-xl backdrop-blur-md relative overflow-hidden group"
+      >
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
@@ -99,7 +105,7 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
                 <span className="text-2xl sm:text-3xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200">
                   {dashData.totalPoints.toLocaleString()}
                 </span>
-                <span className="text-white/40 font-bold text-[10px] sm:text-xs">/ {dashData.powerCap.toLocaleString()} Max</span>
+                <span className="text-white/40 font-bold text-[10px] sm:text-xs">/ {dashData.powerCap.toLocaleString()} Score Max.</span>
               </div>
             </div>
           </div>
@@ -126,6 +132,35 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
         </div>
       </div>
 
+      {!props.lineupOnly && (
+        <div className="flex items-center justify-between gap-3 px-1 sm:px-2">
+          <div>
+            <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.25em] text-white/30">Visualização</p>
+            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white/50">Troque entre cards e lista</p>
+          </div>
+          <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+            {[
+              { id: 'cards', label: 'Cards', icon: LayoutGrid },
+              { id: 'list', label: 'Lista', icon: Rows3 },
+            ].map(mode => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setRosterViewMode(mode.id as 'cards' | 'list')}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+                  rosterViewMode === mode.id
+                    ? 'bg-cyan-500 text-black'
+                    : 'text-white/45 hover:text-white'
+                }`}
+              >
+                <mode.icon size={12} />
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ESCALAÇÃO - LineupBuilder (shown when lineupOnly or showLineup prop) */}
       {(props.lineupOnly || props.showLineup) && (
         <div className="space-y-3 sm:space-y-4">
@@ -150,7 +185,45 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
         />
       )}
 
-      {props.lineupOnly ? null : (Object.keys(playersByPosition) as (keyof typeof playersByPosition)[]).map(pos => {
+      {props.lineupOnly ? null : rosterViewMode === 'list' ? (
+        <div className="space-y-4">
+          {(Object.keys(playersByPosition) as (keyof typeof playersByPosition)[]).map(pos => {
+            const players = playersByPosition[pos];
+            if (players.length === 0) return null;
+
+            return (
+              <div key={pos} className="overflow-hidden rounded-2xl border border-white/10 bg-black/35">
+                <div className="border-b border-white/5 bg-white/[0.03] px-4 py-3">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                    {pos === 'GOL' ? 'Goleiros' : pos === 'ZAG' ? 'Zagueiros' : pos === 'MEI' ? 'Meio-Campistas' : 'Atacantes'}
+                  </h3>
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {players.map(player => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => handlePlayerClick(player)}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">{player.role} • {player.district}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-black italic text-cyan-300">{player.totalRating}</p>
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/25">
+                          {player.contract.teamId ? state.teams[player.contract.teamId]?.name || 'Clube' : 'Sem clube'}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (Object.keys(playersByPosition) as (keyof typeof playersByPosition)[]).map(pos => {
         const players = playersByPosition[pos];
         if (players.length === 0) return null;
 
@@ -173,14 +246,15 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
               </div>
             </div>
 
-            <div className="flex overflow-x-auto gap-3 sm:gap-6 px-1 sm:px-2 pb-6 sm:pb-8 snap-x snap-mandatory scroll-smooth">
+            <div className="flex overflow-x-auto gap-4 sm:gap-6 px-1 sm:px-2 pb-6 sm:pb-8 snap-x snap-mandatory scroll-smooth items-center">
               {players.map(player => (
-                <div key={player.id} className="w-[140px] sm:w-[180px] shrink-0 snap-start">
+                <div key={player.id} className="w-[132px] sm:w-[170px] shrink-0 snap-start">
                   <PlayerCard
                     player={player}
                     onClick={() => handlePlayerClick(player)}
                     variant="full"
                     teamLogo={userTeam.logo}
+                    onTeamClick={setSelectedTeamId}
                   />
                 </div>
               ))}
@@ -193,6 +267,19 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
         <PlayerModal
           player={selectedPlayer}
           onClose={() => setSelectedPlayer(null)}
+        />
+      )}
+
+      {!props.lineupOnly && selectedTeamId && state.teams[selectedTeamId] && (
+        <TeamModal
+          team={state.teams[selectedTeamId]}
+          players={state.players}
+          onClose={() => setSelectedTeamId(null)}
+          onPlayerClick={(player) => {
+            setSelectedPlayer(player);
+            setSelectedTeamId(null);
+          }}
+          onTeamClick={setSelectedTeamId}
         />
       )}
     </div>

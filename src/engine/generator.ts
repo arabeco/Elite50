@@ -17,6 +17,8 @@ import {
 import { generateCalendar } from './CalendarGenerator';
 import { seedUniverse } from './seed_universe';
 import { generateTeamStyle } from '../utils/logoUtils';
+import { applyTeamLogoAsset, applyTeamLogoAssets } from '../utils/teamIdentity';
+import { HAIR_COUNT_BY_GENDER } from '../constants/avatarAssets';
 
 // --- Seeded Random Engine (Fixed Base) ---
 let _seed = 1234567; // Fixed seed for "Base Fixa"
@@ -83,7 +85,6 @@ const lastNames = [
   'Sterling', 'Vanguard', 'Bio', 'Wave', 'Core', 'Nexus', 'Aether', 'Synth', 'Optic', 'Apex', 'Matrix', 'Quantum', 'Echo', 'Flux', 'Giga', 'Hyper', 'Infra', 'Kinet', 'Lumen', 'Meta', 'Nano', 'Omni', 'Penta', 'Quadra', 'Rift', 'Spectra', 'Terra', 'Ultra', 'Velo', 'Xenon', 'Yotta', 'Zetta', 'Blaze', 'Chrome', 'Cypher', 'Daemon', 'Digit', 'Enigma', 'Fusion', 'Grid', 'Helix', 'Ion', 'Joule', 'Kilo', 'Logic', 'Macro', 'Micro', 'Neo', 'Octa', 'Pixel', 'Rune', 'Saga', 'Tech', 'Vector', 'Volt', 'Watt', 'Xerox', 'Yocto', 'Zero', 'Axiom', 'Bionic', 'Cortex', 'Data', 'Eon', 'Fiber', 'Gamma', 'Halo', 'Inertia', 'Jettison', 'Krypton', 'Laser', 'Magnet', 'Neural', 'Orbit', 'Plasma', 'Quasar', 'Radiant', 'Sensor', 'Titan', 'Unity', 'Vortex', 'Warp', 'Xylo', 'Yield', 'Zenith', 'Alba', 'Brooks', 'Cain', 'Dixon', 'Ellis', 'Flynn', 'Grant', 'Hayes', 'Irwin', 'Jones', 'King', 'Lane', 'Marsh', 'Nash', 'Owen', 'Page', 'Reed', 'Shaw', 'Todd', 'Vance', 'Ward', 'Young', 'Zeller', 'Adams', 'Baker', 'Clark', 'Davis', 'Evans', 'Fisher', 'Green', 'Hall', 'Hill', 'Jackson', 'Kelly', 'Lewis', 'Miller', 'Moore', 'Nelson', 'Parker', 'Roberts', 'Scott', 'Smith', 'Taylor', 'White', 'Wright', 'Allen', 'Bell', 'Carter', 'Cook', 'Cooper', 'Edwards', 'Foster', 'Gray', 'Harris', 'James', 'Johnson', 'Lee', 'Martin', 'Mitchell', 'Morris', 'Murphy', 'Myers', 'Perez', 'Phillips', 'Ramirez', 'Ross', 'Sanchez', 'Sanders', 'Stewart', 'Stone', 'Thomas', 'Thompson', 'Turner', 'Walker', 'Watson', 'Webb', 'Williams', 'Wilson', 'Wood', 'Young', 'Anderson', 'Bailey', 'Bennett', 'Brown', 'Campbell', 'Coleman', 'Collins', 'Diaz', 'Edwards', 'Flores', 'Garcia', 'Gomez', 'Gonzalez', 'Hernandez', 'Hughes', 'Jenkins', 'Kim', 'Long', 'Martinez', 'Morgan', 'Ortiz', 'Patel', 'Peterson', 'Price', 'Rivera', 'Rogers', 'Russell', 'Schmidt', 'Simmons', 'Stevens', 'Sullivan', 'Torres', 'Washington', 'Barnes', 'Bryant', 'Burke', 'Chapman', 'Cruz', 'Dean', 'Elliott', 'Ford', 'Gibson', 'Graham', 'Griffin', 'Hamilton', 'Henderson', 'Howard', 'Hudson', 'Hunt', 'Jensen', 'Jordan', 'Kennedy', 'Knight', 'Larson', 'Little', 'Marshall', 'Mason', 'Matthews', 'McDonald', 'Medina', 'Mendoza', 'Meyer', 'Mills', 'Montgomery', 'Morales', 'Murray', 'Neal', 'Olson', 'Palmer', 'Pearson', 'Perry', 'Powell', 'Ray', 'Reynolds', 'Richards', 'Robinson', 'Ruiz', 'Ryan', 'Saunders', 'Sharp', 'Singleton', 'Spencer', 'Stephens', 'Stevenson', 'Stone'
 ];
 const districts: District[] = ['NORTE', 'SUL', 'LESTE', 'OESTE'];
-
 // --- DNA ELITE 2050 TRAITS ---
 const TRAITS_BRONZE = ['Ofensivo', 'Folego', 'Passe Bronze', 'Finaliz Bronze', 'Def Bronze'];
 const TRAITS_PRATA = ['Consistência', 'Versatilidade', 'Defesa Prata', 'Finaliz Prata', 'Passe Prata'];
@@ -123,28 +124,19 @@ export const regenerateDNA = (player: Player): Badges => {
 };
 
 const generateName = () => {
-  const gender = Math.random() < 0.5 ? 'M' : 'F';
+  const gender = randomFloat() < 0.5 ? 'M' : 'F';
   const firstList = gender === 'M' ? firstNamesMale : firstNamesFemale;
   const first = firstList[randomInt(0, firstList.length - 1)];
   const last = lastNames[randomInt(0, lastNames.length - 1)];
-
-  // Deterministic appearance based on name hash (so it stays the same)
-  const seedStr = `${first}${last}`;
-  let hash = 0;
-  for (let i = 0; i < seedStr.length; i++) {
-    hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
 
   return {
     name: `${first} ${last}`,
     nickname: `${first[0]}. ${last}`,
     appearance: {
       gender: gender as 'M' | 'F',
-      bodyId: (absHash % 3) + 1, // 1, 2, 3
-      hairId: (absHash % 6) + 1, // 1..6
-      bootId: (absHash % 15) + 1 // 1..15
+      bodyId: randomInt(1, 3),
+      hairId: randomInt(1, HAIR_COUNT_BY_GENDER[gender]),
+      bootId: randomInt(1, 2)
     }
   };
 };
@@ -363,7 +355,7 @@ const getLeagueForDistrict = (district: District): LeagueColor => {
 
 export const generateTeam = (id: string, index: number, district: District): Team => {
   const name = teamNames[index] || `Team ${index}`;
-  const logo = generateTeamStyle(name, district);
+  const logo = applyTeamLogoAsset(id, generateTeamStyle(name, district))!;
   const colors = {
     primary: logo.primary,
     secondary: logo.secondary,
@@ -382,6 +374,9 @@ export const generateTeam = (id: string, index: number, district: District): Tea
       mentality: 'Calculista',
       linePosition: 50,
       aggressiveness: 50,
+      intensity: 50,
+      width: 50,
+      passing: 50,
       slots: [null, null, null],
       preferredFormation: ['4-3-3', '4-4-2', '3-5-2', '4-2-3-1'][randomInt(0, 3)],
     },
@@ -475,7 +470,7 @@ export const generateInitialState = (): GameState => {
 
   districts.forEach(district => {
     const id = `d_${district.toLowerCase()}`;
-    const logo = generateTeamStyle(districtTeams[district], district);
+    const logo = applyTeamLogoAsset(id, generateTeamStyle(districtTeams[district], district))!;
     const colors = {
       primary: logo.primary,
       secondary: logo.secondary,
@@ -488,7 +483,17 @@ export const generateInitialState = (): GameState => {
       league: getLeagueForDistrict(district),
       colors,
       logo,
-      tactics: { playStyle: 'Vertical', preferredFormation: '4-3-3' },
+      tactics: {
+        playStyle: 'Vertical',
+        mentality: 'Calculista',
+        linePosition: 50,
+        aggressiveness: 50,
+        intensity: 50,
+        width: 50,
+        passing: 50,
+        slots: [null, null, null],
+        preferredFormation: '4-3-3'
+      },
       managerId: null,
       squad: [],
       lineup: {},
@@ -562,7 +567,7 @@ export const generateInitialState = (): GameState => {
 
   return {
     players,
-    teams,
+    teams: applyTeamLogoAssets(teams),
     managers,
     world: {
       status: 'LOBBY',

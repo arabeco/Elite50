@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo, useCallback, useState } from 'react';
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
-import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, subscribeToWorld, unsubscribeFromWorld } from '../lib/supabase';
+import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, unsubscribeFromWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 import { advanceGameDay } from '../engine/gameLogic';
 
@@ -14,7 +14,7 @@ interface GameStateValue {
   worldId: string | null;
   worlds: Array<{ id: string, name: string, updatedAt: string, userId: string }>;
   publicWorlds: Array<{ id: string, name: string, updatedAt: string, userId: string }>;
-  toasts: Array<{ id: string, message: string, type: 'success' | 'error' | 'info' }>;
+  toasts: Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>;
   isPaused: boolean;
   timeSpeed: number;
 }
@@ -24,13 +24,16 @@ interface GameDispatchValue {
   saveGame: (newState?: GameState, worldIdOverride?: string) => Promise<void>;
   loadGame: (worldId?: string) => Promise<void>;
   joinGame: (worldId: string) => Promise<void>;
+  joinGameByCode: (joinCode: string) => Promise<void>;
+  claimTeam: (teamId: string, managerName?: string) => Promise<void>;
+  resignFromTeam: () => Promise<void>;
   setIsAuthenticated: (val: boolean) => void;
   setWorldId: (id: string | null) => void;
   logout: () => Promise<void>;
   leaveWorld: () => void;
   deleteWorld: (worldId: string) => Promise<void>;
   refreshWorlds: () => Promise<void>;
-  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   removeToast: (id: string) => void;
   togglePause: () => void;
   setTimeSpeed: (speed: number) => void;
@@ -65,7 +68,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [worldId, setWorldId] = useState<string | null>(null);
   const [worlds, setWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string }>>([]);
   const [publicWorlds, setPublicWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string }>>([]);
-  const [toasts, setToasts] = useState<Array<{ id: string, message: string, type: 'success' | 'error' | 'info' }>>([]);
+  const [toasts, setToasts] = useState<Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [timeSpeed, setTimeSpeed] = useState(DEFAULT_TIME_SPEED);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -117,7 +120,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setPublicWorlds(otherWorlds);
   };
 
-  const addToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+  const addToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -143,8 +146,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await saveGameState(stateToSave, targetWorldId);
       console.log('Game saved successfully');
       setIsOnline(true);
-      // Only show toast if it's a manual save or a major event
-      if (newState) addToast('Jogo salvo automaticamente', 'success');
     } catch (error) {
       console.error('Failed to save game', error);
       setIsOnline(false);
@@ -172,6 +173,83 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
   }, [setState, addToast]);
+
+  const joinGameByCode = useCallback(async (joinCode: string) => {
+    setIsSyncing(true);
+    try {
+      const joinedState = await joinWorldByCodeFromSupabase(joinCode);
+      if (joinedState?.worldId) {
+        setIsInitialLoad(true);
+        setState(joinedState);
+        setWorldId(joinedState.worldId);
+        await refreshWorlds();
+        addToast('Codigo aceito. Voce entrou como observador.', 'success');
+      } else {
+        addToast('Codigo de mundo invalido', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to join by code', error);
+      addToast('Codigo de mundo invalido ou indisponivel', 'error');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setIsInitialLoad(false), 1000);
+    }
+  }, [setState, addToast]);
+
+  const claimTeam = useCallback(async (teamId: string, managerName?: string) => {
+    if (!worldId) {
+      addToast('Entre em um mundo antes de assumir um clube', 'warning');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const claimedState = await claimTeamInWorld(worldId, teamId, managerName);
+      if (claimedState) {
+        setIsInitialLoad(true);
+        setState(claimedState);
+        addToast('Clube assumido. Agora voce esta dentro da temporada.', 'success');
+        await refreshWorlds();
+      } else {
+        addToast('Nao foi possivel assumir este clube', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to claim team', error);
+      const message = error?.message === 'TEAM_ALREADY_CLAIMED'
+        ? 'Esse clube ja foi assumido por outro humano'
+        : 'Erro ao assumir clube';
+      addToast(message, 'error');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setIsInitialLoad(false), 1000);
+    }
+  }, [worldId, setState, addToast]);
+
+  const resignFromTeam = useCallback(async () => {
+    if (!worldId) {
+      addToast('Entre em um mundo antes de sair do clube', 'warning');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const resignedState = await resignFromTeamInWorld(worldId);
+      if (resignedState) {
+        setIsInitialLoad(true);
+        setState(resignedState);
+        addToast('Voce saiu do clube e agora acompanha o mundo como observador.', 'info');
+        await refreshWorlds();
+      } else {
+        addToast('Nao foi possivel sair do clube', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to resign from team', error);
+      addToast('Erro ao sair do clube', 'error');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setIsInitialLoad(false), 1000);
+    }
+  }, [worldId, setState, addToast]);
 
   const loadGame = useCallback(async (targetWorldId?: string) => {
     const idToLoad = targetWorldId || worldId;
@@ -345,14 +423,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // --- Main Clock (1s interval) ---
     const interval = setInterval(() => {
       setState(prev => {
-        // LOBBY LOCK: Don't advance time while in LOBBY
-        if (prev.world.status === 'LOBBY') return prev;
-
         // Only the world creator drives the clock
         if (!prev.isCreator) return prev;
 
         // --- Map real time to 2050 game world ---
         const gameNow = getGameDate2050();
+        const kickoffScheduled = prev.world.currentDay === -1 && !!prev.world.startScheduledAt;
+        const kickoffReady = kickoffScheduled && gameNow >= new Date(prev.world.startScheduledAt!);
+
+        // Before the GM schedules the season, keep the world frozen.
+        if (prev.world.status === 'LOBBY' && prev.world.currentDay === -1 && !kickoffScheduled) {
+          return prev;
+        }
+
         const oldDate = new Date(prev.world.currentDate);
         const oldDay = oldDate.getDate();
         const newDay = gameNow.getDate();
@@ -372,7 +455,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           world: {
             ...prev.world,
             currentDate: gameNow.toISOString(),
-            seasonStartReal: seasonStartReal
+            seasonStartReal: seasonStartReal,
+            currentDay: kickoffReady ? 0 : prev.world.currentDay,
+            startScheduledAt: kickoffReady ? null : prev.world.startScheduledAt
           }
         };
 
@@ -383,7 +468,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // - Training progress
         // - Safety net checks
         // - Cup progression
-        if (oldDay !== newDay) {
+        if (oldDay !== newDay && !kickoffReady && newState.world.currentDay >= 0) {
           console.log('Clock: Day changed, running daily advance...');
           return advanceGameDay(newState, true);
         }
@@ -446,8 +531,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setState, saveGame,
     loadGame,
     joinGame,
+    joinGameByCode,
+    claimTeam,
+    resignFromTeam,
     setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause, setTimeSpeed
-  }), [setState, saveGame, loadGame, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause, setTimeSpeed]);
+  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause, setTimeSpeed]);
 
   return (
     <GameDispatchContext.Provider value={dispatchValue}>

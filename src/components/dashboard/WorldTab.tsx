@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useGame } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
@@ -14,7 +14,7 @@ import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, Team, GameNotification } from '../../types';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3 } = LucideIcons;
 
 
 export const WorldTab = (props: any) => {
@@ -56,10 +56,62 @@ export const WorldTab = (props: any) => {
   const [marketPotentialMin, setMarketPotentialMin] = useState(0);
   const [marketLimit, setMarketLimit] = useState(50);
   const [showMarketFilters, setShowMarketFilters] = useState(false);
+  const [marketViewMode, setMarketViewMode] = useState<'cards' | 'list'>('cards');
+  const [rankingSearch, setRankingSearch] = useState('');
+  const [rankingDistrict, setRankingDistrict] = useState('all');
+  const [rankingLeague, setRankingLeague] = useState('all');
+  const [rankingPosition, setRankingPosition] = useState('all');
+  const [rankingRatingBand, setRankingRatingBand] = useState('all');
+  const [rankingAvailability, setRankingAvailability] = useState('all');
+  const [showRankingFilters, setShowRankingFilters] = useState(false);
+  const [rankingViewMode, setRankingViewMode] = useState<'cards' | 'list'>('list');
 
   // Derived data
   const players = Object.values(state.players);
   const { leaguesData } = dashData as any;
+  const filteredMarketPlayers = players
+    .filter(p => {
+      const isExiled = !p.contract.teamId;
+      if (marketOnlyExiled && !isExiled) return false;
+
+      const matchesSearch = p.name.toLowerCase().includes(marketSearch.toLowerCase()) || p.nickname.toLowerCase().includes(marketSearch.toLowerCase());
+      const matchesDistrict = marketDistrict === 'all' || p.district === marketDistrict;
+      const matchesPosition = marketPosition === 'all' || p.role === marketPosition;
+      const matchesPoints = p.totalRating >= marketPointsMin && p.totalRating <= marketPointsMax;
+      const matchesSatisfaction = p.satisfaction <= marketSatisfactionMax;
+      const matchesPotential = p.potential >= marketPotentialMin;
+      return matchesSearch && matchesDistrict && matchesPosition && matchesPoints && matchesSatisfaction && matchesPotential;
+    })
+    .slice(0, marketLimit);
+  const filteredRankingPlayers = [...players]
+    .filter(player => {
+      const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+      const matchesSearch = player.name.toLowerCase().includes(rankingSearch.toLowerCase()) || player.nickname.toLowerCase().includes(rankingSearch.toLowerCase());
+      const matchesDistrict = rankingDistrict === 'all' || player.district === rankingDistrict;
+      const matchesLeague = rankingLeague === 'all' || playerTeam?.league === rankingLeague;
+      const matchesPosition = rankingPosition === 'all' || player.role === rankingPosition;
+      const matchesAvailability = rankingAvailability === 'all'
+        || (rankingAvailability === 'free' && !player.contract.teamId)
+        || (rankingAvailability === 'signed' && !!player.contract.teamId);
+      const matchesRatingBand = rankingRatingBand === 'all'
+        || (rankingRatingBand === '900+' && player.totalRating >= 900)
+        || (rankingRatingBand === '800-899' && player.totalRating >= 800 && player.totalRating <= 899)
+        || (rankingRatingBand === '700-799' && player.totalRating >= 700 && player.totalRating <= 799)
+        || (rankingRatingBand === '0-699' && player.totalRating < 700);
+      return matchesSearch && matchesDistrict && matchesLeague && matchesPosition && matchesAvailability && matchesRatingBand;
+    })
+    .sort((a, b) => b.totalRating - a.totalRating)
+    .slice(0, 120);
+  const rankingPlayersByPosition = {
+    GOL: filteredRankingPlayers.filter(player => player.role === 'GOL'),
+    ZAG: filteredRankingPlayers.filter(player => player.role === 'ZAG'),
+    MEI: filteredRankingPlayers.filter(player => player.role === 'MEI'),
+    ATA: filteredRankingPlayers.filter(player => player.role === 'ATA'),
+  };
+  const rankingIndexMap = filteredRankingPlayers.reduce<Record<string, number>>((acc, player, index) => {
+    acc[player.id] = index + 1;
+    return acc;
+  }, {});
 
   if (selectedTeamView) {
     const team = state.teams[selectedTeamView];
@@ -1261,25 +1313,64 @@ export const WorldTab = (props: any) => {
               )}
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
-              {players
-                .filter(p => {
-                  const isExiled = !p.contract.teamId;
-                  if (marketOnlyExiled && !isExiled) return false;
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.25em] text-white/35">
+                Mercado filtrado: {filteredMarketPlayers.length} atletas
+              </div>
+              <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+                {[
+                  { id: 'cards', label: 'Cards', icon: LayoutGrid },
+                  { id: 'list', label: 'Lista', icon: Rows3 },
+                ].map(mode => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setMarketViewMode(mode.id as 'cards' | 'list')}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
+                      marketViewMode === mode.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
+                    }`}
+                  >
+                    <mode.icon size={12} />
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                  const matchesSearch = p.name.toLowerCase().includes(marketSearch.toLowerCase()) || p.nickname.toLowerCase().includes(marketSearch.toLowerCase());
-                  const matchesDistrict = marketDistrict === 'all' || p.district === marketDistrict;
-                  const matchesPosition = marketPosition === 'all' || p.role === marketPosition;
-                  const matchesPoints = p.totalRating >= marketPointsMin && p.totalRating <= marketPointsMax;
-                  const matchesSatisfaction = p.satisfaction <= marketSatisfactionMax;
-                  const matchesPotential = p.potential >= marketPotentialMin;
-                  return matchesSearch && matchesDistrict && matchesPosition && matchesPoints && matchesSatisfaction && matchesPotential;
-                })
-                .slice(0, marketLimit)
-                .map(player => (
+            {marketViewMode === 'cards' ? (
+              <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
+                {filteredMarketPlayers.map(player => (
                   <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} variant="micro" />
                 ))}
-            </div>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-white/5 bg-white/[0.03] px-4 py-3 text-[8px] font-black uppercase tracking-[0.25em] text-white/35">
+                  <span>Jogador</span>
+                  <span>Pos</span>
+                  <span>Distrito</span>
+                  <span>Score</span>
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {filteredMarketPlayers.map(player => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => setSelectedPlayer(player)}
+                      className="grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{player.name}</p>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">{player.role}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-widest text-white/45">{player.district}</span>
+                      <span className="text-lg font-black italic text-white">{player.totalRating}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )
       }
@@ -1287,7 +1378,7 @@ export const WorldTab = (props: any) => {
       {
         activeWorldTab === 'ranking' && (
           <div className="space-y-4 sm:space-y-6">
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-3">
               <div className="relative flex-1 group">
                 <div className="absolute inset-0 bg-cyan-500/10 blur-2xl rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="relative flex items-center glass-card border-white/5 rounded-2xl overflow-hidden transition-all focus-within:border-cyan-500/50">
@@ -1295,71 +1386,186 @@ export const WorldTab = (props: any) => {
                     <Search size={window.innerWidth < 640 ? 14 : 20} />
                   </div>
                   <input
+                    value={rankingSearch}
+                    onChange={(event) => setRankingSearch(event.target.value)}
                     type="text"
                     placeholder="BUSCAR ATLETA DE ELITE..."
                     className="bg-transparent px-2 py-3 sm:py-5 text-[9px] sm:text-[10px] font-black text-white w-full focus:outline-none uppercase tracking-[0.2em] placeholder:text-white/10"
                   />
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:gap-4">
-              {[...players].sort((a, b) => b.totalRating - a.totalRating).slice(0, 30).map((player, index) => {
-                const isTop3 = index < 3;
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRankingFilters(!showRankingFilters)}
+                  className={`px-4 py-2 rounded-xl flex items-center gap-2 font-black text-[8px] sm:text-[10px] uppercase tracking-widest transition-all border ${showRankingFilters ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-white/5 text-cyan-400 border-white/10'}`}
+                >
+                  <Sliders size={12} />
+                  Filtros
+                </button>
+                <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+                  {[
+                    { id: 'list', label: 'Lista', icon: Rows3 },
+                    { id: 'cards', label: 'Cards', icon: LayoutGrid },
+                  ].map(mode => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setRankingViewMode(mode.id as 'cards' | 'list')}
+                      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
+                        rankingViewMode === mode.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
+                      }`}
+                    >
+                      <mode.icon size={12} />
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                return (
-                  <div
-                    key={player.id}
-                    onClick={() => setSelectedPlayer(player)}
-                    className="glass-card-neon border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden"
-                  >
-                    <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
-                      <div className="w-8 sm:w-12 text-center shrink-0">
-                        <span className={`text-base sm:text-2xl font-black italic ${index === 0 ? 'text-amber-400 neon-text-amber' :
-                          index === 1 ? 'text-slate-300 neon-text-white' :
-                            index === 2 ? 'text-amber-700' : 'text-white/10'
-                          }`}>
-                          #{index + 1}
-                        </span>
-                      </div>
-
-                      <div className="w-10 h-10 sm:w-14 sm:h-14 glass-card rounded-lg sm:rounded-xl border border-white/5 flex items-center justify-center group-hover:border-cyan-500/30 transition-all shrink-0 overflow-hidden relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent" />
-                        <span className="text-sm sm:text-xl font-black text-white italic drop-shadow-md">{player.totalRating}</span>
-                      </div>
-
-                      <div className="flex flex-col min-w-0">
-                        <div className="text-xs sm:text-lg font-black text-white uppercase italic tracking-tight group-hover:translate-x-1 transition-transform truncate">{player.name}</div>
-                        <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
-                          <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-cyan-500/20">
-                            {player.role}
-                          </span>
-                          <span className="text-[7px] sm:text-[9px] text-white/30 font-bold uppercase tracking-widest truncate">
-                            {player.contract.teamId ? state.teams[player.contract.teamId]?.name : 'Exilado'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1 sm:gap-2 relative z-10 shrink-0 ml-2">
-                      <div className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-0.5 sm:py-1 glass-card rounded-full border border-white/5 ${player.satisfaction > 80 ? 'text-emerald-400' : player.satisfaction > 50 ? 'text-amber-400' : 'text-rose-400'
-                        }`}>
-                        <Activity size={window.innerWidth < 640 ? 8 : 10} />
-                        <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest">{player.satisfaction}%</span>
-                      </div>
-                      <div className="flex gap-0.5 sm:gap-1">
-                        {player.badges.slot1 && <div className="w-5 h-5 sm:w-6 sm:h-6 glass-card rounded-lg border border-white/5 flex items-center justify-center"><Star size={window.innerWidth < 640 ? 8 : 10} className="text-white/20" /></div>}
-                        {player.badges.slot2 && <div className="w-5 h-5 sm:w-6 sm:h-6 glass-card rounded-lg border border-white/5 flex items-center justify-center"><Star size={window.innerWidth < 640 ? 8 : 10} className="text-white/20" /></div>}
-                      </div>
-                    </div>
-
-                    {isTop3 && (
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent pointer-events-none" />
-                    )}
+              {showRankingFilters && (
+                <div className="grid grid-cols-1 gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Setor</label>
+                    <select value={rankingDistrict} onChange={(e) => setRankingDistrict(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
+                      <option value="all">TODOS OS SETORES</option>
+                      <option value="NORTE">SETOR NORTE</option>
+                      <option value="SUL">SETOR SUL</option>
+                      <option value="LESTE">SETOR LESTE</option>
+                      <option value="OESTE">SETOR OESTE</option>
+                    </select>
                   </div>
-                );
-              })}
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Liga</label>
+                    <select value={rankingLeague} onChange={(e) => setRankingLeague(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
+                      <option value="all">TODAS AS LIGAS</option>
+                      <option value="Cyan">LIGA CYAN</option>
+                      <option value="Orange">LIGA ORANGE</option>
+                      <option value="Purple">LIGA PURPLE</option>
+                      <option value="Green">LIGA GREEN</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Posicao</label>
+                    <select value={rankingPosition} onChange={(e) => setRankingPosition(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
+                      <option value="all">TODAS POSICOES</option>
+                      <option value="GOL">GOLEIRO</option>
+                      <option value="ZAG">ZAGUEIRO</option>
+                      <option value="MEI">MEIO-CAMPISTA</option>
+                      <option value="ATA">ATACANTE</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Faixa de Rating</label>
+                    <select value={rankingRatingBand} onChange={(e) => setRankingRatingBand(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
+                      <option value="all">QUALQUER RATING</option>
+                      <option value="900+">900+</option>
+                      <option value="800-899">800 A 899</option>
+                      <option value="700-799">700 A 799</option>
+                      <option value="0-699">ATE 699</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Contrato</label>
+                    <select value={rankingAvailability} onChange={(e) => setRankingAvailability(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
+                      <option value="all">TODOS</option>
+                      <option value="free">LIVRES</option>
+                      <option value="signed">EM CLUBE</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {rankingViewMode === 'list' ? (
+              <div className="space-y-4">
+                {(['GOL', 'ZAG', 'MEI', 'ATA'] as const).map(role => {
+                  const rolePlayers = rankingPlayersByPosition[role];
+                  if (rolePlayers.length === 0) return null;
+
+                  return (
+                    <div key={role} className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+                      <div className="border-b border-white/5 bg-white/[0.03] px-4 py-3">
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                          {role === 'GOL' ? 'Goleiros' : role === 'ZAG' ? 'Zagueiros' : role === 'MEI' ? 'Meio-Campistas' : 'Atacantes'}
+                        </h3>
+                      </div>
+                      <div className="divide-y divide-white/[0.04]">
+                        {rolePlayers.map(player => {
+                          const overallIndex = rankingIndexMap[player.id];
+                          const isTop3 = overallIndex <= 3;
+
+                          return (
+                            <div
+                              key={player.id}
+                              onClick={() => setSelectedPlayer(player)}
+                              className="glass-card-neon border-white/5 p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden"
+                            >
+                              <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
+                                <div className="w-8 sm:w-12 text-center shrink-0">
+                                  <span className={`text-base sm:text-2xl font-black italic ${overallIndex === 1 ? 'text-amber-400 neon-text-amber' :
+                                    overallIndex === 2 ? 'text-slate-300 neon-text-white' :
+                                      overallIndex === 3 ? 'text-amber-700' : 'text-white/10'
+                                    }`}>
+                                    #{overallIndex}
+                                  </span>
+                                </div>
+
+                                <div className="w-10 h-10 sm:w-14 sm:h-14 glass-card rounded-lg sm:rounded-xl border border-white/5 flex items-center justify-center group-hover:border-cyan-500/30 transition-all shrink-0 overflow-hidden relative">
+                                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent" />
+                                  <span className="text-sm sm:text-xl font-black text-white italic drop-shadow-md">{player.totalRating}</span>
+                                </div>
+
+                                <div className="flex flex-col min-w-0">
+                                  <div className="text-xs sm:text-lg font-black text-white uppercase italic tracking-tight group-hover:translate-x-1 transition-transform truncate">{player.name}</div>
+                                  <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
+                                    <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-cyan-500/20">
+                                      {player.role}
+                                    </span>
+                                    <span className="text-[7px] sm:text-[9px] text-white/30 font-bold uppercase tracking-widest truncate">
+                                      {player.contract.teamId ? state.teams[player.contract.teamId]?.name : 'Livre'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-1 sm:gap-2 relative z-10 shrink-0 ml-2">
+                                <div className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-0.5 sm:py-1 glass-card rounded-full border border-white/5 ${player.satisfaction > 80 ? 'text-emerald-400' : player.satisfaction > 50 ? 'text-amber-400' : 'text-rose-400'
+                                  }`}>
+                                  <Activity size={window.innerWidth < 640 ? 8 : 10} />
+                                  <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest">{player.satisfaction}%</span>
+                                </div>
+                                <div className="flex gap-0.5 sm:gap-1">
+                                  {player.badges.slot1 && <div className="w-5 h-5 sm:w-6 sm:h-6 glass-card rounded-lg border border-white/5 flex items-center justify-center"><Star size={window.innerWidth < 640 ? 8 : 10} className="text-white/20" /></div>}
+                                  {player.badges.slot2 && <div className="w-5 h-5 sm:w-6 sm:h-6 glass-card rounded-lg border border-white/5 flex items-center justify-center"><Star size={window.innerWidth < 640 ? 8 : 10} className="text-white/20" /></div>}
+                                </div>
+                              </div>
+
+                              {isTop3 && (
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent pointer-events-none" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+                {filteredRankingPlayers.map(player => (
+                  <PlayerCard
+                    key={player.id}
+                    player={player}
+                    onClick={setSelectedPlayer}
+                    variant="compact"
+                    onTeamClick={setSelectedTeamView}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )
       }
@@ -1446,3 +1652,4 @@ export const WorldTab = (props: any) => {
     </div >
   );
 }
+

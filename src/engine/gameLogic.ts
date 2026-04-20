@@ -11,6 +11,8 @@ import { shuffleBottomTeams } from './migrationLogic';
 import {
   MAX_TEAM_POWER,
   MAX_TEAM_POWER_TIER_1,
+  MAX_TEAM_POWER_TIER_2,
+  MAX_TEAM_POWER_TIER_3,
   SEASON_ROUNDS,
   ELITE_CUP_ROUNDS,
   DISTRICT_CUP_ROUNDS,
@@ -83,6 +85,61 @@ const sortStandings = (standings: LeagueTeamStats[]) =>
     const gdB = b.goalsFor - b.goalsAgainst;
     return gdB - gdA;
   });
+
+const getLeagueColorForDistrict = (district: District): Team['league'] => {
+  switch (district) {
+    case 'NORTE': return 'Cyan';
+    case 'SUL': return 'Orange';
+    case 'LESTE': return 'Green';
+    case 'OESTE': return 'Purple';
+    default: return 'Cyan';
+  }
+};
+
+const awardTeamTitle = (team: Team | undefined, season: number, title: string, kind: 'league' | 'cup') => {
+  if (!team) return;
+
+  const titles = team.titles || { league: 0, cup: 0, total: 0 };
+  titles[kind] += 1;
+  titles.total += 1;
+  team.titles = titles;
+
+  team.achievements = team.achievements || [];
+  if (!team.achievements.some(achievement => achievement.season === season && achievement.title === title)) {
+    team.achievements.unshift({
+      season,
+      title,
+      type: kind === 'league' ? 'Clube' : 'Distrito'
+    });
+  }
+};
+
+const awardLeagueTopScorer = (state: GameState, leagueName: string, standings: LeagueTeamStats[]) => {
+  const scorers = standings
+    .flatMap(row => {
+      const team = state.teams[row.teamId];
+      return (team?.squad || []).map(playerId => {
+        const player = state.players[playerId];
+        return player ? { player, team } : null;
+      });
+    })
+    .filter(Boolean)
+    .map(item => item!)
+    .sort((a, b) => (b.player.history?.goals || 0) - (a.player.history?.goals || 0));
+
+  const winner = scorers[0];
+  const goals = winner?.player.history?.goals || 0;
+  if (!winner || goals <= 0) return;
+
+  const title = `Artilheiro da ${leagueName} (${goals} gols)`;
+  if (!winner.player.achievements.some(achievement => achievement.season === (state.world.currentSeason || 2050) && achievement.title === title)) {
+    winner.player.achievements.unshift({
+      season: state.world.currentSeason || 2050,
+      title,
+      type: 'Individual'
+    });
+  }
+};
 
 const shuffle = <T,>(items: T[]) => {
   const array = [...items];
@@ -465,10 +522,13 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
     defense: calculateAttr(homeSelection, 'defense', hypePlayerId),
     goalkeeper: calculateAttr(homeSelection, 'goalkeeper', hypePlayerId),
     playStyle: homeTeam.tactics.playStyle,
-    mentality: homeTeam.tactics.mentality,
-    linePosition: homeTeam.tactics.linePosition,
-    aggressiveness: homeTeam.tactics.aggressiveness,
-    slots: homeTeam.tactics.slots,
+    mentality: homeTeam.tactics.mentality || 'Calculista',
+    linePosition: homeTeam.tactics.linePosition ?? 50,
+    aggressiveness: homeTeam.tactics.aggressiveness ?? homeTeam.tactics.intensity ?? 50,
+    intensity: homeTeam.tactics.intensity ?? homeTeam.tactics.aggressiveness ?? 50,
+    width: homeTeam.tactics.width ?? 50,
+    passing: homeTeam.tactics.passing ?? 50,
+    slots: homeTeam.tactics.slots || [null, null, null],
     chemistry: Math.round((homeTeam.chemistry || 50) * (0.5 + (homeUnderstanding / 200))), // Max 1.0x at 100% understanding
     hypePlayerId,
     stabilizationPlayerId
@@ -488,10 +548,13 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
     defense: calculateAttr(awaySelection, 'defense', hypePlayerId),
     goalkeeper: calculateAttr(awaySelection, 'goalkeeper', hypePlayerId),
     playStyle: awayTeam.tactics.playStyle,
-    mentality: awayTeam.tactics.mentality,
-    linePosition: awayTeam.tactics.linePosition,
-    aggressiveness: awayTeam.tactics.aggressiveness,
-    slots: awayTeam.tactics.slots,
+    mentality: awayTeam.tactics.mentality || 'Calculista',
+    linePosition: awayTeam.tactics.linePosition ?? 50,
+    aggressiveness: awayTeam.tactics.aggressiveness ?? awayTeam.tactics.intensity ?? 50,
+    intensity: awayTeam.tactics.intensity ?? awayTeam.tactics.aggressiveness ?? 50,
+    width: awayTeam.tactics.width ?? 50,
+    passing: awayTeam.tactics.passing ?? 50,
+    slots: awayTeam.tactics.slots || [null, null, null],
     chemistry: Math.round((awayTeam.chemistry || 50) * (0.5 + (awayUnderstanding / 200))),
     hypePlayerId,
     stabilizationPlayerId
@@ -613,8 +676,8 @@ const simulateAITeamDay = (state: GameState, teamId: string) => {
     }
   });
 
-  // 2. Sign Free Agents if squad < 16
-  if (team.squad.length < 16) {
+  // 2. Sign Free Agents only until the official squad cap.
+  if (team.squad.length < SQUAD_SIZE_MAX) {
     const freeAgents = Object.values(state.players)
       .filter(p => p.contract.teamId === '')
       .sort((a, b) => b.totalRating - a.totalRating);
@@ -742,6 +805,71 @@ const processTrainingDay = (state: GameState) => {
   }
 };
 
+const maybeGenerateDailyWorldEvent = (state: GameState) => {
+  if (Math.random() > 0.18) return;
+
+  const teams = Object.values(state.teams).filter(team => team.id.startsWith('t_'));
+  const players = Object.values(state.players).filter(player => player.contract.teamId);
+  if (teams.length === 0 || players.length === 0) return;
+
+  const roll = Math.random();
+  const date = state.world.currentDate;
+
+  if (roll < 0.45) {
+    const featured = [...players].sort((a, b) => {
+      const aScore = (a.history.goals || 0) * 3 + (a.history.assists || 0) * 2 + a.totalRating / 100;
+      const bScore = (b.history.goals || 0) * 3 + (b.history.assists || 0) * 2 + b.totalRating / 100;
+      return bScore - aScore;
+    })[0];
+    const team = featured.contract.teamId ? state.teams[featured.contract.teamId] : null;
+    state.notifications.unshift({
+      id: `event_star_${Date.now()}_${featured.id}`,
+      date,
+      title: 'Destaque da Rodada',
+      message: `${featured.nickname} virou assunto na liga${team ? ` defendendo o ${team.name}` : ''}.`,
+      type: 'success',
+      read: false
+    });
+    return;
+  }
+
+  if (roll < 0.75) {
+    const pressureTeam = teams
+      .map(team => {
+        const league = state.world.leagues[team.district.toLowerCase()];
+        const row = league?.standings?.find(s => s.teamId === team.id);
+        return { team, row };
+      })
+      .filter(item => item.row && item.row.played >= 4)
+      .sort((a, b) => (a.row!.points / Math.max(1, a.row!.played)) - (b.row!.points / Math.max(1, b.row!.played)))[0]?.team;
+
+    if (pressureTeam) {
+      state.notifications.unshift({
+        id: `event_manager_${Date.now()}_${pressureTeam.id}`,
+        date,
+        title: 'Tecnico Pressionado',
+        message: `A diretoria do ${pressureTeam.name} cobra reacao imediata apos sequencia ruim.`,
+        type: 'crisis',
+        read: false
+      });
+    }
+    return;
+  }
+
+  const boostedTeam = teams[Math.floor(Math.random() * teams.length)];
+  const oldCap = boostedTeam.powerCap || MAX_TEAM_POWER_TIER_2;
+  const gain = 100;
+  boostedTeam.powerCap = oldCap + gain;
+  state.notifications.unshift({
+    id: `event_value_${Date.now()}_${boostedTeam.id}`,
+    date,
+    title: 'Valor de Clube Atualizado',
+    message: `${boostedTeam.name} ganhou tracao comercial. Teto de score +${gain}.`,
+    type: 'info',
+    read: false
+  });
+};
+
 const processTransferDay = (state: GameState) => {
   // --- Process AI Daily Routines ---
   Object.keys(state.teams).forEach(teamId => {
@@ -813,6 +941,7 @@ const processMatchDay = (state: GameState, round: number) => {
           const champion = state.teams[sorted[0].teamId];
           if (champion) {
             newsHeadlines.champion(state, champion, leagueKey.toUpperCase() as District);
+            awardTeamTitle(champion, world.currentSeason || 2050, `Campeão da Liga ${league.name}`, 'league');
 
             // Award Achievement to Squad
             champion.squad.forEach(pid => {
@@ -854,6 +983,7 @@ const processMatchDay = (state: GameState, round: number) => {
               }
             }
           }
+          awardLeagueTopScorer(state, league.name, league.standings);
         }
       }
     });
@@ -975,6 +1105,7 @@ const processMatchDay = (state: GameState, round: number) => {
       const winnerId = final.homeScore! > final.awayScore! ? final.homeTeamId : final.awayTeamId;
       world.eliteCup.winnerId = winnerId;
       const winnerTeam = state.teams[winnerId];
+      awardTeamTitle(winnerTeam, world.currentSeason || 2050, 'Campeão da Copa Elite', 'cup');
 
       // Award Achievement to Squad
       winnerTeam.squad.forEach(pid => {
@@ -1033,8 +1164,8 @@ const processMatchDay = (state: GameState, round: number) => {
     });
 
     if (districtRound === 1 && world.districtCup.teams.length === 0) {
-      // Use the virtual district teams created in initDistrictCup
-      world.districtCup.teams = ['team_dist_norte', 'team_dist_sul', 'team_dist_leste', 'team_dist_oeste'];
+      // Use the district selection teams created with the universe.
+      world.districtCup.teams = ['d_norte', 'd_sul', 'd_leste', 'd_oeste'];
     }
 
     if (districtRound <= 3) {
@@ -1201,46 +1332,96 @@ export const cancelDraftProposal = (state: GameState, managerId: string, playerI
   return newState;
 };
 
+type DraftProposal = NonNullable<GameState['world']['draftProposals']>[number];
+
+const draftTieBreaker = (proposal: DraftProposal) => {
+  const seed = `${proposal.managerId}:${proposal.teamId}:${proposal.playerId}`;
+  return seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 17;
+};
+
+const canDraftPlayer = (state: GameState, proposal: DraftProposal) => {
+  const player = state.players[proposal.playerId];
+  const team = state.teams[proposal.teamId];
+  if (!player || !team) return false;
+  if ((team.squad || []).includes(player.id)) return false;
+  if ((team.squad || []).length >= SQUAD_SIZE_MAX) return false;
+
+  const currentPower = calculateTeamPower(team, state.players);
+  const cap = team.powerCap || (team.league === 'Cyan' ? MAX_TEAM_POWER_TIER_1 : (team.league === 'Orange' || team.league === 'Purple') ? MAX_TEAM_POWER_TIER_2 : MAX_TEAM_POWER_TIER_3);
+  if (currentPower + player.totalRating > cap) return false;
+
+  const currentTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+  const currentManager = currentTeam?.managerId ? state.managers[currentTeam.managerId] : null;
+
+  // Jogador de time humano nao entra no Draft Genesis; jogador de IA/free agent pode ser disputado.
+  return !currentManager || currentManager.isNPC !== false;
+};
+
+const assignDraftPlayer = (state: GameState, proposal: DraftProposal) => {
+  const player = state.players[proposal.playerId];
+  const team = state.teams[proposal.teamId];
+  if (!player || !team) return;
+
+  const previousTeamId = player.contract.teamId;
+  if (previousTeamId && state.teams[previousTeamId]) {
+    state.teams[previousTeamId].squad = (state.teams[previousTeamId].squad || []).filter(id => id !== player.id);
+    Object.entries(state.teams[previousTeamId].lineup || {}).forEach(([slotId, playerId]) => {
+      if (playerId === player.id) delete state.teams[previousTeamId].lineup[slotId];
+    });
+  }
+
+  player.contract.teamId = team.id;
+  team.squad = [...new Set([...(team.squad || []), player.id])];
+};
+
+const chooseDraftWinner = (state: GameState, proposals: DraftProposal[]) => {
+  const valid = proposals.filter(proposal => canDraftPlayer(state, proposal));
+  if (valid.length === 0) return null;
+
+  return valid.sort((a, b) => {
+    const managerA = state.managers[a.managerId];
+    const managerB = state.managers[b.managerId];
+    const teamA = state.teams[a.teamId];
+    const teamB = state.teams[b.teamId];
+    const powerA = teamA ? calculateTeamPower(teamA, state.players) : 0;
+    const powerB = teamB ? calculateTeamPower(teamB, state.players) : 0;
+    const humanA = managerA?.isNPC === false ? 1 : 0;
+    const humanB = managerB?.isNPC === false ? 1 : 0;
+    const needA = SQUAD_SIZE_MAX - (teamA?.squad?.length || 0);
+    const needB = SQUAD_SIZE_MAX - (teamB?.squad?.length || 0);
+
+    const scoreA = (humanA * 10000) + (needA * 100) - Math.round(powerA / 25) + draftTieBreaker(a);
+    const scoreB = (humanB * 10000) + (needB * 100) - Math.round(powerB / 25) + draftTieBreaker(b);
+    return scoreB - scoreA;
+  })[0];
+};
+
 export const resolveDraftConflict = (state: GameState) => {
   try {
     if (!state?.world?.draftProposals || state.world.draftProposals.length === 0) return;
     const world = state.world;
-    const proposals = world.draftProposals;
-    const playerMap = {};
-    for (const p of proposals) {
-      if (p?.playerId) {
-        if (!playerMap[p.playerId]) playerMap[p.playerId] = [];
-        playerMap[p.playerId].push(p);
+    const proposals = [...world.draftProposals]
+      .filter(proposal => proposal?.playerId && proposal?.managerId && proposal?.teamId)
+      .sort((a, b) => a.priority - b.priority);
+    const maxRound = proposals.reduce((max, proposal) => Math.max(max, proposal.priority || 1), 1);
+    const draftedPlayerIds = new Set<string>();
+
+    for (let round = 1; round <= maxRound; round += 1) {
+      const roundProposals = proposals.filter(proposal => proposal.priority === round && !draftedPlayerIds.has(proposal.playerId));
+      const proposalsByPlayer = roundProposals.reduce<Record<string, DraftProposal[]>>((acc, proposal) => {
+        acc[proposal.playerId] = acc[proposal.playerId] || [];
+        acc[proposal.playerId].push(proposal);
+        return acc;
+      }, {});
+
+      for (const playerId of Object.keys(proposalsByPlayer)) {
+        const winner = chooseDraftWinner(state, proposalsByPlayer[playerId]);
+        if (!winner) continue;
+        assignDraftPlayer(state, winner);
+        draftedPlayerIds.add(playerId);
       }
     }
-    for (const playerId of Object.keys(playerMap)) {
-      const list = playerMap[playerId];
-      let best = list[0];
-      let maxAttr = -1;
-      for (const prop of list) {
-        if (!prop?.managerId || !prop?.teamId) continue;
-        const m = state.managers[prop.managerId];
-        const t = state.teams[prop.teamId];
-        if (!m || !t) continue;
-        const isHuman = !m.isNPC;
-        const rep = m?.reputation || 50;
-        const squadSize = t.squad?.length || 0;
-        const attr = (rep * 10) + ((15 - squadSize) * 20) + (isHuman ? 10000 : 0);
-        if (attr > maxAttr) {
-          maxAttr = attr;
-          best = prop;
-        }
-      }
-      if (best) {
-        const pObj = state.players[best.playerId];
-        const tObj = state.teams[best.teamId];
-        if (pObj && tObj) {
-          pObj.contract.teamId = tObj.id;
-          if (!tObj.squad) tObj.squad = [];
-          if (!tObj.squad.includes(pObj.id)) tObj.squad.push(pObj.id);
-        }
-      }
-    }
+
     world.draftProposals = [];
   } catch (e) { }
 };
@@ -1319,6 +1500,9 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
       nextDay.setHours(0, 0, 0, 0);
       world.seasonStartReal = nextDay.toISOString();
     }
+  } else {
+    world.currentDay = (world.currentDay || 0) + 1;
+    console.log(`>>> RELÓGIO REAL: avançando para o Dia ${world.currentDay} <<<`);
   }
 
   // --- Genesis Draft Phase Checks ---
@@ -1366,6 +1550,8 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
     processMatchDay(state, round);
   }
 
+  maybeGenerateDailyWorldEvent(state);
+
   if (state.world.isInitialSeed) {
     state.world.isInitialSeed = false;
   }
@@ -1378,9 +1564,16 @@ export const startNewSeason = (state: GameState): GameState => {
 
   // 0. Inter-District Migration
   const reallocations = shuffleBottomTeams(state);
+  reallocations.forEach(({ teamId, to }) => {
+    const team = state.teams[teamId];
+    if (team) {
+      team.league = getLeagueColorForDistrict(to);
+    }
+  });
 
   // Generate Season Report (The Pulse)
-  generateSeasonReport(state, reallocations);
+  const seasonReport = generateSeasonReport(state, reallocations);
+  newsHeadlines.seasonEnded(state, seasonReport);
 
   // 1. Reset Leagues and Regenerate Calendars
   const leagues = { ...state.world.leagues };
@@ -1391,12 +1584,26 @@ export const startNewSeason = (state: GameState): GameState => {
   newSeasonStartDate.setDate(newSeasonStartDate.getDate() + 7);
   newSeasonStartDate.setHours(0, 0, 0, 0);
 
+  const leagueDistricts: Record<string, District> = {
+    norte: 'NORTE',
+    sul: 'SUL',
+    leste: 'LESTE',
+    oeste: 'OESTE'
+  };
+
   Object.keys(leagues).forEach(key => {
     const league = { ...leagues[key] };
+    const district = leagueDistricts[key] || league.district;
+    const leagueTeamIds = Object.values(state.teams)
+      .filter(team => team.id.startsWith('t_') && (!district || team.district === district))
+      .map(team => team.id);
 
     // Reset Standings
-    league.standings = league.standings.map(s => ({
-      ...s,
+    league.standings = leagueTeamIds.map((teamId, index) => ({
+      teamId,
+      team: state.teams[teamId]?.name,
+      position: index + 1,
+      logo: state.teams[teamId]?.logo,
       points: 0,
       played: 0,
       won: 0,
@@ -1408,9 +1615,9 @@ export const startNewSeason = (state: GameState): GameState => {
     }));
 
     // Regenerate Matches
-    const leagueTeamIds = league.standings.map(s => s.teamId);
     const teamObjs = leagueTeamIds.map(id => state.teams[id]);
     league.matches = generateCalendar(teamObjs, league.id, newSeasonStartDate.toISOString());
+    league.teams = leagueTeamIds;
 
     leagues[key] = league;
   });
@@ -1430,6 +1637,7 @@ export const startNewSeason = (state: GameState): GameState => {
       assists: 0,
       gamesPlayed: 0,
       averageRating: 0,
+      seasonRatingDelta: 0,
       // lastMatchRatings should probably stay for form? 
       // Let's clear it for a "clean" season start
       lastMatchRatings: []
@@ -1444,10 +1652,14 @@ export const startNewSeason = (state: GameState): GameState => {
     world: {
       ...state.world,
       currentSeason: nextSeason,
+      currentDay: 0,
       currentRound: 1,
       currentDate: newSeasonStartDate.toISOString(),
       seasonStartReal: newSeasonStartDate.toISOString(),
       status: 'LOBBY',
+      phase: 'REGULAR_SEASON',
+      transferWindowOpen: false,
+      offseasonDecision: undefined,
       leagues,
       eliteCup: { ...state.world.eliteCup, round: 0, teams: [], winnerId: null, bracket: { round1: [], quarters: [], semis: [], final: null } },
       districtCup: { ...state.world.districtCup, round: 0, teams: [], matches: [], standings: [], winnerId: null, final: null }

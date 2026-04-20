@@ -119,6 +119,7 @@ export const useDashboardData = () => {
 
             const formattedStandings = sortedStandings.map((stats, index) => ({
                 position: index + 1,
+                teamId: stats.teamId,
                 team: state.teams[stats.teamId]?.name || 'Unknown',
                 logo: state.teams[stats.teamId]?.logo,
                 played: stats.played,
@@ -127,7 +128,7 @@ export const useDashboardData = () => {
                 id: stats.teamId
             }));
 
-            const leaguePlayers: { name: string; team: string; goals: number; rank: number }[] = [];
+            const leaguePlayers: { playerId: string; name: string; team: string; teamId: string; goals: number; rank: number }[] = [];
             league.standings.forEach(teamStats => {
                 const team = state.teams[teamStats.teamId];
                 if (team && team.squad) {
@@ -135,8 +136,10 @@ export const useDashboardData = () => {
                         const player = state.players[playerId];
                         if (player && player.history?.goals > 0) {
                             leaguePlayers.push({
+                                playerId: player.id,
                                 name: player.name,
                                 team: team.name,
+                                teamId: team.id,
                                 goals: player.history.goals,
                                 rank: 0
                             });

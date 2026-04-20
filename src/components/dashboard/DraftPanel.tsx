@@ -1,346 +1,450 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useGame } from '../../store/GameContext';
 import { useTransfers } from '../../hooks/useTransfers';
-import { Rocket, Shield, Zap, TrendingUp, CheckCircle2, Info, Search, Filter, Users, Trophy, Clock, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Player, PlayerRole, District } from '../../types';
+import { Player, PlayerRole } from '../../types';
+import { PlayerCard } from '../PlayerCard';
+import { PlayerModal } from '../PlayerModal';
+import { LayoutGrid, Rows3, Rocket, Search, Shield, Users, X, UserMinus } from 'lucide-react';
+
+const ROLE_ORDER: PlayerRole[] = ['GOL', 'ZAG', 'MEI', 'ATA'];
+
+const ROLE_LABELS: Record<PlayerRole, string> = {
+  GOL: 'Goleiros',
+  ZAG: 'Zagueiros',
+  MEI: 'Meio-Campistas',
+  ATA: 'Atacantes',
+};
+
+const groupPlayersByRole = (players: Player[]) =>
+  ROLE_ORDER.reduce<Record<PlayerRole, Player[]>>((acc, role) => {
+    acc[role] = players.filter(player => player.role === role);
+    return acc;
+  }, { GOL: [], ZAG: [], MEI: [], ATA: [] });
 
 export const DraftPanel: React.FC = () => {
-    const { state, setState, saveGame } = useGame();
-    const [activeTab, setActiveTab] = useState<'squad' | 'market'>('market');
+  const { state, setState, saveGame } = useGame();
+  const [activeTab, setActiveTab] = useState<'market' | 'squad'>('market');
+  const [marketViewMode, setMarketViewMode] = useState<'cards' | 'list'>('list');
+  const [squadViewMode, setSquadViewMode] = useState<'cards' | 'list'>('cards');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<PlayerRole | 'ALL'>('ALL');
+  const [districtFilter, setDistrictFilter] = useState<'ALL' | 'NORTE' | 'SUL' | 'LESTE' | 'OESTE'>('ALL');
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
-    // Filters
-    const [searchTerm, setSearchTerm] = useState('');
-    const [roleFilter, setRoleFilter] = useState<PlayerRole | 'ALL'>('ALL');
-    const [districtFilter, setDistrictFilter] = useState<District | 'ALL'>('ALL');
+  const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
+  const proposals = state.world.draftProposals || [];
+  const myProposals = proposals.filter(proposal => proposal.managerId === state.userManagerId);
+  const myProposalPlayerIds = myProposals.map(proposal => proposal.playerId);
 
-    const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
+  const { handleMakeProposal, handleCancelDraftProposal, handleSellPlayer } = useTransfers(
+    userTeam?.id || null,
+    0,
+    userTeam?.powerCap || 0
+  );
 
-    if (!userTeam) return null;
+  const proposalCounts = useMemo(() => {
+    return proposals.reduce<Record<string, number>>((acc, proposal) => {
+      acc[proposal.playerId] = (acc[proposal.playerId] || 0) + 1;
+      return acc;
+    }, {});
+  }, [proposals]);
 
-    // Proposals logic
-    const proposals = state.world.draftProposals || [];
-    const myProposals = proposals.filter(p => p.managerId === state.userManagerId) || [];
-    const myProposalPlayerIds = myProposals.map(p => p.playerId);
+  const currentSquadPlayers = useMemo(() => {
+    if (!userTeam) return [];
+    return userTeam.squad.map(playerId => state.players[playerId]).filter(Boolean);
+  }, [state.players, userTeam]);
 
-    const currentPower = userTeam.squad.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0) +
-        myProposalPlayerIds.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
+  const pendingPlayers = useMemo(() => {
+    return myProposalPlayerIds.map(playerId => state.players[playerId]).filter(Boolean);
+  }, [myProposalPlayerIds, state.players]);
 
-    const DRAFT_BUDGET = userTeam.powerCap || 15000; // Standard draft budget
-    const remaining = DRAFT_BUDGET - currentPower;
-    const progress = Math.min(100, (currentPower / DRAFT_BUDGET) * 100);
+  const combinedSquad = useMemo(() => {
+    const seen = new Set<string>();
+    return [...currentSquadPlayers, ...pendingPlayers].filter(player => {
+      if (seen.has(player.id)) return false;
+      seen.add(player.id);
+      return true;
+    });
+  }, [currentSquadPlayers, pendingPlayers]);
 
-    // Market Filtering
-    const marketPlayers = useMemo(() => {
-        return Object.values(state.players).filter(p => {
-            // Only players without a manager or in NPC teams
-            const pTeam = p.contract.teamId ? state.teams[p.contract.teamId] : null;
-            const isNpcOwned = !pTeam || !pTeam.managerId;
-            if (!isNpcOwned) return false;
+  const filteredMarketPlayers = useMemo(() => {
+    if (!userTeam) return [];
 
-            const matchesSearch = p.nickname.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesRole = roleFilter === 'ALL' || p.role === roleFilter;
-            const matchesDistrict = districtFilter === 'ALL' || p.district === districtFilter;
-            const notInMySquad = !userTeam.squad.includes(p.id) && !myProposalPlayerIds.includes(p.id);
+    return Object.values(state.players)
+      .filter(player => {
+        const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+        const playerManager = playerTeam?.managerId ? state.managers[playerTeam.managerId] : null;
+        const isDraftEligible = !playerTeam || playerManager?.isNPC !== false;
+        const notAlreadyMine = !userTeam.squad.includes(player.id) && !myProposalPlayerIds.includes(player.id);
+        const matchesSearch =
+          player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          player.nickname.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesRole = roleFilter === 'ALL' || player.role === roleFilter;
+        const matchesDistrict = districtFilter === 'ALL' || player.district === districtFilter;
 
-            return matchesSearch && matchesRole && matchesDistrict && notInMySquad;
-        }).sort((a, b) => b.totalRating - a.totalRating);
-    }, [state.players, state.teams, searchTerm, roleFilter, districtFilter, userTeam.squad, myProposalPlayerIds]);
+        return isDraftEligible && notAlreadyMine && matchesSearch && matchesRole && matchesDistrict;
+      })
+      .sort((a, b) => b.totalRating - a.totalRating)
+      .slice(0, 60);
+  }, [districtFilter, myProposalPlayerIds, roleFilter, searchTerm, state.managers, state.players, state.teams, userTeam]);
 
-    // Proposal Counts for everyone
-    const proposalCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        proposals.forEach(p => {
-            counts[p.playerId] = (counts[p.playerId] || 0) + 1;
-        });
-        return counts;
-    }, [proposals]);
+  const currentPower = useMemo(() => {
+    return combinedSquad.reduce((sum, player) => sum + player.totalRating, 0);
+  }, [combinedSquad]);
 
-    const { handleMakeProposal, handleCancelDraftProposal } = useTransfers(userTeam.id, 0, userTeam.powerCap);
+  const draftBudget = userTeam?.powerCap || 15000;
+  const remaining = draftBudget - currentPower;
+  const progress = Math.min(100, (currentPower / draftBudget) * 100);
 
-    const handleToggleDraft = (player: Player) => {
-        const isRecruited = myProposalPlayerIds.includes(player.id);
-        if (isRecruited) {
-            handleCancelDraftProposal(player.id);
-        } else {
-            handleMakeProposal(player);
-        }
-    };
+  const groupedMarketPlayers = useMemo(() => groupPlayersByRole(filteredMarketPlayers), [filteredMarketPlayers]);
+  const groupedSquadPlayers = useMemo(() => groupPlayersByRole(combinedSquad), [combinedSquad]);
 
-    const handleFinalizeDraft = async () => {
-        const totalSquad = userTeam.squad.length + myProposalPlayerIds.length;
-        if (totalSquad < 11) {
-            alert('Você precisa selecionar pelo menos 11 jogadores!');
-            return;
-        }
+  if (!userTeam) return null;
 
-        if (window.confirm('Deseja confirmar suas propostas de Draft? Elas serão processadas na primeira madrugada.')) {
-            const newState = { ...state };
-            // Advance from Day -1 to Day 0 if not already
-            if (newState.world.currentDay === -1) {
-                newState.world.currentDay = 0;
-            }
-            setState(newState);
-            await saveGame(newState);
-        }
-    };
+  const totalSelected = combinedSquad.length;
+
+  const handleFinalizeDraft = async () => {
+    if (totalSelected < 11) {
+      window.alert('Voce precisa selecionar pelo menos 11 jogadores.');
+      return;
+    }
+
+    if (!window.confirm('Confirmar o Draft Genesis agora? As propostas serao processadas na virada do dia.')) {
+      return;
+    }
+
+    const newState = { ...state };
+    if (newState.world.currentDay === -1) {
+      newState.world.currentDay = 0;
+    }
+    setState(newState);
+    await saveGame(newState);
+  };
+
+  const renderGroupedList = (
+    groups: Record<PlayerRole, Player[]>,
+    options: {
+      emptyMessage: string;
+      actionForPlayer?: (player: Player) => React.ReactNode;
+      onRowClick?: (player: Player) => void;
+      showDemand?: boolean;
+      showStatus?: boolean;
+    }
+  ) => {
+    const total = Object.values(groups).reduce((sum, group) => sum + group.length, 0);
+    if (total === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 py-12 text-center text-[10px] font-black uppercase tracking-[0.25em] text-white/25">
+          {options.emptyMessage}
+        </div>
+      );
+    }
 
     return (
-        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500 max-w-[1600px] mx-auto">
-            {/* Main Stats Header */}
-            <div className="glass-card-neon p-4 sm:p-6 rounded-[2rem] border-cyan-500/20 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-all duration-700 pointer-events-none">
-                    <Rocket size={120} className="text-cyan-400 rotate-12" />
-                </div>
+      <div className="space-y-4">
+        {ROLE_ORDER.map(role => {
+          const players = groups[role];
+          if (players.length === 0) return null;
 
-                <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left relative z-10 w-full md:w-auto">
-                    <div className="space-y-1">
-                        <div className="flex items-center justify-center sm:justify-start gap-2">
-                            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                            <h1 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tighter">
-                                DRAFT <span className="text-cyan-400">GENESIS</span>
-                            </h1>
-                        </div>
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest leading-none">FASE DE MONTAGEM DE ELENCO • DIA {state.world.currentDay === -1 ? 'GENESE' : state.world.currentDay}</p>
-                    </div>
-
-                    <div className="h-10 w-[1px] bg-white/10 hidden sm:block" />
-
-                    <div className="flex gap-4">
-                        <div className="text-center sm:text-left">
-                            <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">SCORE UTILIZADO</p>
-                            <p className={`text-lg font-black leading-none ${remaining < 0 ? 'text-red-400' : 'text-cyan-400'}`}>
-                                {currentPower.toLocaleString()} <span className="text-[10px] text-slate-600">/ {DRAFT_BUDGET.toLocaleString()}</span>
-                            </p>
-                        </div>
-                        <div className="text-center sm:text-left">
-                            <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">VAGAS OCUPADAS</p>
-                            <p className="text-lg font-black text-white leading-none">
-                                {userTeam.squad.length + myProposalPlayerIds.length} <span className="text-[10px] text-slate-600">/ 15</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 relative z-10 w-full md:w-auto">
-                    <div className="flex-1 md:w-48 h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                        <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            className={`h-full ${remaining < 0 ? 'bg-red-500' : 'bg-cyan-500'}`}
-                        />
-                    </div>
-                    <button
-                        onClick={handleFinalizeDraft}
-                        disabled={remaining < 0 || (userTeam.squad.length + myProposalPlayerIds.length) < 11}
-                        className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${remaining < 0 || (userTeam.squad.length + myProposalPlayerIds.length) < 11
-                            ? 'bg-white/5 text-slate-700 cursor-not-allowed'
-                            : 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95'
-                            }`}
+          return (
+            <div key={role} className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+              <div className="border-b border-white/5 bg-white/[0.03] px-4 py-3">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                  {ROLE_LABELS[role]}
+                </h3>
+              </div>
+              <div className="divide-y divide-white/[0.04]">
+                {players.map(player => {
+                  const isPending = myProposalPlayerIds.includes(player.id);
+                  return (
+                    <div
+                      key={player.id}
+                      onClick={() => options.onRowClick?.(player)}
+                      className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04] cursor-pointer"
                     >
-                        Confirmar Draft
-                    </button>
-                </div>
-            </div>
-
-            {/* Content Tabs */}
-            <div className="flex gap-2 p-1 bg-black/40 rounded-2xl border border-white/5 w-fit">
-                <button
-                    onClick={() => setActiveTab('market')}
-                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'market' ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                >
-                    <Users size={14} /> MERCADO DE DRAFT
-                </button>
-                <button
-                    onClick={() => setActiveTab('squad')}
-                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'squad' ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                >
-                    <Shield size={14} /> MEU ELENCO ({userTeam.squad.length + myProposalPlayerIds.length})
-                </button>
-            </div>
-
-            {/* Market View */}
-            <AnimatePresence mode="wait">
-                {activeTab === 'market' ? (
-                    <motion.div
-                        key="market"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className="space-y-4"
-                    >
-                        {/* Filters Bar */}
-                        <div className="glass-card-neon p-4 rounded-2xl border-white/5 flex flex-wrap items-center gap-4">
-                            <div className="relative group flex-1 min-w-[200px]">
-                                <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
-                                <input
-                                    type="text"
-                                    placeholder="BUSCAR ATLETA..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-[10px] font-bold text-white uppercase outline-none focus:border-cyan-500/50 transition-all"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <select
-                                    value={roleFilter}
-                                    onChange={e => setRoleFilter(e.target.value as any)}
-                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-[10px] font-black text-white uppercase outline-none focus:border-cyan-500/50"
-                                >
-                                    <option value="ALL">TODAS AS POSIÇÕES</option>
-                                    <option value="GOL">GOLEIROS</option>
-                                    <option value="ZAG">ZAGUEIROS</option>
-                                    <option value="MEI">MEIAS</option>
-                                    <option value="ATA">ATACANTES</option>
-                                </select>
-                                <select
-                                    value={districtFilter}
-                                    onChange={e => setDistrictFilter(e.target.value as any)}
-                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-[10px] font-black text-white uppercase outline-none focus:border-cyan-500/50"
-                                >
-                                    <option value="ALL">TODOS OS DISTRITOS</option>
-                                    <option value="NORTE">NORTE</option>
-                                    <option value="SUL">SUL</option>
-                                    <option value="LESTE">LESTE</option>
-                                    <option value="OESTE">OESTE</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* HIGH DENSITY PLAYER LIST */}
-                        <div className="glass-card-neon rounded-2xl border-white/5 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-white/[0.02] border-b border-white/5">
-                                            <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Atleta</th>
-                                            <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Pos</th>
-                                            <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Rating</th>
-                                            <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Distrito</th>
-                                            <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Demanda</th>
-                                            <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Ação</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/[0.02]">
-                                        {marketPlayers.slice(0, 50).map(player => (
-                                            <tr key={player.id} className="hover:bg-white/[0.02] transition-colors group">
-                                                <td className="px-6 py-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-black text-[10px] text-white">
-                                                            {player.nickname[0]}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[11px] font-black text-white uppercase">{player.nickname}</p>
-                                                            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{player.name}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${player.role === 'GOL' ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
-                                                        player.role === 'ZAG' ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' :
-                                                            player.role === 'MEI' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
-                                                                'bg-red-500/10 border-red-500/30 text-red-500'
-                                                        }`}>
-                                                        {player.role}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center font-mono font-black text-white text-[11px]">
-                                                    {player.totalRating}
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className="text-[9px] font-bold text-slate-400 opacity-60 uppercase">{player.district}</span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <div className="flex items-center justify-center gap-1.5">
-                                                        <TrendingUp size={10} className={proposalCounts[player.id] > 0 ? 'text-cyan-400' : 'text-slate-700'} />
-                                                        <span className={`text-[10px] font-black ${proposalCounts[player.id] > 0 ? 'text-white' : 'text-slate-700'}`}>
-                                                            {proposalCounts[player.id] || 0}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-3 text-right">
-                                                    <button
-                                                        onClick={() => handleToggleDraft(player)}
-                                                        disabled={state.world.currentDay === 2 && !myProposalPlayerIds.includes(player.id)}
-                                                        className={`px-4 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 justify-end ml-auto ${myProposalPlayerIds.includes(player.id)
-                                                            ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30 hover:bg-red-500 hover:text-white hover:border-red-500/50'
-                                                            : state.world.currentDay === 2
-                                                                ? 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
-                                                                : 'bg-white/5 text-white border border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/10'
-                                                            }`}
-                                                    >
-                                                        {myProposalPlayerIds.includes(player.id) ? (
-                                                            <>
-                                                                <Clock size={10} className="animate-pulse" /> Aguardando
-                                                            </>
-                                                        ) : state.world.currentDay === 2 ? (
-                                                            'Encerrado'
-                                                        ) : (
-                                                            'Recrutar'
-                                                        )}
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {marketPlayers.length === 0 && (
-                                <div className="py-20 flex flex-col items-center justify-center text-slate-600 gap-3">
-                                    <Search size={32} strokeWidth={1} />
-                                    <p className="text-[10px] font-black uppercase tracking-widest">Nenhum atleta encontrado nos filtros</p>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        key="squad"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-                    >
-                        {Array.from(new Set([...userTeam.squad, ...myProposalPlayerIds])).map(playerId => {
-                            const p = state.players[playerId];
-                            const isPending = myProposalPlayerIds.includes(playerId);
-                            if (!p) return null;
-                            return (
-                                <div key={p.id} className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5 group hover:border-cyan-500/30 transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black text-black ${p.role === 'GOL' ? 'bg-amber-400' :
-                                            p.role === 'ZAG' ? 'bg-blue-400' :
-                                                p.role === 'MEI' ? 'bg-emerald-400' : 'bg-red-400'
-                                            }`}>
-                                            {p.role}
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] font-black text-white uppercase truncate max-w-[120px]">{p.nickname}</p>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-[9px] font-bold text-slate-500 uppercase">{p.totalRating} PTS</p>
-                                                {isPending && <span className="text-[7px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 rounded uppercase">Aguardando</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => handleToggleDraft(p)}
-                                        className="p-2 text-slate-500 hover:text-red-400 transition-colors"
-                                        title="Remover do Draft"
-                                    >
-                                        <Shield size={16} className="rotate-180" />
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        {(userTeam.squad.length + myProposalPlayerIds.length) === 0 && (
-                            <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-600 gap-3 glass-card-neon border-dashed border-white/5 rounded-3xl">
-                                <Users size={48} strokeWidth={1} />
-                                <p className="text-xs font-black uppercase tracking-widest italic">Sua lista de recrutamento está vazia</p>
-                            </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">
+                          {player.district} {options.showStatus ? `• ${isPending ? 'Aguardando' : 'No elenco'}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-black italic text-cyan-300">{player.totalRating}</p>
+                        {options.showDemand && (
+                          <p className="text-[8px] font-bold uppercase tracking-widest text-white/25">
+                            {proposalCounts[player.id] || 0} propostas
+                          </p>
                         )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
+                      </div>
+                      <div onClick={event => event.stopPropagation()}>
+                        {options.actionForPlayer?.(player)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     );
+  };
+
+  const renderGroupedCards = (
+    groups: Record<PlayerRole, Player[]>,
+    options: {
+      emptyMessage: string;
+      actionForPlayer?: (player: Player) => React.ReactNode;
+    }
+  ) => {
+    const total = Object.values(groups).reduce((sum, group) => sum + group.length, 0);
+    if (total === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 py-12 text-center text-[10px] font-black uppercase tracking-[0.25em] text-white/25">
+          {options.emptyMessage}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        {ROLE_ORDER.map(role => {
+          const players = groups[role];
+          if (players.length === 0) return null;
+
+          return (
+            <section key={role} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-5 w-1 rounded-full bg-cyan-400" />
+                <div>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{ROLE_LABELS[role]}</h3>
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-white/25">{players.length} atletas</p>
+                </div>
+              </div>
+              <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4">
+                {players.map(player => (
+                  <div key={player.id} className="w-[142px] shrink-0 snap-start space-y-2">
+                    <PlayerCard
+                      player={player}
+                      onClick={setSelectedPlayer}
+                      variant="full"
+                      teamLogo={userTeam.logo}
+                    />
+                    {options.actionForPlayer?.(player)}
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="mx-auto max-w-[1600px] space-y-4 animate-in fade-in duration-500">
+      <div className="relative overflow-hidden rounded-[2rem] border border-cyan-500/20 bg-black/40 p-4 sm:p-6">
+        <div className="absolute right-0 top-0 p-6 opacity-10 pointer-events-none">
+          <Rocket size={96} className="text-cyan-400" />
+        </div>
+        <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-cyan-300">Genesis</p>
+              <h1 className="text-2xl font-black uppercase italic tracking-tight text-white">Draft Genesis</h1>
+            </div>
+            <div className="flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-widest">
+              <span className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white/75">{currentPower.toLocaleString()} / {draftBudget.toLocaleString()} score</span>
+              <span className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white/75">{totalSelected} / 15 atletas</span>
+              <span className={`rounded-xl border px-3 py-2 ${remaining >= 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-rose-500/20 bg-rose-500/10 text-rose-200'}`}>
+                saldo {remaining >= 0 ? '+' : ''}{remaining}
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full max-w-md space-y-3">
+            <div className="h-3 overflow-hidden rounded-full border border-white/10 bg-black/40">
+              <div
+                className={`h-full rounded-full transition-all ${remaining >= 0 ? 'bg-cyan-400' : 'bg-rose-500'}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleFinalizeDraft}
+              disabled={remaining < 0 || totalSelected < 11}
+              className={`w-full rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-[0.25em] transition-all ${
+                remaining < 0 || totalSelected < 11
+                  ? 'cursor-not-allowed border border-white/10 bg-white/[0.03] text-white/25'
+                  : 'bg-cyan-400 text-black hover:bg-cyan-300'
+              }`}
+            >
+              Confirmar Draft
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+          {[
+            { id: 'market', label: `Mercado de Draft (${filteredMarketPlayers.length})`, icon: Users },
+            { id: 'squad', label: `Meu Elenco (${totalSelected})`, icon: Shield },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as 'market' | 'squad')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+                activeTab === tab.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
+              }`}
+            >
+              <tab.icon size={13} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+          {[
+            { id: 'cards', label: 'Cards', icon: LayoutGrid },
+            { id: 'list', label: 'Lista', icon: Rows3 },
+          ].map(mode => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => activeTab === 'market' ? setMarketViewMode(mode.id as 'cards' | 'list') : setSquadViewMode(mode.id as 'cards' | 'list')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+                (activeTab === 'market' ? marketViewMode : squadViewMode) === mode.id
+                  ? 'bg-cyan-500 text-black'
+                  : 'text-white/45 hover:text-white'
+              }`}
+            >
+              <mode.icon size={12} />
+              {mode.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'market' ? (
+        <div className="space-y-4">
+          <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 sm:grid-cols-[1.2fr_repeat(2,minmax(0,0.55fr))]">
+            <div className="relative">
+              <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Buscar atleta..."
+                className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-10 pr-4 text-[10px] font-black uppercase tracking-[0.2em] text-white outline-none placeholder:text-white/15"
+              />
+            </div>
+            <select
+              value={roleFilter}
+              onChange={event => setRoleFilter(event.target.value as PlayerRole | 'ALL')}
+              className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white outline-none"
+            >
+              <option value="ALL">Todas posicoes</option>
+              <option value="GOL">Goleiros</option>
+              <option value="ZAG">Zagueiros</option>
+              <option value="MEI">Meias</option>
+              <option value="ATA">Atacantes</option>
+            </select>
+            <select
+              value={districtFilter}
+              onChange={event => setDistrictFilter(event.target.value as 'ALL' | 'NORTE' | 'SUL' | 'LESTE' | 'OESTE')}
+              className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white outline-none"
+            >
+              <option value="ALL">Todos setores</option>
+              <option value="NORTE">Norte</option>
+              <option value="SUL">Sul</option>
+              <option value="LESTE">Leste</option>
+              <option value="OESTE">Oeste</option>
+            </select>
+          </div>
+
+          {marketViewMode === 'cards'
+            ? renderGroupedCards(groupedMarketPlayers, {
+              emptyMessage: 'Nenhum atleta disponivel nesses filtros.',
+              actionForPlayer: (player) => (
+                <button
+                  type="button"
+                  onClick={() => handleMakeProposal(player)}
+                  className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  Recrutar
+                </button>
+              ),
+            })
+            : renderGroupedList(groupedMarketPlayers, {
+              emptyMessage: 'Nenhum atleta disponivel nesses filtros.',
+              showDemand: true,
+              onRowClick: setSelectedPlayer,
+              actionForPlayer: (player) => (
+                <button
+                  type="button"
+                  onClick={() => handleMakeProposal(player)}
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  Recrutar
+                </button>
+              ),
+            })}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {squadViewMode === 'cards'
+            ? renderGroupedCards(groupedSquadPlayers, {
+              emptyMessage: 'Seu elenco do draft esta vazio.',
+              actionForPlayer: (player) => {
+                const isPending = myProposalPlayerIds.includes(player.id);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => isPending ? handleCancelDraftProposal(player.id) : handleSellPlayer(player.id)}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition ${
+                      isPending
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                        : 'border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'
+                    }`}
+                  >
+                    {isPending ? <X size={12} /> : <UserMinus size={12} />}
+                    {isPending ? 'Remover wishlist' : 'Dispensar'}
+                  </button>
+                );
+              },
+            })
+            : renderGroupedList(groupedSquadPlayers, {
+              emptyMessage: 'Seu elenco do draft esta vazio.',
+              showStatus: true,
+              onRowClick: setSelectedPlayer,
+              actionForPlayer: (player) => {
+                const isPending = myProposalPlayerIds.includes(player.id);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => isPending ? handleCancelDraftProposal(player.id) : handleSellPlayer(player.id)}
+                    className={`rounded-xl border px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] transition ${
+                      isPending
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                        : 'border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'
+                    }`}
+                  >
+                    {isPending ? 'Remover' : 'Dispensar'}
+                  </button>
+                );
+              },
+            })}
+        </div>
+      )}
+
+      {selectedPlayer && (
+        <PlayerModal
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+        />
+      )}
+    </div>
+  );
 };

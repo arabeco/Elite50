@@ -1,5 +1,24 @@
 import { GameState, Player, Team, Manager, District, Match, SeasonPhase } from '../types';
 
+const awardDistrictTeamTitle = (team: Team | undefined, season: number) => {
+    if (!team) return;
+
+    const titles = team.titles || { league: 0, cup: 0, total: 0 };
+    titles.cup += 1;
+    titles.total += 1;
+    team.titles = titles;
+
+    const title = `Campeão da Copa de Distritos (${team.district})`;
+    team.achievements = team.achievements || [];
+    if (!team.achievements.some(achievement => achievement.season === season && achievement.title === title)) {
+        team.achievements.unshift({
+            season,
+            title,
+            type: 'Distrito'
+        });
+    }
+};
+
 /**
  * Selects 4 human managers for District Cup.
  * Priority: Human role, then Reputation.
@@ -55,8 +74,19 @@ export const initDistrictCup = (state: GameState) => {
 
     // Setup the 4 District Teams (Special virtual teams)
     ['NORTE', 'SUL', 'LESTE', 'OESTE'].forEach(d => {
-        const teamId = `team_dist_${d.toLowerCase()}`;
-        const team: Team = {
+        const teamId = `d_${d.toLowerCase()}`;
+        const existingTeam = state.teams[teamId];
+        const team: Team = existingTeam ? {
+            ...existingTeam,
+            managerId: managers[d as District],
+            squad: rosters[d as District],
+            lineup: {},
+            tactics: {
+                ...existingTeam.tactics,
+                playStyle: existingTeam.tactics?.playStyle || 'Equilibrado',
+                preferredFormation: existingTeam.tactics?.preferredFormation || '4-3-3'
+            }
+        } : {
             id: teamId,
             name: `Seleção ${d}`,
             city: d,
@@ -87,6 +117,8 @@ export const finalizeDistrictCup = (state: GameState) => {
     if (winnerId) {
         const winnerTeam = state.teams[winnerId];
         if (winnerTeam) {
+            awardDistrictTeamTitle(winnerTeam, state.world.currentSeason || 2050);
+
             winnerTeam.squad.forEach(pid => {
                 const p = state.players[pid];
                 if (p) {
@@ -130,7 +162,7 @@ export const finalizeDistrictCup = (state: GameState) => {
         if (player.district === 'EXILADO') return;
 
         // Apply Fatigue for participants
-        const isConvoked = Object.values(state.teams).some(t => t.id.startsWith('team_dist_') && t.squad.includes(player.id));
+        const isConvoked = Object.values(state.teams).some(t => t.id.startsWith('d_') && t.squad.includes(player.id));
 
         if (isConvoked) {
             player.fatigue = 50; // Heavy fatigue for next season

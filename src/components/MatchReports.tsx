@@ -4,7 +4,7 @@ import {
   Trophy, Clock, Activity, Zap, Shield,
   ChevronRight, AlertCircle, Award, Target,
   TrendingUp, Users, Play, Pause, FastForward,
-  Info, BarChart3, Star, History, AlertTriangle, Skull
+  Info, BarChart3, Star, History, AlertTriangle, Skull, Brain
 } from 'lucide-react';
 import { TeamLogo } from './TeamLogo';
 
@@ -16,6 +16,8 @@ interface LiveReportProps {
   awayTeam: Team;
   players: Record<string, Player>;
   currentSecond: number; // 0-MATCH_REAL_TIME_SECONDS
+  onTeamClick?: (teamId: string) => void;
+  onPlayerClick?: (player: Player) => void;
 }
 
 export const LiveReport: React.FC<LiveReportProps> = ({
@@ -23,7 +25,9 @@ export const LiveReport: React.FC<LiveReportProps> = ({
   homeTeam,
   awayTeam,
   players,
-  currentSecond
+  currentSecond,
+  onTeamClick,
+  onPlayerClick
 }) => {
   const result = match.result;
   if (!result) return null;
@@ -63,7 +67,11 @@ export const LiveReport: React.FC<LiveReportProps> = ({
 
         <div className="flex items-center justify-between gap-4">
           {/* Home Team */}
-          <div className="flex flex-col items-center flex-1">
+          <button
+            type="button"
+            onClick={() => onTeamClick?.(homeTeam.id)}
+            className="flex flex-col items-center flex-1 rounded-2xl transition hover:bg-white/5"
+          >
             <div className="mb-2">
               {homeTeam.logo ? (
                 <TeamLogo
@@ -82,7 +90,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
               )}
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{homeTeam.name}</span>
-          </div>
+          </button>
 
           {/* Score */}
           <div className="flex flex-col items-center gap-1">
@@ -94,7 +102,11 @@ export const LiveReport: React.FC<LiveReportProps> = ({
           </div>
 
           {/* Away Team */}
-          <div className="flex flex-col items-center flex-1">
+          <button
+            type="button"
+            onClick={() => onTeamClick?.(awayTeam.id)}
+            className="flex flex-col items-center flex-1 rounded-2xl transition hover:bg-white/5"
+          >
             <div className="mb-2">
               {awayTeam.logo ? (
                 <TeamLogo
@@ -113,7 +125,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
               )}
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{awayTeam.name}</span>
-          </div>
+          </button>
         </div>
 
         {/* Progress Bar */}
@@ -142,12 +154,12 @@ export const LiveReport: React.FC<LiveReportProps> = ({
       </div>
 
       {/* Events Timeline */}
-      <Timeline events={visibleEvents} players={players} />
+      <Timeline events={visibleEvents} players={players} onPlayerClick={onPlayerClick} />
     </div>
   );
 };
 
-const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player> }> = ({ events, players }) => (
+const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>, onPlayerClick?: (player: Player) => void }> = ({ events, players, onPlayerClick }) => (
   <div className="flex-1 overflow-y-auto p-6 scrollbar-hide bg-slate-950/50">
     <div className="relative">
       {/* Vertical Line */}
@@ -196,9 +208,17 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black text-cyan-400 tabular-nums">{event.minute}'</span>
                       <div className="h-3 w-px bg-white/10" />
-                      <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const player = players[event.playerId || ''];
+                          if (player) onPlayerClick?.(player);
+                        }}
+                        disabled={!event.playerId || !players[event.playerId || '']}
+                        className="text-left text-[10px] font-black text-white/60 uppercase tracking-widest transition hover:text-cyan-300 disabled:cursor-default disabled:hover:text-white/60"
+                      >
                         {(event.type === 'COMMENTARY' || event.type === 'VAR') ? 'Narrador' : (players[event.playerId || '']?.nickname || 'Partida')}
-                      </span>
+                      </button>
                     </div>
                     {event.type === 'GOAL' && (
                       <div className="px-2 py-0.5 bg-cyan-500 rounded text-[8px] font-black text-black uppercase animate-pulse">
@@ -228,6 +248,54 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
   </div>
 );
 
+const getTacticalReading = (result: NonNullable<Match['result']>, homeTeam: Team, awayTeam: Team) => {
+  const homeWon = result.homeScore > result.awayScore;
+  const awayWon = result.awayScore > result.homeScore;
+  const winningSide = homeWon ? 'home' : awayWon ? 'away' : null;
+  const winningTeam = homeWon ? homeTeam : awayWon ? awayTeam : null;
+  const losingTeam = homeWon ? awayTeam : awayWon ? homeTeam : null;
+  const homePossession = result.stats?.possession.home ?? 50;
+  const awayPossession = result.stats?.possession.away ?? 50;
+  const homeShots = result.stats?.shots.home ?? 0;
+  const awayShots = result.stats?.shots.away ?? 0;
+  const shotGap = Math.abs(homeShots - awayShots);
+  const possessionGap = Math.abs(homePossession - awayPossession);
+  const winnerPossession = winningSide === 'home' ? homePossession : winningSide === 'away' ? awayPossession : 50;
+  const winnerShots = winningSide === 'home' ? homeShots : winningSide === 'away' ? awayShots : 0;
+  const loserShots = winningSide === 'home' ? awayShots : winningSide === 'away' ? homeShots : 0;
+  const winnerStyle = winningTeam?.tactics?.playStyle;
+
+  if (!winningTeam) {
+    if (possessionGap >= 16) {
+      const controller = homePossession > awayPossession ? homeTeam : awayTeam;
+      return `${controller.name} controlou mais a bola, mas encontrou pouca vantagem limpa perto da area. O empate saiu mais por controle de risco do que por dominio absoluto.`;
+    }
+    return 'O jogo ficou comprimido entre os setores. As duas equipes tiveram janelas curtas para acelerar e nenhuma conseguiu transformar volume em vantagem clara.';
+  }
+
+  if ((winnerStyle === 'Retranca Armada' || winnerStyle === 'Catenaccio') && winnerPossession < 47) {
+    return `${winningTeam.name} baixou as linhas, protegeu a entrada da area e escolheu poucos momentos para sair. A vitoria veio de eficiencia, nao de volume.`;
+  }
+
+  if ((winnerStyle === 'Gegenpressing' || (winningTeam.tactics?.intensity || 0) >= 70) && winnerShots >= loserShots) {
+    return `${winningTeam.name} pressionou mais alto e recuperou bolas em zonas boas sem abrir demais o campo. Esse detalhe empurrou o jogo para o lado vencedor.`;
+  }
+
+  if (winnerStyle === 'Tiki-Taka' && winnerPossession >= 55) {
+    return `${winningTeam.name} esfriou o ritmo com posse e paciencia. O placar cresceu quando a circulacao encontrou espaco entre meio e defesa.`;
+  }
+
+  if (shotGap >= 6) {
+    return `${winningTeam.name} produziu mais chances e sustentou presenca no ultimo terco. ${losingTeam?.name} resistiu por partes, mas cedeu finalizacoes demais.`;
+  }
+
+  if (Math.abs(result.homeScore - result.awayScore) === 1) {
+    return `${winningTeam.name} venceu num detalhe. A diferenca foi pequena, mas a equipe foi mais limpa nas decisoes perto da area.`;
+  }
+
+  return `${winningTeam.name} foi superior nos momentos-chave. O jogo nao precisou de exagero: melhor ocupacao, menos perda perigosa e finalizacao mais clara.`;
+};
+
 interface PostGameReportProps {
   match: Match;
   homeTeam: Team;
@@ -235,6 +303,8 @@ interface PostGameReportProps {
   players: Record<string, Player>;
   onClose?: () => void;
   onReveal?: (matchId: string) => void;
+  onTeamClick?: (teamId: string) => void;
+  onPlayerClick?: (player: Player) => void;
 }
 
 export const PostGameReport: React.FC<PostGameReportProps> = ({
@@ -243,7 +313,9 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   awayTeam,
   players,
   onClose,
-  onReveal
+  onReveal,
+  onTeamClick,
+  onPlayerClick
 }) => {
   const result = match.result;
   const isRevealed = match.revealed !== false;
@@ -258,6 +330,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 
   // Sort events for timeline (newest first)
   const sortedEvents = [...result.events].sort((a, b) => b.realTimeSecond - a.realTimeSecond);
+  const tacticalReading = getTacticalReading(result, homeTeam, awayTeam);
 
   return (
     <div className="flex flex-col bg-slate-950 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl max-w-2xl mx-auto h-[600px]">
@@ -278,7 +351,11 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           </h2>
 
           <div className="flex items-center gap-12">
-            <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onTeamClick?.(homeTeam.id)}
+              className="flex flex-col items-center gap-2 rounded-2xl p-1 transition hover:bg-white/5"
+            >
               {homeTeam.logo ? (
                 <TeamLogo
                   primaryColor={homeTeam.logo.primary}
@@ -297,7 +374,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
                 {isRevealed ? result.homeScore : '0'}
               </span>
-            </div>
+            </button>
 
             <div className="flex flex-col items-center gap-4">
               <div className="text-xl font-black text-white/20 italic">VS</div>
@@ -311,7 +388,11 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               )}
             </div>
 
-            <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onTeamClick?.(awayTeam.id)}
+              className="flex flex-col items-center gap-2 rounded-2xl p-1 transition hover:bg-white/5"
+            >
               {awayTeam.logo ? (
                 <TeamLogo
                   primaryColor={awayTeam.logo.primary}
@@ -330,7 +411,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
                 {isRevealed ? result.awayScore : '0'}
               </span>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -357,6 +438,15 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
       <div className="flex-1 overflow-y-auto bg-slate-950 scrollbar-hide">
         {activeTab === 'stats' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/5">
+            <div className="bg-slate-950 p-6 md:col-span-2">
+              <h3 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                <Brain size={14} /> LEITURA TATICA
+              </h3>
+              <p className={`text-xs font-bold leading-relaxed text-white/55 ${!isRevealed ? 'blur-sm select-none opacity-20' : ''}`}>
+                {isRevealed ? tacticalReading : 'Analise liberada ao revelar o placar.'}
+              </p>
+            </div>
+
             {/* Match Stats */}
             <div className="bg-slate-950 p-6">
               <h3 className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
@@ -380,7 +470,13 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               </h3>
               <div className="space-y-3">
                 {topPlayers.map(({ player, rating }, idx) => (
-                  <div key={player?.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                  <button
+                    type="button"
+                    key={player?.id || idx}
+                    onClick={() => player && onPlayerClick?.(player)}
+                    disabled={!player}
+                    className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-cyan-500/30 hover:bg-white/10 disabled:cursor-default"
+                  >
                     <div className="flex items-center gap-3">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-yellow-500 text-black' : 'bg-white/10 text-white/40'
                         }`}>
@@ -394,13 +490,13 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
                     <div className={`text-sm font-black text-cyan-400 italic ${!isRevealed ? 'blur-sm select-none opacity-20' : ''}`}>
                       {isRevealed ? (rating / 10).toFixed(1) : '??'}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           </div>
         ) : (
-          <Timeline events={sortedEvents} players={players} />
+          <Timeline events={sortedEvents} players={players} onPlayerClick={onPlayerClick} />
         )}
       </div>
 

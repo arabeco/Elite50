@@ -18,6 +18,7 @@ import { PlayStyle } from '../../types';
 const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, BookOpen } = LucideIcons;
 
 const PLAYSTYLES: PlayStyle[] = ['Blitzkrieg', 'Tiki-Taka', 'Retranca Armada', 'Motor Lento', 'Equilibrado', 'Gegenpressing', 'Catenaccio', 'Vertical'];
+const LEARNABLE_LEGACY_TRAITS = ['Clutch', 'Protagonista', 'Catalisador', 'Passe Ouro', 'Finaliz Ouro', 'Defesa Ouro'];
 
 
 export const TrainingTab = (props: any) => {
@@ -26,7 +27,7 @@ export const TrainingTab = (props: any) => {
   const { userTeam, upcomingMatches } = dashData;
   const { handleMockReport, setSelectedMatchReport } = useMatchSimulation(userTeam?.id || null);
   const { handleUpdateTactics } = useTactics(userTeam?.id || null);
-  const { handleSetFocus, handleStartCardLab, handleSetPlaystyleTraining } = useTraining(userTeam?.id || null);
+  const { handleSetFocus, handleStartCardLab, handleSetPlaystyleTraining, handleStartLegacyTraining } = useTraining(userTeam?.id || null);
   const { handleAdvanceDay } = useGameDay();
 
   // Modal and Interaction States
@@ -34,6 +35,8 @@ export const TrainingTab = (props: any) => {
   const [isStabilizationModalOpen, setIsStabilizationModalOpen] = useState(false);
   const [isCardLabModalOpen, setIsCardLabModalOpen] = useState(false);
   const [isPlaystyleModalOpen, setIsPlaystyleModalOpen] = useState(false);
+  const [isLegacyModalOpen, setIsLegacyModalOpen] = useState(false);
+  const [selectedLegacyTrait, setSelectedLegacyTrait] = useState(LEARNABLE_LEGACY_TRAITS[0]);
   const [selectedLabSlot, setSelectedLabSlot] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -67,6 +70,8 @@ export const TrainingTab = (props: any) => {
   const evoPlayer = state.training.individualFocus.evolutionSlot ? state.players[state.training.individualFocus.evolutionSlot] : null;
   const stabPlayer = state.training.individualFocus.stabilizationSlot ? state.players[state.training.individualFocus.stabilizationSlot] : null;
   const squadPlayers = userTeam ? userTeam.squad.map(id => state.players[id]).filter(p => !!p) : [];
+  const legacyTrainingPlayers = squadPlayers.filter(player => player.badges.slot4 || !player.badges.trainingSlot4);
+  const activeLegacyTraining = squadPlayers.find(player => player.badges.trainingSlot4);
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-md mx-auto pb-20 px-2 sm:px-0">
@@ -218,6 +223,40 @@ export const TrainingTab = (props: any) => {
 
       {/* Laboratório de Cartas */}
       <section className="relative group overflow-hidden rounded-[1.2rem] sm:rounded-[2rem] glass-card-neon p-4 sm:p-6 transition-all hover:scale-[1.01] sm:hover:scale-[1.02] duration-500 shadow-2xl">
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-500/10 blur-[100px] group-hover:bg-purple-500/20 transition-all duration-700" />
+
+        <div className="relative z-10">
+          <div className="flex justify-between items-start mb-3 sm:mb-6">
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-purple-400 flex items-center gap-2">
+                <Star size={window.innerWidth < 640 ? 10 : 12} /> DNA Legado
+              </span>
+              <span className="text-[8px] sm:text-[10px] font-bold text-white/30 uppercase tracking-widest">Curar fardos ou aprender trait</span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsLegacyModalOpen(true)}
+            className="w-full relative overflow-hidden glass-card border-white/10 hover:border-purple-500/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 transition-all group/btn active:scale-95"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className="text-left min-w-0">
+                <div className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest">Projeto ativo</div>
+                <div className="mt-1 text-sm sm:text-lg font-black text-white uppercase italic tracking-tight truncate">
+                  {activeLegacyTraining
+                    ? `${activeLegacyTraining.nickname}: ${activeLegacyTraining.badges.trainingSlot4?.type === 'CURE' ? 'Cura' : activeLegacyTraining.badges.trainingSlot4?.trait}`
+                    : 'Selecionar atleta'}
+                </div>
+              </div>
+              <div className="shrink-0 rounded-xl border border-purple-500/20 bg-purple-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-purple-200">
+                {activeLegacyTraining ? `${activeLegacyTraining.badges.trainingSlot4?.daysLeft}d` : 'Abrir'}
+              </div>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <section className="relative group overflow-hidden rounded-[1.2rem] sm:rounded-[2rem] glass-card-neon p-4 sm:p-6 transition-all hover:scale-[1.01] sm:hover:scale-[1.02] duration-500 shadow-2xl">
         <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-amber-500/10 blur-[100px] group-hover:bg-amber-500/20 transition-all duration-700" />
 
         <div className="relative z-10">
@@ -305,6 +344,81 @@ export const TrainingTab = (props: any) => {
                   <ChevronRight size={window.innerWidth < 640 ? 14 : 16} className="relative z-10 text-white/10 group-hover:text-fuchsia-400 group-hover:translate-x-1 transition-all" />
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLegacyModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setIsLegacyModalOpen(false)} />
+          <div className="relative glass-card-neon border-purple-500/30 rounded-[2rem] w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <header className="relative z-10 p-6 border-b border-white/5 bg-white/5 text-center">
+              <span className="text-[10px] font-black text-purple-400 uppercase tracking-[0.3em]">DNA Legado</span>
+              <h3 className="mt-1 text-xl font-black text-white uppercase italic tracking-tighter">Treinar Trait</h3>
+              <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/30">Fardo cura em 5 dias. Trait novo aprende em 7.</p>
+            </header>
+
+            <div className="p-4 border-b border-white/5">
+              <label className="mb-2 block text-[8px] font-black uppercase tracking-widest text-white/40">Trait para aprender</label>
+              <select
+                value={selectedLegacyTrait}
+                onChange={(event) => setSelectedLegacyTrait(event.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white outline-none focus:border-purple-500/50"
+              >
+                {LEARNABLE_LEGACY_TRAITS.map(trait => (
+                  <option key={trait} value={trait} className="bg-slate-950">{trait}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative z-10 max-h-[52vh] overflow-y-auto p-4 space-y-2 custom-scrollbar">
+              {legacyTrainingPlayers.map(player => {
+                const hasFardo = !!player.badges.slot4;
+                const isTraining = !!player.badges.trainingSlot4;
+                return (
+                  <div key={player.id} className="glass-card border-white/5 rounded-2xl p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-white uppercase italic tracking-tight truncate">{player.nickname}</div>
+                        <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/30">
+                          {isTraining
+                            ? `${player.badges.trainingSlot4?.type === 'CURE' ? 'Curando' : 'Aprendendo'} - ${player.badges.trainingSlot4?.daysLeft} dias`
+                            : hasFardo
+                              ? `Fardo: ${player.badges.slot4}`
+                              : 'Slot legado livre'}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        {hasFardo && !isTraining && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleStartLegacyTraining(player.id, 'CURE');
+                              setIsLegacyModalOpen(false);
+                            }}
+                            className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[8px] font-black uppercase tracking-widest text-emerald-200"
+                          >
+                            Curar
+                          </button>
+                        )}
+                        {!hasFardo && !isTraining && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleStartLegacyTraining(player.id, 'LEARN', selectedLegacyTrait);
+                              setIsLegacyModalOpen(false);
+                            }}
+                            className="rounded-xl border border-purple-500/30 bg-purple-500/15 px-3 py-2 text-[8px] font-black uppercase tracking-widest text-purple-200"
+                          >
+                            Aprender
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

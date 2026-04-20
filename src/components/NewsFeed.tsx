@@ -39,7 +39,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ news, history }) => {
                                 <h4>Temporada {report.season} — Recapitulativo</h4>
                                 <div className="report-stats">
                                     <div className="stat-item">
-                                        <strong>Lucratividade:</strong> {report.profitWinner.teamId} (+{report.profitWinner.capGain} Cap)
+                                        <strong>Score Máximo:</strong> {report.profitWinner.teamId} (+{report.profitWinner.capGain})
                                     </div>
                                     <div className="stat-item">
                                         <strong>MVP de Rating:</strong> {report.mvpRating.playerId} (+{report.mvpRating.ratingGain} pts)

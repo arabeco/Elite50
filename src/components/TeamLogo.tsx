@@ -121,6 +121,23 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
   className = '',
   showCircle = true
 }) => {
+  const assetPath = symbolId.startsWith('asset:') ? symbolId.slice('asset:'.length) : null;
+
+  if (assetPath) {
+    return (
+      <div
+        className={`relative flex items-center justify-center ${className}`}
+        style={{ width: size, height: size }}
+      >
+        <img
+          src={encodeURI(assetPath)}
+          alt=""
+          className="h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.42)]"
+        />
+      </div>
+    );
+  }
+
   const SymbolIcon = ((Icons as any)[symbolId] as LucideIcon) || Icons.Shield;
   const SecondarySymbolIcon = secondarySymbolId ? ((Icons as any)[secondarySymbolId] as LucideIcon) : null;
   const id = React.useId().replace(/:/g, '');

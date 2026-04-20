@@ -152,14 +152,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         className="w-full max-w-[450px] relative z-10"
       >
         <div className="flex flex-col items-center mb-10">
-          <motion.div
+          <motion.img
+            src="/logo.png"
+            alt="Elite 2050"
             initial={{ scale: 0.8, rotate: -10 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-            className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.4)] border border-white/20 mb-6"
-          >
-            <TeamLogo primaryColor="#fff" secondaryColor="#ccc" patternId="none" symbolId="Shield" size={40} className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
-          </motion.div>
+            className="mb-6 h-20 w-20 rounded-2xl border border-white/20 bg-black/40 object-contain p-2 shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+          />
           <h1 className="text-5xl font-black text-white tracking-tighter uppercase italic flex flex-col items-center">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-400">Elite</span>
             <span className="text-2xl mt-[-8px] tracking-[0.3em] text-cyan-500 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">2050</span>

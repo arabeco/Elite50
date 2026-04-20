@@ -140,6 +140,7 @@ export interface TeamLogoMetadata {
   primary: string;
   secondary: string;
   accent?: string;
+  assetPath?: string;
   shapeId?: LogoShape;
   patternId: LogoPattern;
   symbolId: string;
@@ -163,6 +164,12 @@ export interface Team {
   squad: string[]; // Player IDs
   lineup: Record<string, string>; // Position -> Player ID
   chemistry?: number; // 0-100
+  titles?: {
+    league: number;
+    cup: number;
+    total: number;
+  };
+  achievements?: Achievement[];
   powerCap?: number; // Teto de score dinâmico
 }
 
@@ -356,6 +363,12 @@ export interface NewsItem {
   content: string;
   type: 'TRANSFER' | 'EXILE' | 'CHAMPION' | 'CUP' | 'MIGRATION' | 'SYSTEM';
   importance: 1 | 2 | 3; // 3 is highest
+  action?: {
+    kind: 'SEASON_REPORT' | 'TEAM_PROFILE' | 'PLAYER_PROFILE';
+    season: number;
+    teamId?: string;
+    playerId?: string;
+  };
 }
 
 export interface SeasonReport {
@@ -364,6 +377,17 @@ export interface SeasonReport {
   reallocatedTeams: { teamId: string; from: District; to: District }[];
   profitWinner: { teamId: string; capGain: number };
   mvpRating: { playerId: string; ratingGain: number };
+  eliteCupWinnerId?: string | null;
+  districtCupWinnerId?: string | null;
+  managerHighlight?: {
+    managerId: string;
+    teamId: string;
+    reason: string;
+  } | null;
+  teamRatingMovers?: {
+    best: { teamId: string; scoreDelta: number };
+    worst: { teamId: string; scoreDelta: number };
+  };
 }
 
 export interface WorldState {
@@ -377,6 +401,7 @@ export interface WorldState {
   totalRounds?: number;
   transferWindowOpen?: boolean;
   seasonStartReal?: string | null;
+  startScheduledAt?: string | null;
   rank1000PlayerId?: string | null;
   leagues: Record<string, LeagueState>;
   eliteCup: EliteCupState;
@@ -385,7 +410,19 @@ export interface WorldState {
   news: NewsItem[];
   history: SeasonReport[];
   isPublic?: boolean;
+  access?: {
+    visibility: 'PUBLIC' | 'PRIVATE';
+    allowObservers: boolean;
+    allowMidSeasonJoin: boolean;
+    allowTakeover: boolean;
+    joinCode?: string;
+  };
   isInitialSeed?: boolean;
+  offseasonDecision?: {
+    season: number;
+    choice: 'STAY' | 'SEEK_CLUB';
+    date: string;
+  };
   draftProposals?: { playerId: string; managerId: string; teamId: string; priority: number }[];
 }
 
@@ -412,6 +449,7 @@ export interface GameState {
   worldId?: string;
   userId?: string;
   isCreator?: boolean;
+  participants?: WorldParticipant[];
   teams: Record<string, Team>;
   players: Record<string, Player>;
   managers: Record<string, Manager>;
@@ -425,4 +463,13 @@ export interface GameState {
   training: TrainingState;
   transferProposals?: TransferProposal[];
   tradeOffers?: TradeOffer[];
+}
+
+export interface WorldParticipant {
+  userId: string;
+  teamId: string | null;
+  managerId: string | null;
+  isCreator: boolean;
+  isObserver: boolean;
+  updatedAt?: string;
 }

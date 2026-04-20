@@ -8,6 +8,7 @@ import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
+import { HairCalibrationPanel } from '../HairCalibrationPanel';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
@@ -15,12 +16,12 @@ import { getMatchStatus } from '../../utils/matchUtils';
 import { Player } from '../../types';
 import { SEASON_DAYS } from '../../constants/gameConstants';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy } = LucideIcons;
 
 
 export const CareerTab = (props: any) => {
   const { setState, addToast, togglePause, setTimeSpeed } = useGameDispatch();
-  const { state, isPaused, timeSpeed } = useGameState();
+  const { state, isPaused, timeSpeed, worldId } = useGameState();
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches } = dashData;
   const {
@@ -50,6 +51,16 @@ export const CareerTab = (props: any) => {
     if (playerIds.length > 0) {
       const randomId = playerIds[Math.floor(Math.random() * playerIds.length)];
       setGmRandomPlayer(state.players[randomId]);
+    }
+  };
+
+  const worldJoinCode = state.world.access?.joinCode || (worldId ? `ELITE-${worldId.slice(-6)}` : 'ELITE-LOCAL');
+  const handleCopyJoinCode = async () => {
+    try {
+      await navigator.clipboard.writeText(worldJoinCode);
+      addToast('Codigo do mundo copiado', 'success');
+    } catch {
+      addToast(`Codigo do mundo: ${worldJoinCode}`, 'info');
     }
   };
 
@@ -362,6 +373,28 @@ export const CareerTab = (props: any) => {
               GM Panel <span className="text-[7px] opacity-50 font-normal ml-1">(DEV)</span>
             </h3>
 
+            {state.isCreator && (
+              <div className="relative z-10 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">Codigo do mundo</p>
+                    <p className="mt-1 font-mono text-lg font-black tracking-[0.18em] text-white">{worldJoinCode}</p>
+                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-cyan-100/45">
+                      Envie para alguem entrar como observador quando a entrada por codigo estiver ativa.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyJoinCode}
+                    className="shrink-0 rounded-xl border border-cyan-400/30 bg-black/35 p-3 text-cyan-200 transition hover:bg-cyan-400 hover:text-black"
+                    title="Copiar codigo"
+                  >
+                    <Copy size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2 sm:gap-4 relative z-10">
               <button
                 onClick={handleOpenRandomPlayer}
@@ -390,6 +423,8 @@ export const CareerTab = (props: any) => {
               </button>
             </div>
           </div>
+
+          <HairCalibrationPanel />
         </div>
       </div>
 

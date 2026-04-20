@@ -3,6 +3,8 @@ import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
 import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/gameLogic';
 import { SQUAD_SIZE_MAX } from '../constants/gameConstants';
+import { calculateTradeAcceptanceChance } from '../engine/economyLogic';
+import { addNews } from '../engine/newsService';
 
 export const useTransfers = (userTeamId: string | null, totalPoints: number, powerCap: number) => {
     const { state, setState, isOnline } = useGame();
@@ -10,8 +12,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
 
     const handleMakeProposal = async (player: Player) => {
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
-        const isLobby = state.world.status === 'LOBBY';
-        const isDraftDay = isLobby && (state.world.currentDay === 0 || state.world.currentDay === 1 || state.world.currentDay === 2);
+        const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay < 3;
 
         if (!userTeam) {
             addToast('Você precisa estar em um time para fazer uma proposta!', 'error');
@@ -34,6 +35,15 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             return;
         }
 
+        if (isDraftDay) {
+            const currentTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+            const currentManager = currentTeam?.managerId ? state.managers[currentTeam.managerId] : null;
+            if (currentManager?.isNPC === false) {
+                addToast(`${player.nickname} pertence a um clube humano e nÃ£o entra no Draft Genesis.`, 'warning');
+                return;
+            }
+        }
+
         const currentPower = userTeam.squad.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
         // Also account for pending proposals in the power cap check
         const pendingPower = (state.world.draftProposals || [])
@@ -43,7 +53,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const nextTotalPoints = currentPower + pendingPower + player.totalRating;
 
         if (nextTotalPoints > powerCap) {
-            addToast(`A vinda de ${player.nickname} excederia o limite de ${powerCap} pts de Score!`, 'error');
+            addToast(`A vinda de ${player.nickname} excederia o Score Máximo de ${powerCap} pts!`, 'error');
             return;
         }
 
@@ -62,8 +72,8 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     const newProposal: any = {
                         id: `prop_${Date.now()}`,
                         playerId: player.id,
-                        fromTeamId: userTeam.id,
-                        toTeamId: player.contract.teamId || null,
+                        fromTeamId: player.contract.teamId || null,
+                        toTeamId: userTeam.id,
                         value: player.totalRating,
                         status: 'PENDING',
                         date: state.world.currentDate
@@ -103,7 +113,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const player = state.players[playerId];
         if (!player) return;
 
-        if (window.confirm(`Deseja dispensar ${player.nickname}? O teto de ${powerCap} pts será mantido.`)) {
+        if (window.confirm(`Deseja dispensar ${player.nickname}? O Score Máximo de ${powerCap} pts será mantido.`)) {
             try {
                 // If the player is contracted to another team, we must do a TRADE OFFER instead of selling directly
                 // Actually handleSellPlayer is for RELEASING a player from your OWN team.
@@ -145,6 +155,19 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     };
 
                     newState.notifications = [newNotification, ...(newState.notifications || [])];
+                    addNews(
+                        newState,
+                        'ATLETA DISPENSADO',
+                        `${player.nickname} deixou o ${userTeam.name} e ficou disponivel no mercado.`,
+                        'TRANSFER',
+                        1,
+                        {
+                            kind: 'PLAYER_PROFILE',
+                            season: newState.world.currentSeason || 2050,
+                            playerId: player.id,
+                            teamId: userTeam.id
+                        }
+                    );
                     return newState;
                 });
 
@@ -194,7 +217,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const nextPowerAfterSwap = currentPower - offeredPlayer.totalRating + requestedPlayer.totalRating;
 
         if (nextPowerAfterSwap > powerCap) {
-            addToast(`Essa troca faria seu time exceder o limite de ${powerCap} pts! (Balanço: ${requestedPlayer.totalRating - offeredPlayer.totalRating} pts)`, 'error');
+            addToast(`Essa troca faria seu time exceder o Score Máximo de ${powerCap} pts! (Balanço: ${requestedPlayer.totalRating - offeredPlayer.totalRating} pts)`, 'error');
             return;
         }
 
@@ -243,8 +266,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                 }));
 
                 // Simple AI logic for trade response
-                const diff = offeredPlayer.totalRating - requestedPlayer.totalRating;
-                const acceptanceChance = diff >= 0 ? 0.9 : 0.3 + (diff / 200);
+                const acceptanceChance = calculateTradeAcceptanceChance(offeredPlayer, requestedPlayer);
 
                 if (Math.random() < acceptanceChance) {
                     addToast(`O ${state.teams[targetTeamId].name} aceitou a proposta! A troca foi efetuada.`, 'success');
@@ -260,6 +282,19 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
 
                         newState.players[requestedPlayerId].contract.teamId = userTeam.id;
                         newState.players[offeredPlayerId].contract.teamId = targetTeamId;
+                        addNews(
+                            newState,
+                            'TROCA CONFIRMADA',
+                            `${userTeam.name} recebeu ${requestedPlayer.nickname}; ${state.teams[targetTeamId].name} ficou com ${offeredPlayer.nickname}.`,
+                            'TRANSFER',
+                            2,
+                            {
+                                kind: 'PLAYER_PROFILE',
+                                season: newState.world.currentSeason || 2050,
+                                playerId: requestedPlayer.id,
+                                teamId: userTeam.id
+                            }
+                        );
 
                         if (newState.tradeOffers && newState.tradeOffers.length > 0) {
                             newState.tradeOffers[0].status = 'ACCEPTED';

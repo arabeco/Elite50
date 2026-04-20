@@ -1,6 +1,8 @@
 import { Player, Team, MatchResult, GameState } from '../types';
 import { newsHeadlines } from './newsService';
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
 export const calculatePostMatchProgression = (player: Player, matchRating: number): number => {
     let delta = 0;
 
@@ -42,6 +44,16 @@ export const calculatePostMatchProgression = (player: Player, matchRating: numbe
     if (currentSeasonDelta + delta < -90) delta = -90 - currentSeasonDelta;
 
     return delta;
+};
+
+export const calculateTradeAcceptanceChance = (offeredPlayer: Player, requestedPlayer: Player): number => {
+    const diff = offeredPlayer.totalRating - requestedPlayer.totalRating;
+
+    if (diff >= 0) {
+        return clamp(0.75 + Math.min(diff, 200) / 1000, 0.75, 0.95);
+    }
+
+    return clamp(0.35 + diff / 250, 0.02, 0.35);
 };
 
 /**
@@ -93,7 +105,7 @@ export const calculateAttractiveness = (
     // 1. Tier Bias (Higher tiers prefer Elite teams)
     if (isHighTier) {
         if (isEliteTeam) score += 15;
-        else score -= 20; // Hard to go to Rebuild/Avg
+        else score -= 30; // Stars still want status, not only minutes.
     }
 
     // 2. Protagonism (High Weight)
@@ -102,7 +114,7 @@ export const calculateAttractiveness = (
 
     if (betterPlayers === 0) {
         score += 35; // Star of the team
-        if (!isEliteTeam && isHighTier) score += 15; // "Massive Protagonism" for craques in smaller teams
+        if (!isEliteTeam && isHighTier) score += 5; // Protagonism helps, but should not fully cancel weak-club status.
     } else if (betterPlayers >= 1) {
         score -= 25; // Will have competition
     }
@@ -120,7 +132,7 @@ export const calculateAttractiveness = (
     const chaos = Math.floor(Math.random() * 10);
     score += chaos;
 
-    return Math.min(100, Math.max(0, score));
+    return clamp(score, 0, 100);
 };
 
 /**

@@ -8,6 +8,7 @@ import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
+import { TeamModal } from '../TeamModal';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
@@ -27,6 +28,7 @@ export const DatabaseTab = (props: any) => {
   const { handleAdvanceDay } = useGameDay();
   const players = Object.values(state.players);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   const sortedPlayers = [...players].sort((a, b) => b.totalRating - a.totalRating);
   const limboPlayer = sortedPlayers[sortedPlayers.length - 1];
@@ -110,7 +112,16 @@ export const DatabaseTab = (props: any) => {
                   </td>
                   <td className="px-4 sm:px-8 py-3 sm:py-5 text-right text-slate-500 font-black text-[9px] sm:text-[12px] uppercase italic">
                     {player.contract.teamId ? (
-                      <span className="group-hover:text-white transition-colors">{state.teams[player.contract.teamId]?.name}</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedTeamId(player.contract.teamId!);
+                        }}
+                        className="group-hover:text-white transition-colors hover:text-cyan-400"
+                      >
+                        {state.teams[player.contract.teamId]?.name}
+                      </button>
                     ) : (
                       <span className="text-red-500/50">Free Agent</span>
                     )}
@@ -126,6 +137,19 @@ export const DatabaseTab = (props: any) => {
         <PlayerModal 
           player={selectedPlayer} 
           onClose={() => setSelectedPlayer(null)} 
+        />
+      )}
+
+      {selectedTeamId && state.teams[selectedTeamId] && (
+        <TeamModal
+          team={state.teams[selectedTeamId]}
+          players={state.players}
+          onClose={() => setSelectedTeamId(null)}
+          onPlayerClick={(player) => {
+            setSelectedPlayer(player);
+            setSelectedTeamId(null);
+          }}
+          onTeamClick={setSelectedTeamId}
         />
       )}
     </div>

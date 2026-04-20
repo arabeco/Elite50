@@ -1,7 +1,7 @@
 import { useGame } from '../store/GameContext';
 
 export const useTraining = (userTeamId: string | null) => {
-    const { state, setState } = useGame();
+    const { state, setState, addToast } = useGame();
 
     const handleSetFocus = (type: 'evolution' | 'stabilization', playerId: string | null) => {
         setState(prev => ({
@@ -39,6 +39,7 @@ export const useTraining = (userTeamId: string | null) => {
                 }
             };
         });
+        addToast(`${cardType} iniciado no laboratorio. Conclui em 3 dias.`, 'success');
     };
 
     const handleChemistryBoost = () => {
@@ -59,5 +60,40 @@ export const useTraining = (userTeamId: string | null) => {
         }));
     };
 
-    return { handleSetFocus, handleStartCardLab, handleChemistryBoost, handleSetPlaystyleTraining };
+    const handleStartLegacyTraining = (playerId: string, type: 'CURE' | 'LEARN', trait?: string) => {
+        const player = state.players[playerId];
+        if (!player) return;
+
+        const targetTrait = type === 'CURE'
+            ? (player.badges.slot4 || 'Fardo')
+            : (trait || 'Clutch');
+
+        setState(prev => ({
+            ...prev,
+            players: {
+                ...prev.players,
+                [playerId]: {
+                    ...prev.players[playerId],
+                    badges: {
+                        ...prev.players[playerId].badges,
+                        trainingSlot4: {
+                            trait: targetTrait,
+                            daysLeft: type === 'CURE' ? 5 : 7,
+                            type,
+                            targetRarity: type === 'CURE' ? 'Bronze' : 'Ouro'
+                        }
+                    }
+                }
+            }
+        }));
+
+        addToast(
+            type === 'CURE'
+                ? `${player.nickname} iniciou cura do legado.`
+                : `${player.nickname} iniciou treino de trait: ${targetTrait}.`,
+            'success'
+        );
+    };
+
+    return { handleSetFocus, handleStartCardLab, handleChemistryBoost, handleSetPlaystyleTraining, handleStartLegacyTraining };
 };

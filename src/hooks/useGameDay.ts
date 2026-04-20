@@ -37,7 +37,7 @@ export const useGameDay = () => {
         }
     };
 
-    const handleStartNewSeason = () => {
+    const handleStartNewSeason = async () => {
         if (!state.isCreator) {
             alert('Apenas o Criador do Mundo pode iniciar a nova temporada.');
             return;
@@ -46,7 +46,9 @@ export const useGameDay = () => {
         if (!window.confirm('A Temporada atual chegou ao fim! Deseja calcular a evolução dos jogadores e iniciar o próximo ano?')) return;
 
         console.log('GM: Iniciando nova temporada...');
-        setState(prev => startNewSeason(prev));
+        const newState = startNewSeason(state);
+        setState(newState);
+        await saveGame(newState);
         addToast('Nova temporada iniciada com sucesso! Elencos, calendários e traços atualizados.', 'success');
     };
 

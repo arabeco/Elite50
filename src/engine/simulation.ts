@@ -44,10 +44,10 @@ export const calculateMatchEvent = (
   // Base goal probability is 0.15, up to 0.55 if dominating.
   // Boost base probability if it's a "High Quality" match (high average attributes)
   const qualityFactor = (attack.averageAttribute + defense.averageAttribute) / 1600; // > 1 for elite matches
-  const baseProb = 0.15 * Math.max(1, qualityFactor);
+  const baseProb = 0.13 * Math.max(1, qualityFactor);
 
-  const goalProbability = clamp(baseProb + (ratio - 1) * 0.25, 0.08, 0.60);
-  const defenseProbability = clamp(0.15 + (1 / ratio - 1) * 0.12, 0.05, 0.30);
+  const goalProbability = clamp(baseProb + (ratio - 1) * 0.23, 0.06, 0.55);
+  const defenseProbability = clamp(0.16 + (1 / ratio - 1) * 0.12, 0.06, 0.32);
 
   let outcome: 'goal' | 'defense' | 'turnover' = 'turnover';
   const roll = Math.random();
