@@ -679,56 +679,43 @@ export const CareerTab = (props: any) => {
                       <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/40">{section.title}</p>
                       <p className="text-[7px] font-black uppercase tracking-widest text-white/20">{section.items.length} itens</p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5">
                       {section.items.map(item => {
                         const owned = isOwnedInView(item.id);
                         const canEquip = !!section.onEquip && owned && !!userTeam;
                         return (
-                          <div
+                          <button
                             key={item.id}
-                            className="rounded-xl border border-white/10 bg-black/35 p-2.5 cursor-pointer transition hover:bg-white/[0.05]"
+                            type="button"
+                            className={`group flex aspect-square min-w-0 flex-col items-center justify-center rounded-xl border p-1.5 text-center transition hover:bg-white/[0.06] ${
+                              owned
+                                ? 'border-cyan-400/25 bg-cyan-500/10'
+                                : 'border-white/10 bg-black/35'
+                            }`}
                             onClick={() => setSelectedStoreItem(item)}
                           >
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl border border-white/10 bg-black/45 overflow-hidden flex items-center justify-center">
-                                <img src={item.imagePath} alt={item.name} className="w-full h-full object-contain p-1.5" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-white truncate">{item.name}</p>
-                                <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-white/30">{item.rarity} - {item.price} {item.currency === 'GOLD' ? 'ouro' : 'frag'}</p>
-                              </div>
+                            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 sm:h-14 sm:w-14">
+                              <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" />
                             </div>
-                            <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/30">{item.description}</p>
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleBuyStoreItem(item.id);
-                                }}
-                                disabled={owned}
-                                className={`flex-1 rounded-lg px-3 py-2 text-[8px] font-black uppercase tracking-[0.25em] transition ${
-                                  owned
-                                    ? 'border border-white/10 bg-white/[0.04] text-white/30'
-                                    : 'border border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20'
-                                }`}
-                              >
-                                {owned ? 'No inventario' : 'Comprar'}
-                              </button>
-                              {canEquip && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    section.onEquip!(item.id);
-                                  }}
-                                  className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100 transition hover:bg-cyan-500/20"
-                                >
-                                  Equipar
-                                </button>
-                              )}
+                            <p className="mt-1 w-full truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
+                            <p className="text-[6px] font-black uppercase tracking-widest text-white/35">
+                              {item.price} {item.currency === 'GOLD' ? 'ouro' : 'frag'}
+                            </p>
+                            <div className="mt-0.5 flex min-h-[0.9rem] items-center justify-center">
+                              <span className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase tracking-widest ${
+                                owned
+                                  ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
+                                  : 'border-white/10 bg-white/[0.03] text-white/35'
+                              }`}>
+                                {owned ? 'Seu' : item.rarity}
+                              </span>
                             </div>
-                          </div>
+                            {canEquip && (
+                              <span className="mt-0.5 block text-[6px] font-black uppercase tracking-widest text-cyan-200">
+                                Equipavel
+                              </span>
+                            )}
+                          </button>
                         );
                       })}
                     </div>
@@ -750,23 +737,23 @@ export const CareerTab = (props: any) => {
                     <p className="text-[8px] font-black uppercase tracking-widest text-white/25">Nada comprado ainda.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5">
                     {ownedItems.map(item => (
-                      <div
+                      <button
                         key={item.id}
-                        className="rounded-xl border border-white/10 bg-black/35 p-2.5 cursor-pointer transition hover:bg-white/[0.05]"
+                        type="button"
+                        className="flex aspect-square min-w-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/35 p-1.5 text-center transition hover:bg-white/[0.05]"
                         onClick={() => setSelectedStoreItem(item)}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl border border-white/10 bg-black/45 overflow-hidden flex items-center justify-center">
-                            <img src={item.imagePath} alt={item.name} className="w-full h-full object-contain p-1.5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-white truncate">{item.name}</p>
-                            <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-white/30">{item.category} - {item.rarity}</p>
-                          </div>
+                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 sm:h-14 sm:w-14">
+                          <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" />
                         </div>
-                      </div>
+                        <p className="mt-1 w-full truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
+                        <p className="text-[6px] font-bold uppercase tracking-widest text-white/35">{item.category}</p>
+                        <span className="mt-0.5 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[6px] font-black uppercase tracking-widest text-cyan-100">
+                          {item.rarity}
+                        </span>
+                      </button>
                     ))}
                   </div>
                 )}
