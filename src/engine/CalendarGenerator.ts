@@ -1,10 +1,10 @@
 import { Match, Team } from '../types';
 
 /**
- * Generates a double round-robin calendar for the given teams.
- * Teams play each other twice (home and away).
- * Total rounds = (N-1) * 2
- * 
+ * Generates a single round-robin calendar for the given teams.
+ * Teams play each other once.
+ * Total rounds = (N-1)
+ *
  * @param teams - Array of teams in the league
  * @param leagueId - Unique identifier for the league
  * @param seasonStartDate - ISO date string for when the season starts (e.g. '2050-02-28T00:00:00.000Z')
@@ -28,7 +28,7 @@ export const generateCalendar = (teams: Team[], leagueId: string, seasonStartDat
   // Rotation teams for next round
   let rotation = [...teamIds];
 
-  for (let roundNum = 1; roundNum <= roundsPerHalf * 2; roundNum++) {
+  for (let roundNum = 1; roundNum <= roundsPerHalf; roundNum++) {
     // Each round happens every 2 days
     // Round 1 = seasonStart + 2 days (Day 3 of season)
     const roundDate = new Date(baseDate);
@@ -36,9 +36,8 @@ export const generateCalendar = (teams: Team[], leagueId: string, seasonStartDat
     const dateStr = roundDate.toISOString().split('T')[0];
 
     for (let i = 0; i < matchesPerRound; i++) {
-      const isFirstHalf = roundNum <= roundsPerHalf;
-      const home = isFirstHalf ? rotation[i] : rotation[n - 1 - i];
-      const away = isFirstHalf ? rotation[n - 1 - i] : rotation[i];
+      const home = roundNum % 2 === 0 ? rotation[n - 1 - i] : rotation[i];
+      const away = roundNum % 2 === 0 ? rotation[i] : rotation[n - 1 - i];
 
       // Distribute times: 16:00, 18:00, 20:00
       const hours = [16, 18, 20];

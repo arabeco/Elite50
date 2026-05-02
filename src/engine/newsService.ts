@@ -77,6 +77,81 @@ export const newsHeadlines = {
             kind: 'SEASON_REPORT',
             season: report.season
         });
+    },
+    offseasonWindow: (state: GameState) => {
+        const title = 'JANELA DE OFFSEASON ABERTA';
+        const content = 'O mundo segue rodando. Ha 3 dias de offseason para ajustes finais, entradas em clubes e leitura do season report antes da nova temporada.';
+        addNews(state, title, content, 'SYSTEM', 2);
+    },
+    seasonStarted: (state: GameState, season: number) => {
+        const title = `TEMPORADA ${season} EM CURSO`;
+        const content = 'A nova temporada comecou automaticamente. Clubes mantiveram sua base e quem ajustar tatica e treino agora ganha vantagem cedo.';
+        addNews(state, title, content, 'SYSTEM', 2);
+    },
+    joinWindow: (state: GameState, roundLimit: number) => {
+        const title = 'ENTRADA EM CLUBES LIBERADA';
+        const content = `Managers podem assumir clubes sem resetar nada ate a rodada ${roundLimit}. Depois disso, o mundo segue apenas com takeover elegivel.`;
+        addNews(state, title, content, 'SYSTEM', 2);
+    },
+    managerQueueOpened: (state: GameState, team: Team) => {
+        addNews(
+            state,
+            'FILA DE TECNICOS ANDOU',
+            `${team.name} voltou ao radar e abriu conversa para a proxima temporada.`,
+            'SYSTEM',
+            2,
+            {
+                kind: 'TEAM_PROFILE',
+                season: state.world.currentSeason || 2050,
+                teamId: team.id
+            }
+        );
+    },
+    managerApplicationAccepted: (state: GameState, team: Team) => {
+        addNews(
+            state,
+            'CLUBE ABRIU CONVERSA',
+            `${team.name} gostou do contato e deixou a assinatura pronta para o tecnico interessado.`,
+            'SYSTEM',
+            2,
+            {
+                kind: 'TEAM_PROFILE',
+                season: state.world.currentSeason || 2050,
+                teamId: team.id
+            }
+        );
+    },
+    managerApplicationRejected: (state: GameState, teamName: string) => {
+        addNews(
+            state,
+            'NEGOCIACAO ENCERRADA',
+            `${teamName} recuou e optou por outro caminho no mercado de tecnicos.`,
+            'SYSTEM',
+            1
+        );
+    },
+    managerInviteReceived: (state: GameState, team: Team) => {
+        addNews(
+            state,
+            'CLUBE PROCURA COMANDO',
+            `${team.name} iniciou contatos em busca de um novo tecnico para reorganizar a campanha.`,
+            'SYSTEM',
+            2,
+            {
+                kind: 'TEAM_PROFILE',
+                season: state.world.currentSeason || 2050,
+                teamId: team.id
+            }
+        );
+    },
+    managerClubUnavailable: (state: GameState, teamName: string) => {
+        addNews(
+            state,
+            'VAGA FECHADA',
+            `${teamName} saiu do mercado de tecnicos antes do acordo ser fechado.`,
+            'SYSTEM',
+            1
+        );
     }
 };
 

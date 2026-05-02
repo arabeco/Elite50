@@ -25,6 +25,7 @@ type Step = 'path-selection' | 'heir-choice' | 'founder-identity';
 
 export const NewGameFlow: React.FC = () => {
   const { state, setState, saveGame, isSyncing, userId } = useGame();
+  const canFoundClub = state.world.status === 'LOBBY' && !state.userTeamId;
   const [step, setStep] = useState<Step>('path-selection');
   const [selectedHeirTeamId, setSelectedHeirTeamId] = useState('');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
@@ -176,7 +177,7 @@ export const NewGameFlow: React.FC = () => {
 
     const newState = {
       ...state,
-      isCreator: true,
+      isCreator: state.isCreator === true,
       teams: {
         ...state.teams,
         [selectedHeirTeamId]: {
@@ -189,11 +190,6 @@ export const NewGameFlow: React.FC = () => {
         ...state.managers,
         [managerId]: userManager
       },
-      world: {
-        ...state.world,
-        status: 'LOBBY' as const,
-        currentDay: 0 // Start at Day 0 (Genesis Day 0)
-      },
       userTeamId: selectedHeirTeamId,
       userManagerId: managerId
     };
@@ -203,6 +199,7 @@ export const NewGameFlow: React.FC = () => {
   };
 
   const handleFinishFounder = () => {
+    if (!canFoundClub) return;
     const newTeamId = `t_founder_${Date.now()}`;
     const managerId = userId || 'm_user';
 
@@ -223,7 +220,8 @@ export const NewGameFlow: React.FC = () => {
       managerId: managerId,
       squad: [],
       lineup: {}
-    };
+    } as Team;
+    (newTeam as any).replacedTeamId = founderData.replacedTeamId;
 
     // 2. Clear old team squad and set them to Free Agents
     const updatedPlayers = { ...state.players };
@@ -286,7 +284,7 @@ export const NewGameFlow: React.FC = () => {
 
     const newState: GameState = {
       ...state,
-      isCreator: true,
+      isCreator: state.isCreator === true,
       teams: updatedTeams,
       players: updatedPlayers,
       managers: {
@@ -307,7 +305,7 @@ export const NewGameFlow: React.FC = () => {
   };
 
   const renderPathSelection = () => (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-[#02040a] relative overflow-hidden">
+    <div className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-[#02040a] px-4 py-5 sm:min-h-screen sm:p-4">
       {/* Background Decorative Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-cyan-500/10 blur-[120px] rounded-full animate-pulse" />
@@ -315,11 +313,11 @@ export const NewGameFlow: React.FC = () => {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.02)_0%,transparent_70%)]" />
       </div>
 
-      <div className="text-center mb-12 space-y-4 relative z-10">
+      <div className="relative z-10 mb-6 space-y-3 text-center sm:mb-12 sm:space-y-4">
         <div className="inline-block px-4 py-1 bg-white/5 border border-white/10 rounded-full mb-2 backdrop-blur-md">
           <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.5em]">Protocolo Onboarding v2.0.50</span>
         </div>
-        <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-2xl">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-2xl">
           ELITE <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-amber-400">2050</span>
         </h1>
         <div className="flex items-center justify-center gap-4">
@@ -331,11 +329,11 @@ export const NewGameFlow: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full max-w-5xl relative z-10 px-4">
+      <div className="relative z-10 grid w-full max-w-5xl grid-cols-1 gap-3 px-1 sm:px-4 md:grid-cols-2 sm:gap-6">
         {/* Path A: Heir */}
         <button
           onClick={() => setStep('heir-choice')}
-          className="group relative min-h-[280px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-cyan-500/40 hover:bg-cyan-500/[0.02] overflow-hidden shadow-2xl"
+          className="group relative min-h-[220px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-cyan-500/40 hover:bg-cyan-500/[0.02] overflow-hidden shadow-2xl"
         >
           {/* Animated Background Icon */}
           <div className="absolute -bottom-10 -right-10 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 group-hover:scale-110 group-hover:-rotate-12">
@@ -346,23 +344,23 @@ export const NewGameFlow: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 via-transparent to-cyan-500/0 group-hover:from-cyan-500/[0.05] transition-all duration-700" />
 
           <div className="relative z-10 h-full flex flex-col">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 xl:w-16 xl:h-16 bg-black/40 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6 xl:mb-8 group-hover:scale-110 group-hover:border-cyan-400 transition-all duration-500 shadow-lg shadow-cyan-500/10">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-500/30 bg-black/40 sm:mb-6 sm:h-14 sm:w-14 sm:rounded-2xl xl:mb-8 xl:h-16 xl:w-16 group-hover:scale-110 group-hover:border-cyan-400 transition-all duration-500 shadow-lg shadow-cyan-500/10">
               <Briefcase size={24} className="text-cyan-400 sm:size-7 xl:size-8" />
             </div>
 
-            <div className="space-y-1 sm:space-y-2 mb-3 sm:mb-4 xl:mb-6">
-              <h2 className="text-xl sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O HERDEIRO</h2>
+            <div className="mb-3 space-y-1 sm:mb-4 sm:space-y-2 xl:mb-6">
+              <h2 className="text-lg sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O HERDEIRO</h2>
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                 <p className="text-cyan-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">GESTÃO DE LEGADO</p>
               </div>
             </div>
 
-            <p className="text-slate-400 text-[11px] sm:text-xs xl:text-sm leading-relaxed font-medium mb-auto">
+            <p className="mb-auto text-[10px] leading-relaxed text-slate-400 sm:text-xs xl:text-sm font-medium">
               Assuma o comando de uma equipe que já está pronta. Você entrará num clube fechado e jogará com o elenco atual dele, sem precisar recrutar ou montar o time.
             </p>
 
-            <div className="pt-4 sm:pt-6 xl:pt-8 border-t border-white/5 mt-4">
+            <div className="mt-4 border-t border-white/5 pt-4 sm:pt-6 xl:pt-8">
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-2 sm:gap-3 text-cyan-400 font-black text-[9px] sm:text-[10px] xl:text-[11px] uppercase tracking-[0.2em] group-hover:gap-5 transition-all">
                   Escolher Time Pronto
@@ -378,8 +376,13 @@ export const NewGameFlow: React.FC = () => {
 
         {/* Path B: Founder */}
         <button
-          onClick={() => setStep('founder-identity')}
-          className="group relative min-h-[280px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-amber-500/40 hover:bg-amber-500/[0.02] overflow-hidden shadow-2xl"
+          onClick={() => canFoundClub && setStep('founder-identity')}
+          disabled={!canFoundClub}
+          className={`group relative min-h-[220px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-8 xl:p-10 text-left transition-all duration-500 overflow-hidden shadow-2xl ${
+            canFoundClub
+              ? 'border-white/5 hover:border-amber-500/40 hover:bg-amber-500/[0.02]'
+              : 'cursor-not-allowed border-white/5 opacity-45'
+          }`}
         >
           {/* Animated Background Icon */}
           <div className="absolute -bottom-10 -right-10 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 group-hover:scale-110 group-hover:rotate-12">
@@ -390,26 +393,32 @@ export const NewGameFlow: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-br from-amber-500/0 via-transparent to-amber-500/0 group-hover:from-amber-500/[0.05] transition-all duration-700" />
 
           <div className="relative z-10 h-full flex flex-col">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 xl:w-16 xl:h-16 bg-black/40 border border-amber-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6 xl:mb-8 group-hover:scale-110 group-hover:border-amber-400 transition-all duration-500 shadow-lg shadow-amber-500/10">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/30 bg-black/40 sm:mb-6 sm:h-14 sm:w-14 sm:rounded-2xl xl:mb-8 xl:h-16 xl:w-16 group-hover:scale-110 group-hover:border-amber-400 transition-all duration-500 shadow-lg shadow-amber-500/10">
               <Globe size={24} className="text-amber-400 sm:size-7 xl:size-8" />
             </div>
 
-            <div className="space-y-1 sm:space-y-2 mb-3 sm:mb-4 xl:mb-6">
-              <h2 className="text-xl sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O FUNDADOR</h2>
+            <div className="mb-3 space-y-1 sm:mb-4 sm:space-y-2 xl:mb-6">
+              <h2 className="text-lg sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O FUNDADOR</h2>
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
                 <p className="text-amber-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">CRIAR TIME E DRAFTAR</p>
               </div>
             </div>
 
-            <p className="text-slate-400 text-[11px] sm:text-xs xl:text-sm leading-relaxed font-medium mb-auto">
+            <p className="mb-auto text-[10px] leading-relaxed text-slate-400 sm:text-xs xl:text-sm font-medium">
               Crie uma potência do zero e roube o lugar de um time da liga. Você começará de mãos vazias e montará seu elenco escolhendo atletas no Draft inicial.
             </p>
 
-            <div className="pt-4 sm:pt-6 xl:pt-8 border-t border-white/5 mt-4">
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[7px] font-black uppercase tracking-[0.16em] text-amber-100/70">
+              <span className="rounded-lg border border-amber-400/15 bg-amber-500/8 px-2 py-2">Criar escudo</span>
+              <span className="rounded-lg border border-amber-400/15 bg-amber-500/8 px-2 py-2">Trocar vaga</span>
+              <span className="rounded-lg border border-amber-400/15 bg-amber-500/8 px-2 py-2">Draft inicial</span>
+            </div>
+
+            <div className="mt-4 border-t border-white/5 pt-4 sm:pt-6 xl:pt-8">
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-2 sm:gap-3 text-amber-400 font-black text-[9px] sm:text-[10px] xl:text-[11px] uppercase tracking-[0.2em] group-hover:gap-5 transition-all">
-                  Iniciar Registro
+                  {canFoundClub ? 'Iniciar Registro' : 'Bloqueado'}
                   <ArrowRight size={14} className="sm:size-4" />
                 </div>
                 <div className="flex gap-1">
@@ -422,7 +431,7 @@ export const NewGameFlow: React.FC = () => {
       </div>
 
       {/* Bottom Technical Info */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-8 opacity-20 hover:opacity-50 transition-opacity">
+      <div className="absolute bottom-8 left-1/2 hidden -translate-x-1/2 items-center gap-8 opacity-20 transition-opacity hover:opacity-50 sm:flex">
         <div className="flex flex-col items-center">
           <span className="text-[7px] font-black text-white uppercase tracking-widest">Database</span>
           <span className="text-[9px] font-mono text-cyan-400">SUPABASE_CONNECTED</span>

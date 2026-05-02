@@ -9,7 +9,7 @@ console.log('=== PROTOCOLO DE AUDITORIA E SIMULAÇÃO REAL: ELITE 2050 ===\n');
 // --- PERSISTENCE HANDLING ---
 const forceReset = process.argv.includes('--force-reset');
 if (forceReset) {
-    deleteSavedState();
+    deleteSavedState('default');
 }
 
 let state: GameState = generateInitialState();

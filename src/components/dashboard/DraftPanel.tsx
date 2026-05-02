@@ -285,6 +285,32 @@ export const DraftPanel: React.FC = () => {
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">1. Escolha atletas</p>
+          <p className="mt-2 text-xl font-black italic text-white">{totalSelected}/15</p>
+          <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+            minimo de 11 para liberar a confirmacao
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-amber-200">2. Respeite o teto</p>
+          <p className={`mt-2 text-xl font-black italic ${remaining >= 0 ? 'text-white' : 'text-rose-200'}`}>
+            {remaining >= 0 ? '+' : ''}{remaining.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+            saldo de score antes da temporada
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-white/45">3. Confirme</p>
+          <p className="mt-2 text-xl font-black italic text-white">{myProposals.length}</p>
+          <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+            propostas entram na fila da virada do dia
+          </p>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
           {[

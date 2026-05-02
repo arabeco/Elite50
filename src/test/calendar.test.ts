@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { generateCalendar } from '../engine/CalendarGenerator';
 
 describe('CalendarGenerator', () => {
-    it('should generate a correct double round-robin calendar for 8 teams', () => {
-        // 8 teams should play 14 rounds (7 * 2)
+    it('should generate a correct single round-robin calendar for 8 teams', () => {
+        // 8 teams should play 7 rounds
         // Each round should have 4 matches (8 / 2)
-        // Total matches: 56
+        // Total matches: 28
 
         // Create 8 dummy teams
         const teams = Array.from({ length: 8 }, (_, i) => ({
@@ -20,14 +20,14 @@ describe('CalendarGenerator', () => {
 
         const calendar = generateCalendar(teams as any, 'league_test', startDate);
 
-        // Total matches should be 56
-        expect(calendar.length).toBe(56);
+        // Total matches should be 28
+        expect(calendar.length).toBe(28);
 
-        // Should be 14 distinct rounds
+        // Should be 7 distinct rounds
         const rounds = new Set(calendar.map(m => m.round));
-        expect(rounds.size).toBe(14);
+        expect(rounds.size).toBe(7);
 
-        // Each team should play exactly 14 times
+        // Each team should play exactly 7 times
         const teamMatches: Record<string, number> = {};
         teams.forEach(t => teamMatches[t.id] = 0);
 
@@ -40,7 +40,7 @@ describe('CalendarGenerator', () => {
         });
 
         Object.values(teamMatches).forEach(count => {
-            expect(count).toBe(14);
+            expect(count).toBe(7);
         });
     });
 

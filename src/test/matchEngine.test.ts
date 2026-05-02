@@ -78,6 +78,15 @@ describe('MatchEngine', () => {
 
         expect(homeGoals).toBe(result.homeScore);
         expect(awayGoals).toBe(result.awayScore);
+        expect(result.stats?.shots.home).toBeGreaterThanOrEqual(result.homeScore);
+        expect(result.stats?.shots.away).toBeGreaterThanOrEqual(result.awayScore);
+        expect(result.stats?.shotsOnTarget.home).toBeGreaterThanOrEqual(result.homeScore);
+        expect(result.stats?.shotsOnTarget.away).toBeGreaterThanOrEqual(result.awayScore);
+        expect(result.events[result.events.length - 1]).toMatchObject({
+            type: 'COMMENTARY',
+            title: 'FIM DE PAPO',
+            minute: 90
+        });
 
         // Should have some commentary
         expect(result.events.length).toBeGreaterThan(0);

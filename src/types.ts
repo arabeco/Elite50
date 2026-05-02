@@ -98,6 +98,54 @@ export interface TacticalCard {
   effect: string;
 }
 
+export type StoreItemCategory = 'BOOT' | 'KIT' | 'LOGO' | 'PASS' | 'BADGE';
+export type StoreCurrency = 'GOLD' | 'FRAGMENT';
+export type StoreItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+
+export interface StoreBootBonus {
+  progressionGainPct?: number;
+  progressionLossMitigationPct?: number;
+}
+
+export interface StoreItem {
+  id: string;
+  category: StoreItemCategory;
+  name: string;
+  description: string;
+  collectionLabel?: string;
+  effectLabel?: string;
+  effectDescription?: string;
+  rarity: StoreItemRarity;
+  currency: StoreCurrency;
+  price: number;
+  imagePath: string;
+  premiumOnly?: boolean;
+  assetPath?: string;
+  bootVisualId?: number;
+  bootBonus?: StoreBootBonus;
+  logoPreview?: Partial<TeamLogoMetadata>;
+  circuitTag?: string;
+}
+
+export interface CircuitProgress {
+  id: string;
+  name: string;
+  premiumActive: boolean;
+  seasonRunsCompleted: number;
+  targetSeasonRuns: number;
+  endsAt: string;
+}
+
+export interface StoreState {
+  gold: number;
+  fragments: number;
+  ownedItemIds: string[];
+  equippedBootByPlayerId: Record<string, string>;
+  equippedKitByTeamId: Record<string, string>;
+  equippedLogoByTeamId: Record<string, string>;
+  circuit: CircuitProgress;
+}
+
 export interface TeamTactics {
   playStyle: PlayStyle;
   mentality?: Mentality;
@@ -218,6 +266,20 @@ export interface TransferProposal {
   value: number;
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'WAITING_WINDOW';
   date: string;
+}
+
+export interface ClubOffer {
+  id: string;
+  teamId: string;
+  targetUserId: string;
+  managerId?: string | null;
+  managerName?: string | null;
+  source: 'APPLICATION' | 'INVITE';
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'SIGNED' | 'EXPIRED' | 'WAITING_NEXT_SEASON';
+  createdAt: string;
+  availableOnDay: number;
+  respondedAt?: string | null;
+  note?: string | null;
 }
 
 export interface MatchEvent {
@@ -402,6 +464,11 @@ export interface WorldState {
   transferWindowOpen?: boolean;
   seasonStartReal?: string | null;
   startScheduledAt?: string | null;
+  clock?: {
+    profile: 'REAL' | 'TEST';
+    timeSpeed: number;
+    label: string;
+  };
   rank1000PlayerId?: string | null;
   leagues: Record<string, LeagueState>;
   eliteCup: EliteCupState;
@@ -424,6 +491,7 @@ export interface WorldState {
     date: string;
   };
   draftProposals?: { playerId: string; managerId: string; teamId: string; priority: number }[];
+  clubOffers?: ClubOffer[];
 }
 
 export interface TrainingState {
@@ -460,6 +528,7 @@ export interface GameState {
     title: string;
     message: string;
   };
+  store?: StoreState;
   training: TrainingState;
   transferProposals?: TransferProposal[];
   tradeOffers?: TradeOffer[];

@@ -9,10 +9,12 @@ import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
 import { TeamLogo } from '../TeamLogo';
+import { WorldParticipantsPanel } from '../WorldParticipantsPanel';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
-import { Player, Team, GameNotification } from '../../types';
+import { Player, Team, GameNotification, ClubOffer } from '../../types';
+import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
 import * as LucideIcons from 'lucide-react';
 const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3 } = LucideIcons;
 
@@ -102,6 +104,7 @@ export const WorldTab = (props: any) => {
     })
     .sort((a, b) => b.totalRating - a.totalRating)
     .slice(0, 120);
+  const elitePlayerIds = new Set(getElitePlayers(state, ELITE_PLAYER_CUTOFF).map(player => player.id));
   const rankingPlayersByPosition = {
     GOL: filteredRankingPlayers.filter(player => player.role === 'GOL'),
     ZAG: filteredRankingPlayers.filter(player => player.role === 'ZAG'),
@@ -112,6 +115,47 @@ export const WorldTab = (props: any) => {
     acc[player.id] = index + 1;
     return acc;
   }, {});
+  const leagueStandingMap = Object.values(state.world.leagues || {}).reduce<Record<string, { name: string; position: number }>>((acc, league: any) => {
+    const sorted = [...(league.standings || [])].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      const gdA = a.goalsFor - a.goalsAgainst;
+      const gdB = b.goalsFor - b.goalsAgainst;
+      return gdB - gdA;
+    });
+    sorted.forEach((row, index) => {
+      acc[row.teamId] = { name: league.name, position: index + 1 };
+    });
+    return acc;
+  }, {});
+  const userClubOffers = ((state.world.clubOffers || []).filter(offer => offer.targetUserId === state.userId) as ClubOffer[]);
+  const managerialHotspots = (Object.values(state.teams) as Team[])
+    .filter(team => team.id.startsWith('t_'))
+    .filter(team => {
+      const manager = team.managerId ? state.managers[team.managerId] : null;
+      return !manager || manager.isNPC !== false;
+    })
+    .map(team => {
+      const standing = leagueStandingMap[team.id];
+      const squadScore = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
+      const average = team.squad.length ? Math.round(squadScore / team.squad.length) : 0;
+      const offer = userClubOffers.find(item => item.teamId === team.id) || null;
+      const urgency = !team.managerId ? 4 : (standing?.position || 99) >= 7 ? 3 : (standing?.position || 99) >= 5 ? 2 : 1;
+      return { team, standing, average, offer, urgency };
+    })
+    .sort((a, b) => {
+      if (b.urgency !== a.urgency) return b.urgency - a.urgency;
+      return (b.average || 0) - (a.average || 0);
+    });
+  const pressureTeams = managerialHotspots.filter(item => item.urgency >= 3).slice(0, 3);
+  const opportunityTeams = managerialHotspots.slice(0, 3);
+  const teamPowerRanking = (Object.values(state.teams) as Team[])
+    .map(team => {
+      const totalRating = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
+      return { ...team, totalRating };
+    })
+    .sort((a, b) => b.totalRating - a.totalRating);
+  const userTeamRank = userTeam ? teamPowerRanking.findIndex(team => team.id === userTeam.id) + 1 : 0;
+  const rankedUserTeam = userTeamRank > 0 ? teamPowerRanking[userTeamRank - 1] : null;
 
   if (selectedTeamView) {
     const team = state.teams[selectedTeamView];
@@ -177,7 +221,7 @@ export const WorldTab = (props: any) => {
         </div>
 
         {worldTeamSubTab === 'squad' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
             {(team.squad || []).map((playerId) => {
               const player = state.players[playerId];
               if (!player) return null;
@@ -188,6 +232,7 @@ export const WorldTab = (props: any) => {
                   onClick={setSelectedPlayer}
                   onProposta={handleMakeProposal}
                   onTeamClick={setSelectedTeamView}
+                  variant="compact"
                 />
               );
             })}
@@ -1338,9 +1383,9 @@ export const WorldTab = (props: any) => {
             </div>
 
             {marketViewMode === 'cards' ? (
-              <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
                 {filteredMarketPlayers.map(player => (
-                  <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} variant="micro" />
+                  <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} variant="compact" />
                 ))}
               </div>
             ) : (
@@ -1395,10 +1440,13 @@ export const WorldTab = (props: any) => {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRankingFilters(!showRankingFilters)}
+            <div className="flex flex-wrap gap-2">
+              <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.22em] text-amber-100">
+                Elite {ELITE_PLAYER_CUTOFF}: aura premium para os maiores ratings do mundo
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRankingFilters(!showRankingFilters)}
                   className={`px-4 py-2 rounded-xl flex items-center gap-2 font-black text-[8px] sm:text-[10px] uppercase tracking-widest transition-all border ${showRankingFilters ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-white/5 text-cyan-400 border-white/10'}`}
                 >
                   <Sliders size={12} />
@@ -1495,12 +1543,13 @@ export const WorldTab = (props: any) => {
                         {rolePlayers.map(player => {
                           const overallIndex = rankingIndexMap[player.id];
                           const isTop3 = overallIndex <= 3;
+                          const isElite50 = elitePlayerIds.has(player.id);
 
                           return (
                             <div
                               key={player.id}
                               onClick={() => setSelectedPlayer(player)}
-                              className="glass-card-neon border-white/5 p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden"
+                              className={`glass-card-neon border-white/5 p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden ${isElite50 ? 'shadow-[0_0_22px_rgba(34,211,238,0.15)] border-cyan-400/15' : ''}`}
                             >
                               <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
                                 <div className="w-8 sm:w-12 text-center shrink-0">
@@ -1523,6 +1572,11 @@ export const WorldTab = (props: any) => {
                                     <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-cyan-500/20">
                                       {player.role}
                                     </span>
+                                    {isElite50 && (
+                                      <span className="text-[7px] sm:text-[9px] font-black text-amber-100 uppercase tracking-[0.22em] px-1.5 sm:px-2 py-0.5 rounded-md border border-amber-400/25 bg-amber-500/12">
+                                        Elite 50
+                                      </span>
+                                    )}
                                     <span className="text-[7px] sm:text-[9px] text-white/30 font-bold uppercase tracking-widest truncate">
                                       {player.contract.teamId ? state.teams[player.contract.teamId]?.name : 'Livre'}
                                     </span>
@@ -1545,6 +1599,9 @@ export const WorldTab = (props: any) => {
                               {isTop3 && (
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent pointer-events-none" />
                               )}
+                              {isElite50 && !isTop3 && (
+                                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-transparent to-transparent pointer-events-none" />
+                              )}
                             </div>
                           );
                         })}
@@ -1554,7 +1611,7 @@ export const WorldTab = (props: any) => {
                 })}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
                 {filteredRankingPlayers.map(player => (
                   <PlayerCard
                     key={player.id}
@@ -1572,23 +1629,141 @@ export const WorldTab = (props: any) => {
 
       {
         activeWorldTab === 'teams' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {(Object.values(state.teams) as Team[])
-              .map(team => {
-                const totalRating = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
-                return { ...team, totalRating };
-              })
-              .sort((a, b) => b.totalRating - a.totalRating)
-              .map((team, index) => (
+          <div className="space-y-4 sm:space-y-6">
+            {state.isCreator && <WorldParticipantsPanel />}
+
+            {!userTeam && (
+              <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                <div className="rounded-[1.8rem] border border-cyan-400/20 bg-cyan-500/10 p-4 sm:p-5">
+                  <div className="flex items-center gap-2">
+                    <Users size={15} className="text-cyan-200" />
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-100">Radar de tecnicos</h3>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {opportunityTeams.map(({ team, standing, average, offer }) => (
+                      <button
+                        key={team.id}
+                        onClick={() => setSelectedTeamView(team.id)}
+                        className="w-full rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:bg-white/[0.05]"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                            <TeamLogo
+                              primaryColor={team.logo?.primary || team.colors.primary || '#fff'}
+                              secondaryColor={team.logo?.secondary || team.colors.secondary || '#111'}
+                              accentColor={team.logo?.accent}
+                              shapeId={team.logo?.shapeId}
+                              patternId={(team.logo?.patternId || 'none') as any}
+                              symbolId={team.logo?.symbolId || 'Shield'}
+                              size={38}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                              {team.district} {standing ? `- ${standing.position}o ${standing.name}` : ''}
+                            </p>
+                            <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
+                            <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+                              media {average} {offer ? `- ${offer.status.toLowerCase()}` : '- sem contato aberto'}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[1.8rem] border border-amber-400/20 bg-amber-500/10 p-4 sm:p-5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={15} className="text-amber-200" />
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-100">Clubes sob pressao</h3>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {pressureTeams.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 p-4 text-center">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-white/35">Nenhum caso quente agora.</p>
+                      </div>
+                    ) : pressureTeams.map(({ team, standing, average, offer, urgency }) => (
+                      <button
+                        key={team.id}
+                        onClick={() => setSelectedTeamView(team.id)}
+                        className="w-full rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:bg-white/[0.05]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-amber-200">
+                              {standing ? `${standing.position}o ${standing.name}` : team.district}
+                            </p>
+                            <h4 className="mt-1 text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
+                            <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">
+                              {urgency >= 4
+                                ? 'vaga aberta agora'
+                                : 'campanha abaixo da expectativa'}
+                              {offer ? ` - ${offer.status.toLowerCase()}` : ''}
+                            </p>
+                          </div>
+                          <div className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-amber-100">
+                            media {average}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {rankedUserTeam && (
+              <div className="glass-card-neon border-cyan-500/30 bg-cyan-500/10 p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] flex items-center justify-between gap-4 overflow-hidden relative">
+                <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-400/10 blur-3xl" />
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl border border-cyan-400/30 bg-black/35 flex items-center justify-center overflow-hidden shrink-0">
+                    {rankedUserTeam.logo ? (
+                      <TeamLogo
+                        primaryColor={rankedUserTeam.logo.primary}
+                        secondaryColor={rankedUserTeam.logo.secondary}
+                        accentColor={rankedUserTeam.logo.accent}
+                        shapeId={rankedUserTeam.logo.shapeId}
+                        patternId={rankedUserTeam.logo.patternId as any}
+                        symbolId={rankedUserTeam.logo.symbolId}
+                        size={window.innerWidth < 640 ? 48 : 62}
+                      />
+                    ) : (
+                      <TeamLogo
+                        primaryColor="#06b6d4"
+                        secondaryColor="#0f172a"
+                        patternId="none"
+                        symbolId="Shield"
+                        size={window.innerWidth < 640 ? 44 : 58}
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Seu clube no ranking</p>
+                    <h3 className="mt-1 truncate text-xl sm:text-3xl font-black uppercase italic text-white">{rankedUserTeam.name}</h3>
+                    <p className="mt-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      {rankedUserTeam.totalRating} score / {rankedUserTeam.squad.length} atletas
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white/30">Posicao</p>
+                  <p className="text-4xl sm:text-6xl font-black italic text-white drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]">#{userTeamRank}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {teamPowerRanking.map((team, index) => (
                 <div
                   key={team.id}
                   onClick={() => setSelectedTeamView(team.id)}
-                  className="glass-card-neon border-white/5 rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 cursor-pointer hover:scale-[1.02] transition-all flex flex-col gap-4 sm:gap-6 group relative overflow-hidden"
+                  className={`glass-card-neon rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 cursor-pointer hover:scale-[1.02] transition-all flex flex-col gap-4 sm:gap-6 group relative overflow-hidden ${team.id === userTeam?.id ? 'border-cyan-500/45 bg-cyan-500/[0.08]' : 'border-white/5'}`}
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/5 blur-3xl pointer-events-none" />
 
                   <div className="flex items-center justify-between">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 glass-card rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/5 group-hover:border-fuchsia-500/30 transition-all overflow-hidden">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 glass-card rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/5 group-hover:border-fuchsia-500/30 transition-all overflow-hidden">
                       {team.logo ? (
                         <TeamLogo
                           primaryColor={team.logo.primary}
@@ -1597,16 +1772,16 @@ export const WorldTab = (props: any) => {
                           shapeId={team.logo.shapeId}
                           patternId={team.logo.patternId as any}
                           symbolId={team.logo.symbolId}
-                          size={window.innerWidth < 640 ? 32 : 40}
+                          size={window.innerWidth < 640 ? 46 : 58}
                         />
                       ) : (
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center">
                           <TeamLogo
                             primaryColor="#a855f7"
                             secondaryColor="#7e22ce"
                             patternId="none"
                             symbolId="Shield"
-                            size={window.innerWidth < 640 ? 24 : 32}
+                            size={window.innerWidth < 640 ? 38 : 48}
                           />
                         </div>
                       )}
@@ -1637,6 +1812,7 @@ export const WorldTab = (props: any) => {
                   </div>
                 </div>
               ))}
+            </div>
           </div>
         )
       }

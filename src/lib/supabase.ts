@@ -1,7 +1,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { GameState, Manager, TrainingState } from '../types';
+import { MIDSEASON_JOIN_MAX_ROUND } from '../constants/gameConstants';
 import { applyTeamLogoAssets } from '../utils/teamIdentity';
+import { syncNormalizedWorldFromState } from './worldRepository';
 
 // Supabase configuration - Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY 
 // are set in your Vercel Environment Variables.
@@ -42,6 +44,45 @@ const createDefaultTrainingState = (): TrainingState => ({
     stabilizationSlot: null
   }
 });
+
+const applyParticipantFoundedClubs = (baseWorld: any, mergedTeams: Record<string, any>, participantRecords: any[]) => {
+  const mergedWorld = {
+    ...baseWorld,
+    leagues: { ...(baseWorld?.leagues || {}) }
+  };
+
+  participantRecords.forEach(record => {
+    const recordTeams = (record.teams_data || {}) as Record<string, any>;
+
+    Object.values(recordTeams).forEach(team => {
+      const replacedTeamId = team?.replacedTeamId;
+      if (!team?.id || !replacedTeamId) return;
+
+      Object.keys(mergedTeams).forEach(teamId => {
+        if (teamId === replacedTeamId) {
+          delete mergedTeams[teamId];
+        }
+      });
+
+      Object.keys(mergedWorld.leagues).forEach(key => {
+        const league = mergedWorld.leagues[key];
+        mergedWorld.leagues[key] = {
+          ...league,
+          standings: (league.standings || []).map((row: any) =>
+            row.teamId === replacedTeamId ? { ...row, teamId: team.id } : row
+          ),
+          matches: (league.matches || []).map((match: any) => ({
+            ...match,
+            homeTeamId: match.homeTeamId === replacedTeamId ? team.id : match.homeTeamId,
+            awayTeamId: match.awayTeamId === replacedTeamId ? team.id : match.awayTeamId
+          }))
+        };
+      });
+    });
+  });
+
+  return mergedWorld;
+};
 
 export const saveGameState = async (state: GameState, worldId: string = 'default') => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -99,6 +140,13 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
     console.error('Error saving game state:', error);
     return null;
   }
+
+  if (isCreator && ['dual_write', 'parallel'].includes(import.meta.env.VITE_WORLD_BACKEND_MODE)) {
+    syncNormalizedWorldFromState(supabase, state, worldId).catch(syncError => {
+      console.error('Error syncing normalized world tables:', syncError);
+    });
+  }
+
   return data;
 };
 
@@ -136,6 +184,7 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
   const gameState: GameState = {
     world: masterGame.world_state as any,
     worldId: worldId,
+    userId: user.id,
     isCreator: false,
     teams: applyTeamLogoAssets(masterGame.teams_data as any),
     players: masterGame.players_data as any,
@@ -272,9 +321,12 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     }
   });
 
+  const mergedWorld = applyParticipantFoundedClubs(masterRecord.world_state, mergedTeams, allWorldRecords);
+
   const gameState: GameState = {
-    world: masterRecord.world_state as any, // Master defines the world clock
+    world: mergedWorld, // Master defines the clock; participant-founded clubs patch league slots.
     worldId: masterRecord.world_id,
+    userId: user.id,
     isCreator,
     participants,
     teams: applyTeamLogoAssets(mergedTeams),
@@ -317,9 +369,23 @@ export const claimTeamInWorld = async (
   }
 
   const masterRecord = allWorldRecords.find(record => record.is_creator) || allWorldRecords[0];
+  const worldState = masterRecord.world_state as any;
   const teams = { ...(masterRecord.teams_data as any) };
   const players = { ...(masterRecord.players_data as any) };
   const selectedTeam = teams[teamId];
+
+  const currentDay = worldState?.currentDay || 0;
+  const currentRound = worldState?.currentRound || 0;
+  const phase = worldState?.phase;
+  const access = worldState?.access || {};
+  const joinWindowOpen =
+    currentDay < 3 ||
+    phase === 'OFFSEASON' ||
+    (phase === 'REGULAR_SEASON' && currentRound <= MIDSEASON_JOIN_MAX_ROUND);
+
+  if (!joinWindowOpen || access.allowMidSeasonJoin === false || access.allowTakeover === false) {
+    throw new Error('JOIN_WINDOW_CLOSED');
+  }
 
   if (!selectedTeam || !String(teamId).startsWith('t_')) {
     throw new Error('TEAM_NOT_AVAILABLE');

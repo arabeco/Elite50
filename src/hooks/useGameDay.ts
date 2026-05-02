@@ -1,56 +1,82 @@
-import { useGame, useGameDispatch } from '../store/GameContext';
-import { advanceGameDay, startNewSeason } from '../engine/gameLogic';
 import { useRef } from 'react';
+import { advanceGameDay, startNewSeason } from '../engine/gameLogic';
+import { useGame, useGameDispatch } from '../store/GameContext';
+import { grantSeasonCompletionRewards } from '../lib/metaStore';
+import { calculateSeasonRewardsForUser } from '../utils/seasonRewards';
 
 export const useGameDay = () => {
-    const { state, setState, saveGame } = useGame();
-    const { addToast } = useGameDispatch();
+  const { state, setState, saveGame, isAuthenticated } = useGame();
+  const { addToast } = useGameDispatch();
+  const isAdvancingRef = useRef(false);
 
-    const isAdvancingRef = useRef(false);
+  const maybeGrantSeasonRewards = async (previousSeason: number | undefined, nextState: typeof state) => {
+    const nextSeason = nextState.world.currentSeason || 2050;
+    if (!previousSeason || nextSeason <= previousSeason) return;
+    if (!isAuthenticated) return;
 
-    const handleAdvanceDay = async () => {
-        if (isAdvancingRef.current) return;
+    const rewards = calculateSeasonRewardsForUser(nextState);
+    if (!rewards) return;
 
-        if (!state.isCreator) {
-            alert('Apenas o Criador do Mundo pode avançar a data da temporada.');
-            return;
-        }
+    try {
+      const result = await grantSeasonCompletionRewards(
+        rewards.season,
+        rewards.gold,
+        rewards.fragments,
+        rewards.payload
+      );
 
-        if (state.world.status === 'LOBBY') {
-            alert('A temporada ainda não começou! Inicie a temporada na aba Home primeiro.');
-            return;
-        }
+      if (result.ok) {
+        addToast(`Temporada encerrada: +${result.gold} ouro, +${result.fragments} fragmentos`, 'success');
+      }
+    } catch (error) {
+      console.error('Erro ao conceder recompensas de temporada:', error);
+      addToast('Temporada virou, mas a recompensa online nao foi sincronizada.', 'warning');
+    }
+  };
 
-        if (!window.confirm('Deseja avançar para o próximo dia? Todos os jogos da rodada serão simulados.')) return;
+  const handleAdvanceDay = async () => {
+    if (isAdvancingRef.current) return;
 
-        isAdvancingRef.current = true;
-        try {
-            console.log('GM: Avançando dia do jogo...');
-            // We apply the change and immediately get the new state
-            const newState = advanceGameDay(state);
-            setState(newState);
-            // Save state immediately to ensure the new state is distributed
-            await saveGame(newState);
-            addToast('Dia avançado com sucesso', 'success');
-        } finally {
-            isAdvancingRef.current = false;
-        }
-    };
+    if (!state.isCreator) {
+      alert('Apenas o Criador do Mundo pode avancar a data da temporada.');
+      return;
+    }
 
-    const handleStartNewSeason = async () => {
-        if (!state.isCreator) {
-            alert('Apenas o Criador do Mundo pode iniciar a nova temporada.');
-            return;
-        }
+    if (state.world.status === 'LOBBY') {
+      alert('A temporada ainda nao comecou! Inicie a temporada na aba Home primeiro.');
+      return;
+    }
 
-        if (!window.confirm('A Temporada atual chegou ao fim! Deseja calcular a evolução dos jogadores e iniciar o próximo ano?')) return;
+    if (!window.confirm('Deseja avancar para o proximo dia? Todos os jogos da rodada serao simulados.')) return;
 
-        console.log('GM: Iniciando nova temporada...');
-        const newState = startNewSeason(state);
-        setState(newState);
-        await saveGame(newState);
-        addToast('Nova temporada iniciada com sucesso! Elencos, calendários e traços atualizados.', 'success');
-    };
+    isAdvancingRef.current = true;
+    try {
+      const previousSeason = state.world.currentSeason || 2050;
+      const newState = advanceGameDay(state);
+      setState(newState);
+      await saveGame(newState);
+      await maybeGrantSeasonRewards(previousSeason, newState);
+      addToast('Dia avancado com sucesso', 'success');
+    } finally {
+      isAdvancingRef.current = false;
+    }
+  };
 
-    return { handleAdvanceDay, handleStartNewSeason };
+  const handleStartNewSeason = async () => {
+    if (!state.isCreator) {
+      alert('Apenas o Criador do Mundo pode acelerar a offseason.');
+      return;
+    }
+
+    if (!window.confirm('Deseja encurtar a offseason e abrir a proxima temporada agora?')) return;
+
+    const previousSeason = state.world.currentSeason || 2050;
+    const newState = startNewSeason(state);
+    setState(newState);
+    await saveGame(newState);
+    await maybeGrantSeasonRewards(previousSeason, newState);
+    addToast('Offseason encerrada. A nova temporada ja comecou.', 'success');
+  };
+
+  return { handleAdvanceDay, handleStartNewSeason };
 };

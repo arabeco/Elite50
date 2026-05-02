@@ -246,13 +246,13 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
               </div>
             </div>
 
-            <div className="flex overflow-x-auto gap-4 sm:gap-6 px-1 sm:px-2 pb-6 sm:pb-8 snap-x snap-mandatory scroll-smooth items-center">
+            <div className="grid grid-cols-4 gap-2 px-1 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
               {players.map(player => (
-                <div key={player.id} className="w-[132px] sm:w-[170px] shrink-0 snap-start">
+                <div key={player.id} className="w-full min-w-0">
                   <PlayerCard
                     player={player}
                     onClick={() => handlePlayerClick(player)}
-                    variant="full"
+                    variant="compact"
                     teamLogo={userTeam.logo}
                     onTeamClick={setSelectedTeamId}
                   />

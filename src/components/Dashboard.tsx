@@ -9,7 +9,7 @@ import { WorldTab } from './dashboard/WorldTab';
 import { DatabaseTab } from './dashboard/DatabaseTab';
 import { CareerTab } from './dashboard/CareerTab';
 import { NewGameFlow } from './NewGameFlow';
-import { Users, Brain, Target, Home, Trophy, History, MessageSquare, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, X } from 'lucide-react';
+import { Users, Brain, Target, Home, Trophy, History, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, X } from 'lucide-react';
 import { useGameDispatch, useGameState } from '../store/GameContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DraftPanel } from './dashboard/DraftPanel';
@@ -20,8 +20,8 @@ import { ManagerModal } from './ManagerModal';
 import { startNewSeason } from '../engine/gameLogic';
 import { TeamModal } from './TeamModal';
 import { PlayerModal } from './PlayerModal';
+import { TeamLogo } from './TeamLogo';
 import { ObserverClaimPanel } from './ObserverClaimPanel';
-import { WorldParticipantsPanel } from './WorldParticipantsPanel';
 import { OnboardingActionHint, OnboardingArea, OnboardingHint } from './OnboardingHint';
 import { addNews } from '../engine/newsService';
 import { FeedbackReportModal } from './FeedbackReportModal';
@@ -66,11 +66,11 @@ export const Dashboard: React.FC = () => {
   const [activeTeamTab, setActiveTeamTab] = useState<TeamSubTab>(
     (state.world.status === 'LOBBY' && state.world.currentDay < 2) ? 'draft' : 'squad'
   );
+  const isDraftOpen = state.world.status === 'LOBBY' && state.world.currentDay < 2;
 
   const [liveMatch, setLiveMatch] = useState<Match | null>(null);
   const [liveMatchSecond, setLiveMatchSecond] = useState(0);
   const [watchedMatches, setWatchedMatches] = useState<Set<string>>(new Set());
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isSeasonEndDismissed, setIsSeasonEndDismissed] = useState(false);
@@ -85,13 +85,48 @@ export const Dashboard: React.FC = () => {
       ? `team-${activeTeamTab}` as OnboardingArea
       : activeTab;
 
-  // Ticking Clock
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!isDraftOpen && activeTeamTab === 'draft') {
+      setActiveTeamTab('squad');
+    }
+  }, [activeTeamTab, isDraftOpen]);
 
-  const { daysPassed, userTeamMatches } = useDashboardData();
+  useEffect(() => {
+    if (isObserver && activeTab === 'home' && state.worldId) {
+      setActiveTab('team');
+    }
+  }, [activeTab, isObserver, state.worldId]);
+
+  const headerReferenceDate = React.useMemo(() => {
+    const rawDate = new Date(
+      state.world.status === 'LOBBY' && state.world.startScheduledAt
+        ? state.world.startScheduledAt
+        : state.world.currentDate
+    );
+    const now = new Date();
+    return new Date(
+      now.getFullYear(),
+      rawDate.getMonth(),
+      rawDate.getDate(),
+      rawDate.getHours(),
+      rawDate.getMinutes(),
+      0,
+      0
+    );
+  }, [state.world.currentDate, state.world.startScheduledAt, state.world.status]);
+
+  const headerClock = `${headerReferenceDate.toLocaleDateString('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit'
+  }).replace('.', '')}`;
+  const headerTime = headerReferenceDate.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  const headerSeasonDay = state.world.currentDay < 0 ? 0 : (state.world.currentDay || 0) + 1;
+
+  const { daysPassed, userTeamMatches, totalPoints, powerCap } = useDashboardData();
   const isSeasonEnded = state.world.status !== 'LOBBY' && daysPassed > SEASON_DAYS;
   const actionOnboardingHint = React.useMemo<OnboardingActionHint | null>(() => {
     if (isObserver || activeTab !== 'home') return null;
@@ -263,12 +298,20 @@ export const Dashboard: React.FC = () => {
       return;
     }
 
-    if (!window.confirm('Iniciar a proxima temporada agora? Isso recalcula migracoes, calendario e elencos.')) return;
+    if (!window.confirm('Deseja preparar a proxima temporada e agenda-la para amanha 00:00?')) return;
+    const nextStart = new Date(state.world.currentDate);
+    nextStart.setDate(nextStart.getDate() + 1);
+    nextStart.setHours(0, 0, 0, 0);
+
     const newState = startNewSeason(state);
+    newState.world.status = 'LOBBY';
+    newState.world.currentDay = -1;
+    newState.world.startScheduledAt = nextStart.toISOString();
+    newState.world.seasonStartReal = nextStart.toISOString();
     setState(newState);
     await saveGame(newState);
     setIsSeasonEndDismissed(true);
-    addToast('Nova temporada iniciada.', 'success');
+    addToast('Nova temporada preparada e agendada para amanha 00:00.', 'success');
   };
 
   const handleResignFromClub = async () => {
@@ -383,7 +426,7 @@ export const Dashboard: React.FC = () => {
   }, [liveMatch]);
 
   const renderCurrentTab = () => {
-    if (isObserver && (activeTab === 'home' || activeTab === 'team' || activeTab === 'career')) {
+    if (isObserver && activeTab === 'team') {
       return <ObserverClaimPanel />;
     }
 
@@ -392,7 +435,7 @@ export const Dashboard: React.FC = () => {
         <HomeTab
           onOpenDraft={() => {
             setActiveTab('team');
-            setActiveTeamTab('draft');
+            setActiveTeamTab(isDraftOpen ? 'draft' : 'squad');
           }}
           onOpenTeam={() => {
             setActiveTab('team');
@@ -417,8 +460,7 @@ export const Dashboard: React.FC = () => {
               className="flex bg-black/40 backdrop-blur-md rounded-2xl p-1 border border-white/5 shadow-lg overflow-x-auto scrollbar-hide"
             >
               {[
-                // Show Draft sub-tab during Genesis (Days 0-2) regardless of status to be safe
-                ...(state.world.currentDay < 3 ? [{ id: 'draft', label: 'Draft', icon: Rocket }] : []),
+                ...(isDraftOpen ? [{ id: 'draft', label: 'Draft', icon: Rocket }] : []),
                 { id: 'squad', label: 'Elenco', icon: Users },
                 { id: 'lineup', label: 'Escalação', icon: Shield },
                 { id: 'tactics', label: 'Tática', icon: Brain },
@@ -442,7 +484,7 @@ export const Dashboard: React.FC = () => {
                 </button>
               ))}
             </div>
-            {activeTeamTab === 'draft' && <DraftPanel />}
+            {activeTeamTab === 'draft' && isDraftOpen && <DraftPanel />}
             {activeTeamTab === 'squad' && <SquadTab showLineup={false} />}
             {activeTeamTab === 'lineup' && <SquadTab showLineup={true} lineupOnly />}
             {activeTeamTab === 'tactics' && <TacticsTab />}
@@ -452,14 +494,22 @@ export const Dashboard: React.FC = () => {
       case 'calendar': return <CompetitionTab />;
       case 'world': return <WorldTab onTabChange={(tab: any) => setActiveTab(tab)} />;
       case 'draft': return <DraftPanel />;
-      case 'career': return <CareerTab />;
+      case 'career': return <CareerTab onOpenFeedback={() => setIsFeedbackOpen(true)} />;
       default: return <HomeTab />;
     }
   };
 
-  if (!state.userTeamId && !isObserver) {
+  const requiresEntryCreation = !state.userTeamId && state.world.status === 'LOBBY';
+
+  if (requiresEntryCreation) {
     return <NewGameFlow />;
   }
+
+  const headerTeamId = state.userTeamId || (state.userManagerId ? state.managers[state.userManagerId]?.career.currentTeamId : null);
+  const headerTeam = headerTeamId ? state.teams[headerTeamId] : null;
+  const headerLeagueName = headerTeam?.league
+    ? (Object.values(state.world.leagues || {}) as LeagueState[]).find(league => league.id === headerTeam.league)?.name
+    : null;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden text-white font-sans selection:bg-cyan-500/30 stadium-bg"
@@ -480,62 +530,49 @@ export const Dashboard: React.FC = () => {
               setIsManagerModalOpen(true);
             }}
           >
-            <img
-              src="/logo.png"
-              alt="Elite 2050"
-              className="h-8 w-8 rounded-lg border border-cyan-500/50 bg-black/40 object-contain p-1 shadow-2xl sm:h-12 sm:w-12 sm:rounded-2xl"
-            />
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-cyan-500/50 bg-black/40 p-1 shadow-2xl sm:h-14 sm:w-14 sm:rounded-2xl">
+              {headerTeam?.logo ? (
+                <TeamLogo
+                  primaryColor={headerTeam.logo.primary}
+                  secondaryColor={headerTeam.logo.secondary}
+                  accentColor={headerTeam.logo.accent}
+                  shapeId={headerTeam.logo.shapeId}
+                  patternId={headerTeam.logo.patternId as any}
+                  symbolId={headerTeam.logo.symbolId}
+                  size={window.innerWidth < 640 ? 34 : 48}
+                />
+              ) : (
+                <img
+                  src="/logo.png"
+                  alt="Elite 2050"
+                  className="h-full w-full object-contain"
+                />
+              )}
+            </div>
             <div className="flex flex-col">
               <h1 className="text-[9px] sm:text-[14px] font-black italic tracking-tighter uppercase text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] leading-none truncate max-w-[80px] sm:max-w-none">
-                {isObserver ? 'Observador Elite' : (state.managers[state.userManagerId]?.name || 'Admin Elite')}
+                {isObserver ? 'Observador Elite' : (headerTeam?.name || 'Sem Clube')}
               </h1>
               <p className="text-[6px] sm:text-[9px] font-bold text-cyan-400 uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1">
-                {isObserver ? 'Escolha um clube' : `Comandante Nível ${Math.floor((state.managers[state.userManagerId]?.reputation || 0) / 10)}`}
+                {isObserver ? 'Escolha um clube' : (headerLeagueName || headerTeam?.district || 'Temporada')}
               </p>
             </div>
           </div>
 
           <div className="flex flex-col items-center sm:items-end flex-1 sm:flex-none">
             <div className="text-[8px] sm:text-[11px] font-black italic tabular-nums text-white leading-tight drop-shadow-md uppercase tracking-widest">
-              Dia {state.world.currentDay || 0} - Temporada {state.world.currentSeason || 1} (Ano 2050)
+              S{state.world.currentSeason || 1} • Dia {headerSeasonDay} • {headerClock} • {headerTime}
             </div>
-            <div className="w-20 sm:w-40 mt-1 flex flex-col gap-0.5 group/progress">
-              <div className="flex justify-between items-center px-0.5">
-                <span className="text-[5px] sm:text-[8px] font-black text-white/50 uppercase tracking-widest transition-colors group-hover/progress:text-white/80">
-                  SEASON
-                </span>
-                <span className="text-[5px] sm:text-[8px] font-black text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]">
-                  DIA {daysPassed === 0 ? 0 : Math.max(0, daysPassed)}/{SEASON_DAYS}
-                </span>
-              </div>
-              <div className="h-1 sm:h-1.5 w-full bg-white/10 rounded-full overflow-hidden relative shadow-inner">
-                <div
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-500 to-fuchsia-500 shadow-[0_0_10px_rgba(34,211,238,0.8)] transition-all duration-1000 ease-out"
-                  style={{ width: `${Math.min(100, Math.max(0, (daysPassed / SEASON_DAYS) * 100))}%` }}
-                />
-              </div>
+            <div className="mt-1 flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1">
+              <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Score</span>
+              <span className="text-[10px] sm:text-sm font-black italic tabular-nums text-white">
+                {totalPoints.toLocaleString()}
+              </span>
+              <span className="hidden sm:inline text-[7px] font-black uppercase tracking-widest text-white/30">/ {powerCap.toLocaleString()}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3">
-            <button
-              onClick={() => {
-                playClickSound();
-                triggerHaptic();
-                setIsFeedbackOpen(true);
-              }}
-              className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-black/40 hover:bg-black/60 flex items-center justify-center transition-all border border-cyan-500/30 shadow-inner group active:scale-90"
-              title="Reportar problema"
-              aria-label="Reportar problema"
-            >
-              <MessageSquare size={12} className="text-cyan-300 group-hover:scale-110 transition-transform sm:size-[16px]" />
-            </button>
-            <button
-              onClick={togglePause}
-              className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-black/40 hover:bg-black/60 flex items-center justify-center transition-all border border-cyan-500/30 shadow-inner group active:scale-90"
-            >
-              <Clock size={12} className={`${isPaused ? 'text-amber-500 animate-pulse' : 'text-cyan-400'} group-hover:scale-110 transition-transform sm:size-[16px]`} />
-            </button>
             <button
               onClick={() => {
                 playClickSound();
@@ -553,6 +590,26 @@ export const Dashboard: React.FC = () => {
         </div>
       </header>
 
+      <button
+        onClick={() => {
+          playClickSound();
+          triggerHaptic();
+          togglePause();
+        }}
+        className={`fixed right-3 top-[4.4rem] z-[55] h-10 rounded-2xl border px-3 shadow-2xl backdrop-blur-xl transition active:scale-95 sm:right-6 sm:top-[6.4rem] ${
+          isPaused
+            ? 'border-amber-400/45 bg-amber-500/20 text-amber-100'
+            : 'border-cyan-400/35 bg-black/45 text-cyan-200 hover:bg-cyan-500/10'
+        }`}
+        title={isPaused ? 'Retomar mundo' : 'Pausar mundo'}
+        aria-label={isPaused ? 'Retomar mundo' : 'Pausar mundo'}
+      >
+        <span className="flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.22em]">
+          <Clock size={14} className={isPaused ? 'animate-pulse text-amber-300' : 'text-cyan-300'} />
+          <span className="hidden sm:inline">{isPaused ? 'Pausado' : 'Pausar'}</span>
+        </span>
+      </button>
+
       {/* Main Content Area */}
       <main className="h-full overflow-y-auto pt-4 sm:pt-6 pb-32 sm:pb-40 slim-scrollbar">
         <div className="max-w-7xl mx-auto px-3 sm:px-8 lg:px-12 w-full">
@@ -565,8 +622,6 @@ export const Dashboard: React.FC = () => {
               Voce entrou como observador. Pode acompanhar o mundo ou assumir um clube de IA.
             </motion.div>
           )}
-
-          <WorldParticipantsPanel />
 
           {/* LOBBY STATUS BANNER - Robust check for Genesis and creator status */}
           {(state.world.status === 'LOBBY' || state.world.currentDay < 3) && (
@@ -600,25 +655,25 @@ export const Dashboard: React.FC = () => {
                 {state.world.status === 'LOBBY' ? (
                   state.isCreator ? (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         playClickSound();
                         triggerHaptic();
-                        setState(prev => {
-                          const isPreDay = prev.world.currentDay === -1;
-                          const nextDay = new Date();
-                          nextDay.setDate(nextDay.getDate() + 1);
-                          nextDay.setHours(0, 0, 0, 0);
-                          return {
-                            ...prev,
-                            world: {
-                              ...prev.world,
-                              currentDay: isPreDay ? -1 : prev.world.currentDay,
-                              status: isPreDay ? 'LOBBY' : 'ACTIVE',
-                              startScheduledAt: isPreDay ? nextDay.toISOString() : null,
-                              seasonStartReal: nextDay.toISOString()
-                            }
-                          };
-                        });
+                        const isPreDay = state.world.currentDay === -1;
+                        const nextDay = new Date(state.world.currentDate || Date.now());
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        nextDay.setHours(0, 0, 0, 0);
+                        const newState = {
+                          ...state,
+                          world: {
+                            ...state.world,
+                            currentDay: isPreDay ? -1 : state.world.currentDay,
+                            status: isPreDay ? 'LOBBY' as const : 'ACTIVE' as const,
+                            startScheduledAt: isPreDay ? nextDay.toISOString() : null,
+                            seasonStartReal: nextDay.toISOString()
+                          }
+                        };
+                        setState(newState);
+                        await saveGame(newState);
                       }}
                       className="group relative w-full md:w-auto px-6 xl:px-14 py-3 xl:py-5 rounded-xl bg-amber-500 text-black font-black text-[9px] sm:text-xs xl:text-sm uppercase tracking-[0.3em] transition-all duration-500 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(245,158,11,0.4)]"
                     >
@@ -670,7 +725,7 @@ export const Dashboard: React.FC = () => {
                 triggerHaptic();
                 setActiveTab(tab.id as Tab);
                 // Force Draft sub-tab if going to team during Genesis
-                if (tab.id === 'team' && state.world.status === 'LOBBY' && state.world.currentDay <= 2) {
+                if (tab.id === 'team' && isDraftOpen) {
                   setActiveTeamTab('draft');
                 }
               }
@@ -700,13 +755,13 @@ export const Dashboard: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-4 backdrop-blur-xl"
+            className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/90 p-3 backdrop-blur-xl sm:p-4"
           >
             <motion.div
               initial={{ y: 30, scale: 0.96 }}
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 20, scale: 0.98 }}
-              className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_70px_rgba(6,182,212,0.22)]"
+              className="relative my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_70px_rgba(6,182,212,0.22)] slim-scrollbar"
             >
               <button
                 type="button"
@@ -728,7 +783,8 @@ export const Dashboard: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+              <div className="max-h-[62vh] overflow-y-auto p-5 slim-scrollbar sm:p-6">
+                <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-300">
                     <Trophy size={15} /> Campeoes
@@ -767,6 +823,7 @@ export const Dashboard: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </div>
                 </div>
               </div>
 
@@ -839,7 +896,7 @@ export const Dashboard: React.FC = () => {
                   onClick={handleSeasonEndContinue}
                   className="rounded-xl border border-cyan-400/40 bg-cyan-400 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_24px_rgba(34,211,238,0.28)] transition hover:bg-cyan-300"
                 >
-                  {state.isCreator ? 'Iniciar proxima temporada' : 'Continuar'}
+                  {state.isCreator ? 'Acelerar offseason' : 'Continuar'}
                 </button>
               </div>
             </motion.div>

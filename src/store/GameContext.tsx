@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo, useCallback, useState } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo, useCallback, useRef, useState } from 'react';
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
 import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, unsubscribeFromWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
+import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, listSavedWorlds, loadGameState as loadLocalGameState, loadStoredWorldEnvelope, saveGameState as saveLocalGameState } from '../engine/persistence';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
-import { advanceGameDay } from '../engine/gameLogic';
+import { advanceGameDay, isJoinWindowOpen } from '../engine/gameLogic';
+import { addNews } from '../engine/newsService';
 
 interface GameStateValue {
   state: GameState;
@@ -12,11 +14,10 @@ interface GameStateValue {
   isAuthenticated: boolean;
   userId: string | null;
   worldId: string | null;
-  worlds: Array<{ id: string, name: string, updatedAt: string, userId: string }>;
+  worlds: Array<{ id: string, name: string, updatedAt: string, userId: string, isLocalOnly?: boolean }>;
   publicWorlds: Array<{ id: string, name: string, updatedAt: string, userId: string }>;
   toasts: Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>;
   isPaused: boolean;
-  timeSpeed: number;
 }
 
 interface GameDispatchValue {
@@ -26,6 +27,8 @@ interface GameDispatchValue {
   joinGame: (worldId: string) => Promise<void>;
   joinGameByCode: (joinCode: string) => Promise<void>;
   claimTeam: (teamId: string, managerName?: string) => Promise<void>;
+  submitClubApplication: (teamId: string, managerName?: string) => Promise<void>;
+  respondToClubOffer: (offerId: string, accept: boolean, managerName?: string) => Promise<void>;
   resignFromTeam: () => Promise<void>;
   setIsAuthenticated: (val: boolean) => void;
   setWorldId: (id: string | null) => void;
@@ -36,7 +39,6 @@ interface GameDispatchValue {
   addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   removeToast: (id: string) => void;
   togglePause: () => void;
-  setTimeSpeed: (speed: number) => void;
 }
 
 type GameContextType = GameStateValue & GameDispatchValue;
@@ -66,23 +68,104 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [worldId, setWorldId] = useState<string | null>(null);
-  const [worlds, setWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string }>>([]);
+  const [worlds, setWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string, isLocalOnly?: boolean }>>([]);
   const [publicWorlds, setPublicWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string }>>([]);
   const [toasts, setToasts] = useState<Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>>([]);
   const [isPaused, setIsPaused] = useState(false);
-  const [timeSpeed, setTimeSpeed] = useState(DEFAULT_TIME_SPEED);
+  const [timeSpeed, setTimeSpeedState] = useState(DEFAULT_TIME_SPEED);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const hasAttemptedSessionRestoreRef = useRef(false);
+  const timeAnchorRef = useRef<{
+    realTimeMs: number;
+    gameTimeMs: number;
+    speed: number;
+    lastWorldDateMs: number;
+  } | null>(null);
 
   const setState = useCallback((payload: GameState | ((prev: GameState) => GameState)) => {
     dispatch({ type: 'SET_STATE', payload });
   }, []);
 
+  const applyLocalHydration = useCallback((targetWorldId?: string) => {
+    const cachedState = loadLocalGameState(targetWorldId);
+    if (!cachedState) return false;
+
+    const resolvedWorldId = targetWorldId || cachedState.worldId || getLastSavedWorldId();
+    setIsInitialLoad(true);
+    setState(cachedState);
+    if (resolvedWorldId) {
+      setWorldId(resolvedWorldId);
+    }
+    setIsOnline(false);
+    setTimeout(() => setIsInitialLoad(false), 300);
+    return true;
+  }, [setState]);
+
+  useEffect(() => {
+    const nextSpeed = state.world.clock?.timeSpeed ?? DEFAULT_TIME_SPEED;
+    timeAnchorRef.current = null;
+    setTimeSpeedState(prev => prev === nextSpeed ? prev : nextSpeed);
+  }, [state.world.clock?.timeSpeed]);
+
+  const getAcceleratedGameDate = useCallback((currentDate?: string) => {
+    const nowMs = Date.now();
+    const fallbackGameDate = getGameDate2050();
+    const parsedCurrentDate = currentDate ? new Date(currentDate) : fallbackGameDate;
+    const currentGameMs = Number.isFinite(parsedCurrentDate.getTime())
+      ? parsedCurrentDate.getTime()
+      : fallbackGameDate.getTime();
+    const anchor = timeAnchorRef.current;
+    const externalDateJump = anchor && Math.abs(currentGameMs - anchor.lastWorldDateMs) > 10 * 60 * 1000;
+
+    if (!anchor || anchor.speed !== timeSpeed || externalDateJump) {
+      timeAnchorRef.current = {
+        realTimeMs: nowMs,
+        gameTimeMs: currentGameMs,
+        speed: timeSpeed,
+        lastWorldDateMs: currentGameMs,
+      };
+      return new Date(currentGameMs);
+    }
+
+    const elapsedRealSeconds = (nowMs - anchor.realTimeMs) / 1000;
+    const acceleratedGameMs = anchor.gameTimeMs + elapsedRealSeconds * anchor.speed * 60 * 1000;
+    anchor.lastWorldDateMs = acceleratedGameMs;
+
+    return new Date(acceleratedGameMs);
+  }, [timeSpeed]);
+
   // Listen for auth changes
+  const refreshWorlds = useCallback(async (forceRemote = false) => {
+    const localWorlds = listSavedWorlds();
+
+    if (!forceRemote && !isAuthenticated) {
+      setWorlds(localWorlds);
+      setPublicWorlds([]);
+      return;
+    }
+
+    const [userWorlds, otherWorlds] = await Promise.all([
+      listUserWorlds(),
+      listPublicWorlds()
+    ]);
+
+    const mergedWorlds = [
+      ...userWorlds,
+      ...localWorlds.filter(localWorld => !userWorlds.some(remoteWorld => remoteWorld.id === localWorld.id)),
+    ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    setWorlds(mergedWorlds);
+    setPublicWorlds(otherWorlds);
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
       console.warn('Supabase not configured. Auth skipped.');
       setIsAuthenticated(false);
+      const cachedWorlds = listSavedWorlds();
+      setWorlds(cachedWorlds);
+      applyLocalHydration();
       return;
     }
 
@@ -91,7 +174,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(hasSession);
       setUserId(session?.user.id || null);
       if (hasSession) {
-        refreshWorlds();
+        refreshWorlds(true);
+      } else {
+        const cachedWorlds = listSavedWorlds();
+        setWorlds(cachedWorlds);
+        applyLocalHydration();
       }
     });
 
@@ -100,25 +187,20 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(hasSession);
       setUserId(session?.user.id || null);
       if (hasSession) {
-        refreshWorlds();
+        hasAttemptedSessionRestoreRef.current = false;
+        refreshWorlds(true);
       } else {
+        hasAttemptedSessionRestoreRef.current = false;
         setWorldId(null);
-        setWorlds([]);
-        dispatch({ type: 'RESET_STATE' });
+        setWorlds(listSavedWorlds());
+        if (!applyLocalHydration()) {
+          dispatch({ type: 'RESET_STATE' });
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  const refreshWorlds = async () => {
-    const [userWorlds, otherWorlds] = await Promise.all([
-      listUserWorlds(),
-      listPublicWorlds()
-    ]);
-    setWorlds(userWorlds);
-    setPublicWorlds(otherWorlds);
-  };
+  }, [applyLocalHydration, refreshWorlds]);
 
   const addToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -132,28 +214,60 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const buildUserManager = useCallback((managerId: string, displayName: string, district: any, teamId: string | null) => ({
+    id: managerId,
+    name: displayName,
+    district,
+    reputation: 50,
+    isNPC: false,
+    attributes: {
+      evolution: 50,
+      negotiation: 50,
+      scout: 50
+    },
+    career: {
+      titlesWon: 0,
+      totalLeagueTitles: 0,
+      totalCupTitles: 0,
+      hallOfFameEntries: 0,
+      consecutiveTitles: 0,
+      currentTeamId: teamId,
+      historyTeamIds: teamId ? [teamId] : []
+    },
+    achievements: []
+  }), []);
+
   const saveGame = useCallback(async (newState?: GameState, worldIdOverride?: string) => {
     const targetWorldId = worldIdOverride || worldId;
     if (!targetWorldId) return;
+    const stateToSave = newState || state;
+    saveLocalGameState(stateToSave, targetWorldId, userId || 'local', {
+      isLocalOnly: true
+    });
+    setWorlds(listSavedWorlds());
     setIsSyncing(true);
     try {
-      const stateToSave = newState || state;
       console.log('GM: Persistindo estado no Supabase...', {
         world_id: targetWorldId,
         currentDate: stateToSave.world.currentDate,
         matchesCount: Object.values(stateToSave.world.leagues).reduce((acc, l: any) => acc + (l.matches?.length || 0), 0)
       });
       await saveGameState(stateToSave, targetWorldId);
+      saveLocalGameState(stateToSave, targetWorldId, userId || 'local', {
+        isLocalOnly: false
+      });
+      setWorlds(listSavedWorlds());
       console.log('Game saved successfully');
       setIsOnline(true);
     } catch (error) {
       console.error('Failed to save game', error);
+      setWorlds(listSavedWorlds());
       setIsOnline(false);
       addToast('Erro ao salvar progresso', 'error');
     } finally {
       setIsSyncing(false);
     }
-  }, [worldId, state, addToast]);
+  }, [worldId, state, addToast, isAuthenticated, userId]);
 
   const joinGame = useCallback(async (targetWorldId: string) => {
     setIsSyncing(true);
@@ -225,6 +339,238 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [worldId, setState, addToast]);
 
+  const submitClubApplication = useCallback(async (teamId: string, managerName?: string) => {
+    if (!worldId || !userId) {
+      addToast('Entre em um mundo antes de negociar com um clube', 'warning');
+      return;
+    }
+
+    const team = state.teams[teamId];
+    if (!team || !team.id.startsWith('t_')) {
+      addToast('Clube indisponivel para proposta.', 'error');
+      return;
+    }
+
+    const activeOffers = state.world.clubOffers || [];
+    const alreadyOpen = activeOffers.some(offer =>
+      offer.targetUserId === userId &&
+      offer.teamId === teamId &&
+      (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'WAITING_NEXT_SEASON')
+    );
+
+    if (alreadyOpen) {
+      addToast('Ja existe uma negociacao aberta com esse clube.', 'info');
+      return;
+    }
+
+    const teamManager = team.managerId ? state.managers[team.managerId] : null;
+    if (teamManager && teamManager.isNPC === false) {
+      addToast('Esse clube esta sob comando humano.', 'warning');
+      return;
+    }
+
+    const existingManagerName = state.userManagerId ? state.managers[state.userManagerId]?.name : null;
+    const managerLabel = managerName?.trim() || existingManagerName || 'Manager Elite';
+    const joinOpen = isJoinWindowOpen(state);
+
+    const nextState = JSON.parse(JSON.stringify(state)) as GameState;
+    nextState.world.clubOffers = nextState.world.clubOffers || [];
+    nextState.world.clubOffers.unshift({
+      id: `application_${Date.now()}_${teamId}`,
+      teamId,
+      targetUserId: userId,
+      managerId: nextState.userManagerId || null,
+      managerName: managerLabel,
+      source: 'APPLICATION',
+      status: joinOpen ? 'PENDING' : 'WAITING_NEXT_SEASON',
+      createdAt: nextState.world.currentDate,
+      availableOnDay: joinOpen ? (nextState.world.currentDay || 0) + 1 : -1,
+      note: joinOpen
+        ? 'Pedido enviado. Resposta prevista para o proximo dia.'
+        : 'Voce entrou na fila da proxima temporada.'
+    });
+    nextState.notifications.unshift({
+      id: `notify_application_${Date.now()}`,
+      date: nextState.world.currentDate,
+      title: joinOpen ? 'Proposta enviada' : 'Fila aberta',
+      message: joinOpen
+        ? `Seu staff entrou em contato com ${team.name}. A resposta so sai a partir do proximo dia.`
+        : `${team.name} ficou marcado como destino desejado para a proxima temporada.`,
+      type: 'info',
+      read: false
+    });
+    addNews(
+      nextState,
+      joinOpen ? 'TECNICO SE COLOCOU NO MERCADO' : 'FILA DA PROXIMA TEMPORADA',
+      joinOpen
+        ? `${managerLabel} enviou proposta para ${team.name} e agora aguarda a resposta no timing do mundo.`
+        : `${managerLabel} marcou ${team.name} como destino desejado para a proxima temporada.`,
+      'SYSTEM',
+      1,
+      {
+        kind: 'TEAM_PROFILE',
+        season: nextState.world.currentSeason || 2050,
+        teamId: team.id
+      }
+    );
+
+    setState(nextState);
+    await saveGame(nextState);
+    addToast(
+      joinOpen
+        ? 'Proposta enviada. Nada de entrada instantanea.'
+        : 'Janela fechada. Seu nome entrou na fila da proxima temporada.',
+      'success'
+    );
+  }, [addToast, saveGame, setState, state, userId, worldId]);
+
+  const respondToClubOffer = useCallback(async (offerId: string, accept: boolean, managerName?: string) => {
+    if (!worldId || !userId) {
+      addToast('Entre em um mundo antes de responder propostas.', 'warning');
+      return;
+    }
+
+    const offer = (state.world.clubOffers || []).find(item => item.id === offerId && item.targetUserId === userId);
+    if (!offer) {
+      addToast('Proposta nao encontrada.', 'error');
+      return;
+    }
+
+    const nextState = JSON.parse(JSON.stringify(state)) as GameState;
+    const targetOffer = (nextState.world.clubOffers || []).find(item => item.id === offerId);
+    if (!targetOffer) return;
+
+    if (!accept) {
+      targetOffer.status = 'REJECTED';
+      targetOffer.respondedAt = nextState.world.currentDate;
+      targetOffer.note = 'Voce recusou a proposta.';
+      addNews(
+        nextState,
+        'PROPOSTA RECUSADA',
+        `${nextState.managers[nextState.userManagerId || userId]?.name || 'O tecnico'} recusou a conversa com ${nextState.teams[targetOffer.teamId]?.name || 'o clube'}.`,
+        'SYSTEM',
+        1,
+        {
+          kind: 'TEAM_PROFILE',
+          season: nextState.world.currentSeason || 2050,
+          teamId: targetOffer.teamId
+        }
+      );
+      setState(nextState);
+      await saveGame(nextState);
+      addToast('Proposta recusada.', 'info');
+      return;
+    }
+
+    if (targetOffer.status !== 'ACCEPTED') {
+      addToast('Essa proposta ainda nao pode ser assinada.', 'warning');
+      return;
+    }
+
+    if ((nextState.world.currentDay || 0) < targetOffer.availableOnDay) {
+      addToast('Assinatura liberada so no proximo dia.', 'warning');
+      return;
+    }
+
+    if (!isJoinWindowOpen(nextState)) {
+      addToast('A janela de entrada foi encerrada.', 'warning');
+      return;
+    }
+
+    const team = nextState.teams[targetOffer.teamId];
+    if (!team) {
+      addToast('Esse clube nao esta mais disponivel.', 'error');
+      return;
+    }
+
+    const currentTeamManager = team.managerId ? nextState.managers[team.managerId] : null;
+    if (currentTeamManager && currentTeamManager.isNPC === false && team.managerId !== nextState.userManagerId) {
+      targetOffer.status = 'EXPIRED';
+      targetOffer.respondedAt = nextState.world.currentDate;
+      targetOffer.note = 'O clube ficou indisponivel.';
+      setState(nextState);
+      await saveGame(nextState);
+      addToast('O clube ficou indisponivel.', 'warning');
+      return;
+    }
+
+    const managerId = nextState.userManagerId || userId;
+    const displayName =
+      managerName?.trim() ||
+      nextState.managers[managerId]?.name ||
+      targetOffer.managerName ||
+      'Manager Elite';
+
+    if (!nextState.managers[managerId]) {
+      nextState.managers[managerId] = buildUserManager(managerId, displayName, team.district, team.id) as any;
+    }
+
+    if (team.managerId && nextState.managers[team.managerId]) {
+      nextState.managers[team.managerId] = {
+        ...nextState.managers[team.managerId],
+        career: {
+          ...nextState.managers[team.managerId].career,
+          currentTeamId: null
+        }
+      };
+    }
+
+    nextState.managers[managerId] = {
+      ...nextState.managers[managerId],
+      name: displayName,
+      district: team.district,
+      isNPC: false,
+      career: {
+        ...nextState.managers[managerId].career,
+        currentTeamId: team.id,
+        historyTeamIds: Array.from(new Set([...(nextState.managers[managerId].career.historyTeamIds || []), team.id]))
+      }
+    };
+
+    nextState.teams[team.id] = {
+      ...team,
+      managerId
+    };
+    nextState.userManagerId = managerId;
+    nextState.userTeamId = team.id;
+    targetOffer.status = 'SIGNED';
+    targetOffer.respondedAt = nextState.world.currentDate;
+    targetOffer.note = 'Contrato assinado.';
+
+    (nextState.world.clubOffers || []).forEach(item => {
+      if (item.id !== targetOffer.id && item.targetUserId === userId && (item.status === 'PENDING' || item.status === 'ACCEPTED')) {
+        item.status = 'EXPIRED';
+        item.respondedAt = nextState.world.currentDate;
+        item.note = 'Outra assinatura foi concluida.';
+      }
+    });
+
+    nextState.notifications.unshift({
+      id: `notify_sign_${Date.now()}`,
+      date: nextState.world.currentDate,
+      title: 'Contrato assinado',
+      message: `${team.name} agora esta sob seu comando.`,
+      type: 'success',
+      read: false
+    });
+    addNews(
+      nextState,
+      'NOVO TECNICO NO COMANDO',
+      `${displayName} assumiu o ${team.name}. O clube segue com a base atual e entra em nova fase.`,
+      'SYSTEM',
+      2,
+      {
+        kind: 'TEAM_PROFILE',
+        season: nextState.world.currentSeason || 2050,
+        teamId: team.id
+      }
+    );
+
+    setState(nextState);
+    await saveGame(nextState);
+    addToast(`Contrato assinado com ${team.name}.`, 'success');
+  }, [addToast, buildUserManager, saveGame, setState, state, userId, worldId]);
+
   const resignFromTeam = useCallback(async () => {
     if (!worldId) {
       addToast('Entre em um mundo antes de sair do clube', 'warning');
@@ -258,28 +604,37 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsSyncing(true);
     try {
       const loadedState = await loadGameState(idToLoad);
-      if (loadedState) {
+      const localEnvelope = loadStoredWorldEnvelope(idToLoad);
+      const remoteWorldSummary = worlds.find(world => world.id === idToLoad) || null;
+      const shouldPreferLocalCache = !!(
+        localEnvelope &&
+        (!remoteWorldSummary ||
+          new Date(localEnvelope.updatedAt).getTime() > new Date(remoteWorldSummary.updatedAt).getTime())
+      );
+      const preferredState = shouldPreferLocalCache ? localEnvelope?.state || null : loadedState;
+
+      if (preferredState) {
         // Deep comparison to avoid unnecessary state updates and potential world regeneration
         // We compare critical parts of the state: world clock/status and key counts
         const hasSubstantialChanges = (
-          loadedState.world.currentDate !== state.world.currentDate ||
-          loadedState.world.status !== state.world.status ||
-          Object.keys(loadedState.teams).length !== Object.keys(state.teams).length ||
-          Object.keys(loadedState.players).length !== Object.keys(state.players).length
-        );
+            preferredState.world.currentDate !== state.world.currentDate ||
+            preferredState.world.status !== state.world.status ||
+            Object.keys(preferredState.teams).length !== Object.keys(state.teams).length ||
+            Object.keys(preferredState.players).length !== Object.keys(state.players).length
+          );
 
-        if (!hasSubstantialChanges && !targetWorldId) {
-          console.log('GameContext: Loaded state matches local state, skipping update.');
-          return;
-        }
+          if (!hasSubstantialChanges && !targetWorldId) {
+            console.log('GameContext: Loaded state matches local state, skipping update.');
+            return;
+          }
 
-        // Migration for legacy saves missing training state
-        if (!loadedState.training) {
-          console.log('GameContext: Legacy save missing training state, patching...');
-          loadedState.training = {
-            chemistryBoostLastUsed: undefined,
-            playstyleTraining: {
-              currentStyle: null,
+          // Migration for legacy saves missing training state
+          if (!preferredState.training) {
+            console.log('GameContext: Legacy save missing training state, patching...');
+            preferredState.training = {
+              chemistryBoostLastUsed: undefined,
+              playstyleTraining: {
+                currentStyle: null,
               understanding: {
                 'Blitzkrieg': 0,
                 'Tiki-Taka': 0,
@@ -302,14 +657,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               stabilizationSlot: null
             }
           };
-        }
+          }
 
-        // Ensure playstyleTraining exists
-        if (!loadedState.training.playstyleTraining) {
-          loadedState.training.playstyleTraining = {
-            currentStyle: null,
-            understanding: {
-              'Blitzkrieg': 0,
+          // Ensure playstyleTraining exists
+          if (!preferredState.training.playstyleTraining) {
+            preferredState.training.playstyleTraining = {
+              currentStyle: null,
+              understanding: {
+                'Blitzkrieg': 0,
               'Tiki-Taka': 0,
               'Retranca Armada': 0,
               'Motor Lento': 0,
@@ -319,43 +674,69 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               'Vertical': 0
             }
           };
-        }
+          }
 
-        // Ensure cardLaboratory exists
-        if (!loadedState.training.cardLaboratory) {
-          loadedState.training.cardLaboratory = {
-            slots: [
-              { cardId: null, finishTime: null },
-              { cardId: null, finishTime: null }
+          // Ensure cardLaboratory exists
+          if (!preferredState.training.cardLaboratory) {
+            preferredState.training.cardLaboratory = {
+              slots: [
+                { cardId: null, finishTime: null },
+                { cardId: null, finishTime: null }
             ]
           };
-        }
+          }
 
-        // Ensure individualFocus exists
-        if (!loadedState.training.individualFocus) {
-          loadedState.training.individualFocus = {
-            evolutionSlot: null,
-            stabilizationSlot: null
-          };
-        }
+          // Ensure individualFocus exists
+          if (!preferredState.training.individualFocus) {
+            preferredState.training.individualFocus = {
+              evolutionSlot: null,
+              stabilizationSlot: null
+            };
+          }
 
-        setIsInitialLoad(true);
-        setState(loadedState);
-        setWorldId(idToLoad);
-        console.log('Game loaded successfully');
-        setIsOnline(true);
-        addToast('Mundo carregado com sucesso', 'success');
+          setIsInitialLoad(true);
+          setState(preferredState);
+          setWorldId(idToLoad);
+          console.log('Game loaded successfully');
+          setIsOnline(true);
+          addToast(
+            shouldPreferLocalCache
+              ? 'Cache local mais recente restaurado'
+              : 'Mundo carregado com sucesso',
+            shouldPreferLocalCache ? 'info' : 'success'
+          );
+        } else if (applyLocalHydration(idToLoad)) {
+          addToast('Mundo carregado do cache local', 'info');
+        } else {
+        addToast('Nenhum save encontrado para este mundo', 'error');
       }
     } catch (error) {
       console.error('Failed to load game', error);
-      setIsOnline(false);
-      addToast('Erro ao carregar mundo', 'error');
+      if (applyLocalHydration(idToLoad)) {
+        addToast('Supabase indisponivel. Cache local restaurado.', 'warning');
+      } else {
+        setIsOnline(false);
+        addToast('Erro ao carregar mundo', 'error');
+      }
     } finally {
       setIsSyncing(false);
       // Small delay to prevent immediate auto-save on load
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
-  }, [worldId, setState, addToast]);
+  }, [worldId, worlds, setState, addToast, state.world.currentDate, state.world.status, state.teams, state.players, applyLocalHydration]);
+
+  useEffect(() => {
+    if (!isAuthenticated || worldId || hasAttemptedSessionRestoreRef.current) return;
+
+    const preferredWorldId = getLastSavedWorldId();
+    if (!preferredWorldId) {
+      hasAttemptedSessionRestoreRef.current = true;
+      return;
+    }
+
+    hasAttemptedSessionRestoreRef.current = true;
+    loadGame(preferredWorldId);
+  }, [isAuthenticated, worldId, loadGame]);
 
   // Auto-save logic
   useEffect(() => {
@@ -396,6 +777,29 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => clearInterval(periodicTimer);
   }, [worldId, isInitialLoad, isPaused, saveGame]);
 
+  useEffect(() => {
+    if (isInitialLoad || !worldId) return;
+
+    const flushWorldState = () => {
+      console.log('GameContext: Background save triggered...');
+      saveGame();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushWorldState();
+      }
+    };
+
+    window.addEventListener('pagehide', flushWorldState);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', flushWorldState);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [worldId, isInitialLoad, saveGame]);
+
   // Real-time Clock Logic
   useEffect(() => {
     if (isPaused || isInitialLoad || !worldId) return;
@@ -426,8 +830,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Only the world creator drives the clock
         if (!prev.isCreator) return prev;
 
-        // --- Map real time to 2050 game world ---
-        const gameNow = getGameDate2050();
+        // --- Map accelerated real time to 2050 game world ---
+        const gameNow = getAcceleratedGameDate(prev.world.currentDate);
         const kickoffScheduled = prev.world.currentDay === -1 && !!prev.world.startScheduledAt;
         const kickoffReady = kickoffScheduled && gameNow >= new Date(prev.world.startScheduledAt!);
 
@@ -457,6 +861,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             currentDate: gameNow.toISOString(),
             seasonStartReal: seasonStartReal,
             currentDay: kickoffReady ? 0 : prev.world.currentDay,
+            status: kickoffReady ? 'ACTIVE' as const : prev.world.status,
             startScheduledAt: kickoffReady ? null : prev.world.startScheduledAt
           }
         };
@@ -483,7 +888,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       clearInterval(interval);
     };
-  }, [isPaused, isInitialLoad, worldId, setState, state.isCreator, state.world.currentDate, state.world.status, state.teams]);
+  }, [isPaused, isInitialLoad, worldId, setState, getAcceleratedGameDate, state.isCreator, state.world.currentDate, state.world.status, state.teams]);
 
   const togglePause = useCallback(() => setIsPaused(prev => !prev), []);
 
@@ -493,39 +898,46 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(false);
       setUserId(null);
       setWorldId(null);
-      setWorlds([]);
-      dispatch({ type: 'RESET_STATE' });
+      setWorlds(listSavedWorlds());
+      if (!applyLocalHydration()) {
+        dispatch({ type: 'RESET_STATE' });
+      }
       addToast('Sistema desconectado', 'info');
     } catch (error) {
       console.error('Logout error:', error);
       addToast('Erro ao sair do sistema', 'error');
     }
-  }, [addToast]);
+  }, [addToast, applyLocalHydration]);
 
   const leaveWorld = useCallback(() => {
     setWorldId(null);
-    dispatch({ type: 'RESET_STATE' });
+    const fallbackWorldId = getLastSavedWorldId();
+    if (!fallbackWorldId || !applyLocalHydration(fallbackWorldId)) {
+      dispatch({ type: 'RESET_STATE' });
+    }
     addToast('Saindo do mundo...', 'info');
-  }, [addToast]);
+  }, [addToast, applyLocalHydration]);
 
   const deleteWorld = useCallback(async (id: string) => {
     try {
+      deleteLocalWorldState(id);
       const success = await deleteWorldFromSupabase(id);
       if (success) {
         addToast('Mundo deletado com sucesso', 'success');
         await refreshWorlds();
       } else {
-        addToast('Erro ao deletar mundo', 'error');
+        addToast('Save local removido. Falha ao deletar mundo remoto.', 'warning');
       }
     } catch (error) {
       console.error('Delete world error:', error);
-      addToast('Erro ao deletar mundo', 'error');
+      addToast('Save local removido. Falha ao deletar mundo remoto.', 'warning');
+      await refreshWorlds();
     }
-  }, [addToast]);
+  }, [addToast, refreshWorlds]);
 
   const stateValue = useMemo(() => ({
-    state, isSyncing, isOnline, isAuthenticated, userId, worldId, worlds, publicWorlds, toasts, isPaused, timeSpeed
-  }), [state, isSyncing, isOnline, isAuthenticated, userId, worldId, worlds, publicWorlds, toasts, isPaused, timeSpeed]);
+    state, isSyncing, isOnline, isAuthenticated, userId, worldId, worlds, publicWorlds, toasts, isPaused
+  }), [state, isSyncing, isOnline, isAuthenticated, userId, worldId, worlds, publicWorlds, toasts, isPaused]);
 
   const dispatchValue = useMemo(() => ({
     setState, saveGame,
@@ -533,9 +945,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     joinGame,
     joinGameByCode,
     claimTeam,
+    submitClubApplication,
+    respondToClubOffer,
     resignFromTeam,
-    setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause, setTimeSpeed
-  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause, setTimeSpeed]);
+    setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause
+  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, submitClubApplication, respondToClubOffer, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause]);
 
   return (
     <GameDispatchContext.Provider value={dispatchValue}>

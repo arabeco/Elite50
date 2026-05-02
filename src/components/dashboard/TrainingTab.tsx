@@ -72,6 +72,21 @@ export const TrainingTab = (props: any) => {
   const squadPlayers = userTeam ? userTeam.squad.map(id => state.players[id]).filter(p => !!p) : [];
   const legacyTrainingPlayers = squadPlayers.filter(player => player.badges.slot4 || !player.badges.trainingSlot4);
   const activeLegacyTraining = squadPlayers.find(player => player.badges.trainingSlot4);
+  const currentStyle = state.training.playstyleTraining?.currentStyle;
+  const currentUnderstanding = currentStyle
+    ? (state.training.playstyleTraining?.understanding[currentStyle] || 0)
+    : 0;
+  const evolutionImpact = evoPlayer ? '+50% no ganho quando for evoluir bem' : 'Escolha um atleta para acelerar';
+  const stabilizationImpact = stabPlayer ? '-50% das perdas em ma fase' : 'Escolha um atleta para segurar oscilacao';
+  const styleImpactLabel = currentStyle
+    ? currentUnderstanding >= 80
+      ? 'Identidade forte e leitura quase automatica'
+      : currentUnderstanding >= 55
+        ? 'Base coletiva firme, mas ainda ajustando timing'
+        : currentUnderstanding >= 30
+          ? 'Ideia em construcao, com execucao irregular'
+          : 'Estilo novo ainda pesa mais na intencao do que na execucao'
+    : 'Sem estilo ativo, o time responde so ao tatico bruto';
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-md mx-auto pb-20 px-2 sm:px-0">
@@ -144,6 +159,13 @@ export const TrainingTab = (props: any) => {
                       />
                     </div>
                   </div>
+
+                  <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-left">
+                    <div className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-cyan-300">Impacto em jogo</div>
+                    <div className="mt-1 text-[10px] sm:text-xs font-bold leading-relaxed text-white/75">
+                      {styleImpactLabel}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-[8px] sm:text-[9px] text-cyan-400/60 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] animate-pulse py-4">
@@ -182,6 +204,7 @@ export const TrainingTab = (props: any) => {
                   <div className="space-y-0.5 sm:space-y-1">
                     <div className="text-[10px] sm:text-sm font-black text-white uppercase italic tracking-tighter truncate">{evoPlayer.nickname}</div>
                     <div className="text-[8px] sm:text-[10px] font-bold text-white/20 uppercase tracking-widest">{evoPlayer.totalRating} pts</div>
+                    <div className="pt-1 text-[7px] sm:text-[8px] font-bold text-emerald-300/80 uppercase tracking-widest">{evolutionImpact}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-1.5 sm:gap-2 py-1 sm:py-2">
@@ -189,6 +212,7 @@ export const TrainingTab = (props: any) => {
                       <Users size={window.innerWidth < 640 ? 10 : 14} />
                     </div>
                     <span className="text-[7px] sm:text-[8px] text-white/10 font-black uppercase tracking-widest">Vazio</span>
+                    <span className="text-[7px] sm:text-[8px] text-white/20 font-bold uppercase tracking-widest">{evolutionImpact}</span>
                   </div>
                 )}
               </div>
@@ -206,6 +230,7 @@ export const TrainingTab = (props: any) => {
                   <div className="space-y-0.5 sm:space-y-1">
                     <div className="text-[10px] sm:text-sm font-black text-white uppercase italic tracking-tighter truncate">{stabPlayer.nickname}</div>
                     <div className="text-[8px] sm:text-[10px] font-bold text-white/20 uppercase tracking-widest">{stabPlayer.totalRating} pts</div>
+                    <div className="pt-1 text-[7px] sm:text-[8px] font-bold text-amber-300/80 uppercase tracking-widest">{stabilizationImpact}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-1.5 sm:gap-2 py-1 sm:py-2">
@@ -213,6 +238,7 @@ export const TrainingTab = (props: any) => {
                       <Users size={window.innerWidth < 640 ? 10 : 14} />
                     </div>
                     <span className="text-[7px] sm:text-[8px] text-white/10 font-black uppercase tracking-widest">Vazio</span>
+                    <span className="text-[7px] sm:text-[8px] text-white/20 font-bold uppercase tracking-widest">{stabilizationImpact}</span>
                   </div>
                 )}
               </div>
@@ -299,6 +325,32 @@ export const TrainingTab = (props: any) => {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-[1rem] border border-cyan-500/20 bg-cyan-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-cyan-300">Estilo</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white">
+            {currentStyle || 'Livre'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+            {currentStyle ? `${currentUnderstanding}% entendido` : 'Sem treino ativo'}
+          </div>
+        </div>
+        <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-emerald-300">Evolucao</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white truncate">
+            {evoPlayer?.nickname || 'Vazio'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">Ganho forte quando encaixa</div>
+        </div>
+        <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-amber-300">Estavel</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white truncate">
+            {stabPlayer?.nickname || 'Vazio'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">Segura perdas em rodada ruim</div>
         </div>
       </section>
 

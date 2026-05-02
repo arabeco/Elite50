@@ -13,9 +13,10 @@ import {
   MAX_TEAM_POWER_TIER_1,
   MAX_TEAM_POWER_TIER_2,
   MAX_TEAM_POWER_TIER_3,
+  MIDSEASON_JOIN_MAX_ROUND,
+  OFFSEASON_DAYS,
   SEASON_ROUNDS,
   ELITE_CUP_ROUNDS,
-  DISTRICT_CUP_ROUNDS,
   SEASON_DAYS,
   MATCH_INTERVAL_DAYS,
   TOTAL_ROUNDS,
@@ -42,15 +43,12 @@ export const getSeasonDayNumber = (dateStr: string, seasonStartRealStr?: string 
 const isSeasonMatchDay = (dayNumber: number) => {
   if (dayNumber < 3) return false;
 
-  if (dayNumber <= 29) return dayNumber % 2 !== 0;
+  const leagueLastDay = 2 + (SEASON_ROUNDS * MATCH_INTERVAL_DAYS) - 1;
+  if (dayNumber <= leagueLastDay) return dayNumber % 2 !== 0;
 
-  // Elite Cup (Oitavas, Quartas, Semis, Final - with 1 rest day in between)
-  // Day 30, 32, 34, 36
-  if (dayNumber >= 30 && dayNumber <= 36) return (dayNumber - 30) % 2 === 0;
-
-  // District Cup (Rodada 1, 2, 3, Final - consecutive)
-  // Day 37, 38, 39, 40
-  if (dayNumber >= 37 && dayNumber <= 40) return true;
+  const eliteCupStartDay = leagueLastDay + 1;
+  const eliteCupEndDay = eliteCupStartDay + ELITE_CUP_ROUNDS - 1;
+  if (dayNumber >= eliteCupStartDay && dayNumber <= eliteCupEndDay) return true;
 
   return false;
 };
@@ -58,24 +56,186 @@ const isSeasonMatchDay = (dayNumber: number) => {
 const getRoundFromDay = (dayNumber: number) => {
   if (dayNumber < 3) return 0;
 
-  if (dayNumber <= 29) {
+  const leagueLastDay = 2 + (SEASON_ROUNDS * MATCH_INTERVAL_DAYS) - 1;
+  if (dayNumber <= leagueLastDay) {
     if (dayNumber % 2 !== 0) return Math.floor(dayNumber / 2);
     else return 0; // Rest days between league matches
   }
 
-  if (dayNumber >= 30 && dayNumber <= 36) {
-    if ((dayNumber - 30) % 2 === 0) {
-      return 14 + ((dayNumber - 30) / 2) + 1;
-    } else {
-      return 0; // Rest day during Elite Cup
-    }
-  }
-
-  if (dayNumber >= 37 && dayNumber <= 40) {
-    return 18 + (dayNumber - 36);
+  const eliteCupStartDay = leagueLastDay + 1;
+  const eliteCupEndDay = eliteCupStartDay + ELITE_CUP_ROUNDS - 1;
+  if (dayNumber >= eliteCupStartDay && dayNumber <= eliteCupEndDay) {
+    return SEASON_ROUNDS + (dayNumber - eliteCupStartDay) + 1;
   }
 
   return 0; // No round
+};
+
+export const isJoinWindowOpen = (state: GameState) => {
+  if ((state.world.currentDay || 0) < 3) return true;
+  if (state.world.phase === 'OFFSEASON') return true;
+  if (state.world.phase === 'REGULAR_SEASON' && (state.world.currentRound || 0) <= MIDSEASON_JOIN_MAX_ROUND) return true;
+  return false;
+};
+
+const pushManagerMarketNotification = (
+  state: GameState,
+  title: string,
+  message: string,
+  type: GameNotification['type'] = 'info'
+) => {
+  state.notifications.unshift({
+    id: `manager_market_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    date: state.world.currentDate,
+    title,
+    message,
+    type,
+    read: false
+  });
+};
+
+const getStandingPosition = (state: GameState, teamId: string) => {
+  for (const league of Object.values(state.world.leagues || {})) {
+    const standings = league.standings || [];
+    const index = standings.findIndex(row => row.teamId === teamId);
+    if (index >= 0) return index + 1;
+  }
+  return 99;
+};
+
+const resolveClubOfferMarket = (state: GameState) => {
+  const userId = state.userId;
+  if (!userId) return;
+
+  const currentDay = state.world.currentDay || 0;
+  const clubOffers = state.world.clubOffers || (state.world.clubOffers = []);
+  const userManager = state.userManagerId ? state.managers[state.userManagerId] : null;
+  const unemployed = !state.userTeamId && (!userManager || !userManager.career.currentTeamId);
+
+  clubOffers.forEach(offer => {
+    if (offer.targetUserId !== userId) return;
+
+    if (
+      offer.status === 'WAITING_NEXT_SEASON' &&
+      (state.world.phase === 'OFFSEASON' || currentDay < 3)
+    ) {
+      offer.status = 'PENDING';
+      offer.availableOnDay = currentDay + 1;
+      offer.note = 'A fila andou. A diretoria responde a partir do proximo dia.';
+      pushManagerMarketNotification(
+        state,
+        'Fila liberada',
+        `${state.teams[offer.teamId]?.name || 'Um clube'} abriu conversa para a proxima temporada.`,
+        'info'
+      );
+      const queuedTeam = state.teams[offer.teamId];
+      if (queuedTeam) {
+        newsHeadlines.managerQueueOpened(state, queuedTeam);
+      }
+    }
+
+    if (offer.status === 'PENDING' && offer.source === 'APPLICATION' && offer.availableOnDay <= currentDay) {
+      const team = state.teams[offer.teamId];
+      const teamManager = team?.managerId ? state.managers[team.managerId] : null;
+      const teamBlocked = !team || (teamManager && teamManager.isNPC === false);
+
+      if (teamBlocked) {
+        offer.status = 'REJECTED';
+        offer.respondedAt = state.world.currentDate;
+        offer.note = 'Clube indisponivel no momento.';
+        pushManagerMarketNotification(state, 'Resposta de proposta', 'Seu pedido nao pode avancar porque o clube ficou indisponivel.', 'warning');
+        newsHeadlines.managerClubUnavailable(state, team?.name || 'O clube');
+        return;
+      }
+
+      const position = getStandingPosition(state, offer.teamId);
+      const reputation = userManager?.reputation || 50;
+      const vacancyBonus = !team?.managerId ? 0.22 : 0;
+      const pressureBonus = position >= 7 ? 0.16 : position >= 5 ? 0.08 : -0.04;
+      const acceptanceChance = Math.max(0.22, Math.min(0.9, 0.5 + vacancyBonus + pressureBonus + ((reputation - 50) / 200)));
+
+      if (Math.random() <= acceptanceChance) {
+        offer.status = 'ACCEPTED';
+        offer.respondedAt = state.world.currentDate;
+        offer.note = 'Contrato liberado. Assinatura disponivel.';
+        pushManagerMarketNotification(state, 'Proposta aceita', `${team.name} topou conversar. A assinatura pode ser feita agora.`, 'success');
+        newsHeadlines.managerApplicationAccepted(state, team);
+      } else {
+        offer.status = 'REJECTED';
+        offer.respondedAt = state.world.currentDate;
+        offer.note = 'A diretoria optou por outro caminho.';
+        pushManagerMarketNotification(state, 'Proposta recusada', `${team?.name || 'O clube'} recusou sua proposta desta vez.`, 'warning');
+        newsHeadlines.managerApplicationRejected(state, team?.name || 'O clube');
+      }
+    }
+
+    if (offer.status === 'ACCEPTED' && currentDay > offer.availableOnDay + 2) {
+      offer.status = 'EXPIRED';
+      offer.respondedAt = state.world.currentDate;
+      offer.note = 'A proposta perdeu a validade.';
+    }
+  });
+
+  if (!isJoinWindowOpen(state)) {
+    clubOffers.forEach(offer => {
+      if (offer.targetUserId !== userId) return;
+      if (offer.status === 'PENDING' || offer.status === 'ACCEPTED') {
+        offer.status = 'EXPIRED';
+        offer.respondedAt = state.world.currentDate;
+        offer.note = 'A janela de entrada foi encerrada.';
+      }
+    });
+    return;
+  }
+
+  const hasActiveOffer = clubOffers.some(offer =>
+    offer.targetUserId === userId &&
+    (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'WAITING_NEXT_SEASON')
+  );
+
+  if (!unemployed || hasActiveOffer) return;
+
+  const eligibleTeams = Object.values(state.teams)
+    .filter(team => team.id.startsWith('t_'))
+    .filter(team => {
+      const teamManager = team.managerId ? state.managers[team.managerId] : null;
+      return !teamManager || teamManager.isNPC !== false;
+    })
+    .map(team => ({
+      team,
+      position: getStandingPosition(state, team.id),
+      managerless: !team.managerId
+    }))
+    .sort((a, b) => {
+      if (a.managerless !== b.managerless) return a.managerless ? -1 : 1;
+      return b.position - a.position;
+    });
+
+  const inviteTarget = eligibleTeams[0]?.team;
+  if (!inviteTarget) return;
+
+  if (Math.random() > 0.65) return;
+
+  clubOffers.unshift({
+    id: `club_offer_${Date.now()}_${inviteTarget.id}`,
+    teamId: inviteTarget.id,
+    targetUserId: userId,
+    managerId: state.userManagerId || null,
+    managerName: userManager?.name || null,
+    source: 'INVITE',
+    status: 'ACCEPTED',
+    createdAt: state.world.currentDate,
+    availableOnDay: currentDay + 1,
+    note: 'A diretoria quer resposta a partir do proximo dia.'
+  });
+
+  pushManagerMarketNotification(
+    state,
+    'Contato de clube',
+    `${inviteTarget.name} iniciou conversas. A proposta fica assinavel no proximo dia.`,
+    'info'
+  );
+  newsHeadlines.managerInviteReceived(state, inviteTarget);
 };
 
 const sortStandings = (standings: LeagueTeamStats[]) =>
@@ -85,6 +245,37 @@ const sortStandings = (standings: LeagueTeamStats[]) =>
     const gdB = b.goalsFor - b.goalsAgainst;
     return gdB - gdA;
   });
+
+const ensureRecoveryFreeAgentPool = (state: GameState) => {
+  if (!isJoinWindowOpen(state)) return;
+
+  const goodFreeAgents = Object.values(state.players).filter(player =>
+    !player.contract.teamId &&
+    player.district !== 'EXILADO' &&
+    player.totalRating >= 620 &&
+    player.totalRating <= 860
+  );
+
+  const targetCount = 36;
+  if (goodFreeAgents.length >= targetCount) return;
+
+  const districts: District[] = ['NORTE', 'SUL', 'LESTE', 'OESTE'];
+  const roles: PlayerRole[] = ['GOL', 'ZAG', 'MEI', 'ATA'];
+  const needed = targetCount - goodFreeAgents.length;
+  const season = state.world.currentSeason || 2050;
+
+  for (let i = 0; i < needed; i++) {
+    const role = roles[i % roles.length];
+    const district = districts[(i + season) % districts.length];
+    const rating = 640 + ((i * 37 + season) % 190);
+    const id = `p_recovery_${season}_${state.world.currentRound || 0}_${i}_${Object.keys(state.players).length}`;
+    if (state.players[id]) continue;
+    const player = generatePlayer(id, district, rating, role);
+    player.contract.teamId = null;
+    player.satisfaction = 55;
+    state.players[id] = player;
+  }
+};
 
 const getLeagueColorForDistrict = (district: District): Team['league'] => {
   switch (district) {
@@ -197,16 +388,16 @@ export const applySafetyNet = (state: GameState, teamId: string) => {
       if (addedPlayers >= missingPlayers) break;
       team.squad.push(agent.id);
       state.players[agent.id].contract.teamId = team.id;
-      state.players[agent.id].totalRating = SAFETY_NET_FREE_AGENT_RATING;
-      if (state.players[agent.id].potential < SAFETY_NET_FREE_AGENT_RATING) {
-        state.players[agent.id].potential = SAFETY_NET_FREE_AGENT_RATING;
+      state.players[agent.id].totalRating = Math.max(state.players[agent.id].totalRating, SAFETY_NET_FREE_AGENT_RATING);
+      if (state.players[agent.id].potential < state.players[agent.id].totalRating) {
+        state.players[agent.id].potential = state.players[agent.id].totalRating;
       }
       addedPlayers++;
     }
   }
 
   if (addedPlayers > 0) {
-    const message = `Piso de seguranÃ§a ativado. ${addedPlayers} jogadores recrutados para o elenco.`;
+    const message = `Piso de segurança ativado. ${addedPlayers} jogadores recrutados para o elenco.`;
     const notification: GameNotification = {
       id: `n_${Date.now()}_safetynet_${team.id}`,
       date: state.world.currentDate,
@@ -311,16 +502,16 @@ const updateSinglePlayerEvolution = (state: GameState, player: Player, result: M
       const teamWon = isHome ? result.homeScore > result.awayScore : result.awayScore > result.homeScore;
       const teamDraw = result.homeScore === result.awayScore;
 
-      if (teamWon) matchRating += 0.8;
-      else if (teamDraw) matchRating += 0.3;
-      else matchRating -= 0.5; // Penalty for losing even if not involved in events
+      if (teamWon) matchRating += 0.45;
+      else if (teamDraw) matchRating += 0.15;
+      else matchRating -= 0.3; // Softer penalty for low-event players
     }
   }
 
   // Ensure rating is within bounds
   matchRating = Math.max(3, Math.min(10, matchRating));
 
-  const delta = calculatePostMatchProgression(player, matchRating);
+  const delta = calculatePostMatchProgression(player, matchRating, state);
   const newRating = player.totalRating + delta;
 
   // Dynamic Power Cap Logic:
@@ -379,7 +570,7 @@ const updateSinglePlayerEvolution = (state: GameState, player: Player, result: M
 
   player.history.seasonRatingDelta = (player.history.seasonRatingDelta || 0) + delta;
 
-  // PentÃ¡gono e Form
+  // Pentágono e Form
   player.history.lastMatchRatings = [matchRating, ...(player.history.lastMatchRatings || [])].slice(0, 5);
 
   const oldGames = player.history.gamesPlayed - 1;
@@ -510,6 +701,7 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
   const awayUnderstanding = (state.userTeamId === awayTeam.id)
     ? (state.training?.playstyleTraining?.understanding[awayTeam.tactics.playStyle] || 0)
     : 70;
+  const styleReadinessMultiplier = (understanding: number) => Math.max(0.5, Math.min(1.08, 0.5 + (understanding / 170)));
 
   const hypePlayerId = state.training?.individualFocus?.evolutionSlot;
   const stabilizationPlayerId = state.training?.individualFocus?.stabilizationSlot;
@@ -529,7 +721,7 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
     width: homeTeam.tactics.width ?? 50,
     passing: homeTeam.tactics.passing ?? 50,
     slots: homeTeam.tactics.slots || [null, null, null],
-    chemistry: Math.round((homeTeam.chemistry || 50) * (0.5 + (homeUnderstanding / 200))), // Max 1.0x at 100% understanding
+    chemistry: Math.round((homeTeam.chemistry || 50) * styleReadinessMultiplier(homeUnderstanding)),
     hypePlayerId,
     stabilizationPlayerId
   };
@@ -555,7 +747,7 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
     width: awayTeam.tactics.width ?? 50,
     passing: awayTeam.tactics.passing ?? 50,
     slots: awayTeam.tactics.slots || [null, null, null],
-    chemistry: Math.round((awayTeam.chemistry || 50) * (0.5 + (awayUnderstanding / 200))),
+    chemistry: Math.round((awayTeam.chemistry || 50) * styleReadinessMultiplier(awayUnderstanding)),
     hypePlayerId,
     stabilizationPlayerId
   };
@@ -668,7 +860,7 @@ const simulateAITeamDay = (state: GameState, teamId: string) => {
           id: `ai_release_${Date.now()}_${player.id}`,
           date: state.world.currentDate,
           title: 'Jogador Dispensado pela IA',
-          message: `O ${team.name} dispensou ${player.nickname} devido a baixa satisfaÃ§Ã£o.`,
+          message: `O ${team.name} dispensou ${player.nickname} devido a baixa satisfação.`,
           type: 'transfer',
           read: false
         });
@@ -745,12 +937,12 @@ const processTrainingDay = (state: GameState) => {
             const cardTemplates: Record<string, Partial<TacticalCard>> = {
               'ataque': {
                 name: 'Ataque Total',
-                description: 'Aumenta o bÃ´nus ofensivo da equipe em 10%.',
+                description: 'Aumenta o bônus ofensivo da equipe em 10%.',
                 effect: 'Ataque +10%'
               },
               'defesa': {
                 name: 'Muralha',
-                description: 'Aumenta o bÃ´nus defensivo da equipe em 15%.',
+                description: 'Aumenta o bônus defensivo da equipe em 15%.',
                 effect: 'Defesa +15%'
               },
               'meio': {
@@ -779,8 +971,8 @@ const processTrainingDay = (state: GameState) => {
             state.notifications.unshift({
               id: `n_${Date.now()}_card_lab`,
               date: state.world.currentDate,
-              title: 'LaboratÃ³rio de Cartas',
-              message: `A pesquisa da carta "${newCard.name}" foi concluÃ­da e adicionada ao seu inventÃ¡rio!`,
+              title: 'Laboratório de Cartas',
+              message: `A pesquisa da carta "${newCard.name}" foi concluída e adicionada ao seu inventário!`,
               type: 'success',
               read: false
             });
@@ -949,7 +1141,7 @@ const processMatchDay = (state: GameState, round: number) => {
               if (p) {
                 p.achievements.push({
                   season: world.currentSeason || 2050,
-                  title: `CampeÃ£o da Liga ${league.name}`,
+                  title: `Campeão da Liga ${league.name}`,
                   type: 'Clube'
                 });
               }
@@ -963,7 +1155,7 @@ const processMatchDay = (state: GameState, round: number) => {
               m.career.totalLeagueTitles += 1;
               m.achievements.push({
                 season: world.currentSeason || 2050,
-                title: `CampeÃ£o da Liga ${league.name}`,
+                title: `Campeão da Liga ${league.name}`,
                 type: 'Clube'
               });
 
@@ -974,7 +1166,7 @@ const processMatchDay = (state: GameState, round: number) => {
                   world.news.unshift({
                     id: `n_${Date.now()}_era_zee`,
                     title: `A ERA ${m.name.toUpperCase()}!`,
-                    content: `O manager alcanÃ§a o status de Lenda apÃ³s o tricampeonato consecutivo.`,
+                    content: `O manager alcança o status de Lenda após o tricampeonato consecutivo.`,
                     type: 'CHAMPION',
                     date: world.currentDate,
                     importance: 3
@@ -1113,7 +1305,7 @@ const processMatchDay = (state: GameState, round: number) => {
         if (p) {
           p.achievements.push({
             season: world.currentSeason || 2050,
-            title: 'CampeÃ£o da Copa Elite',
+            title: 'Campeão da Copa Elite',
             type: 'Clube'
           });
         }
@@ -1127,7 +1319,7 @@ const processMatchDay = (state: GameState, round: number) => {
         m.career.totalCupTitles += 1;
         m.achievements.push({
           season: world.currentSeason || 2050,
-          title: 'CampeÃ£o da Copa Elite',
+          title: 'Campeão da Copa Elite',
           type: 'Clube'
         });
       }
@@ -1135,7 +1327,7 @@ const processMatchDay = (state: GameState, round: number) => {
       state.notifications.unshift({
         id: `n_${Date.now()}_elite_winner`,
         date: world.currentDate,
-        title: 'CampeÃ£o da Copa Elite!',
+        title: 'Campeão da Copa Elite!',
         message: `${winnerTeam.name} conquistou a Copa Elite em uma final emocionante!`,
         type: 'success',
         read: false
@@ -1224,8 +1416,8 @@ const processMatchDay = (state: GameState, round: number) => {
       state.notifications.unshift({
         id: `n_${Date.now()}_district_winner`,
         date: world.currentDate,
-        title: 'CampeÃ£o dos Distritos!',
-        message: `${winnerTeam.name} venceu a Copa dos Distritos e unificou a regiÃ£o!`,
+        title: 'Campeão dos Distritos!',
+        message: `${winnerTeam.name} venceu a Copa dos Distritos e unificou a região!`,
         type: 'success',
         read: false
       });
@@ -1235,6 +1427,81 @@ const processMatchDay = (state: GameState, round: number) => {
   // --- Generate Top 5 Movers Report ---
   // Note: we can't reliably pass prevState for buildTopMovers here easily 
   // without plumbing it through. We will just re-fetch it in `advanceGameDay` directly after this.
+};
+
+const runDistrictCupShowcase = (state: GameState) => {
+  initDistrictCup(state);
+  state.world.districtCup.teams = ['d_norte', 'd_sul', 'd_leste', 'd_oeste'];
+  state.world.districtCup.matches = [];
+  state.world.districtCup.standings = state.world.districtCup.teams.map(id => ({
+    teamId: id,
+    team: state.teams[id]?.name || id,
+    played: 0,
+    points: 0,
+    won: 0,
+    drawn: 0,
+    lost: 0,
+    goalsFor: 0,
+    goalsAgainst: 0
+  }));
+
+  const pairings = [
+    [[0, 1], [2, 3]],
+    [[0, 2], [1, 3]],
+    [[0, 3], [1, 2]]
+  ];
+
+  pairings.forEach((roundPairings, roundIndex) => {
+    roundPairings.forEach(([homeIndex, awayIndex], matchIndex) => {
+      const match: Match = {
+        id: `dc_r${roundIndex + 1}_${matchIndex}`,
+        round: roundIndex + 1,
+        homeTeamId: state.world.districtCup.teams[homeIndex],
+        awayTeamId: state.world.districtCup.teams[awayIndex],
+        homeScore: 0,
+        awayScore: 0,
+        played: false,
+        date: state.world.currentDate,
+        status: 'FINISHED'
+      };
+      simulateAndRecordMatch(state, match, state.world.districtCup.standings);
+      match.played = true;
+      state.world.districtCup.matches.push(match);
+    });
+  });
+
+  const finalists = sortStandings(state.world.districtCup.standings).slice(0, 2).map(team => team.teamId);
+  const finalMatch: Match = {
+    id: 'dc_final',
+    round: 4,
+    homeTeamId: finalists[0],
+    awayTeamId: finalists[1],
+    homeScore: 0,
+    awayScore: 0,
+    played: false,
+    date: state.world.currentDate,
+    status: 'FINISHED'
+  };
+  simulateAndRecordMatch(state, finalMatch, null);
+  finalMatch.played = true;
+
+  if (finalMatch.homeScore === finalMatch.awayScore) {
+    if (Math.random() > 0.5) finalMatch.homeScore += 1;
+    else finalMatch.awayScore += 1;
+  }
+
+  state.world.districtCup.final = finalMatch;
+  state.world.districtCup.round = 4;
+  state.world.districtCup.winnerId = finalMatch.homeScore > finalMatch.awayScore ? finalMatch.homeTeamId : finalMatch.awayTeamId;
+
+  const winnerTeam = state.teams[state.world.districtCup.winnerId];
+  if (winnerTeam) {
+    newsHeadlines.cupWinner(state, winnerTeam);
+  }
+
+  finalizeDistrictCup(state);
+  newsHeadlines.offseasonWindow(state);
+  newsHeadlines.joinWindow(state, MIDSEASON_JOIN_MAX_ROUND);
 };
 
 const processEndOfDayChecks = (state: GameState, dayNumber: number) => {
@@ -1253,7 +1520,7 @@ const processEndOfDayChecks = (state: GameState, dayNumber: number) => {
           state.notifications.unshift({
             id: `n_${Date.now()}_cure_${player.id}`,
             date: state.world.currentDate,
-            title: 'Cura ConcluÃ­da',
+            title: 'Cura Concluída',
             message: `${player.nickname} superou seu fardo e agora tem o DNA limpo!`,
             type: 'success',
             read: false
@@ -1263,7 +1530,7 @@ const processEndOfDayChecks = (state: GameState, dayNumber: number) => {
           state.notifications.unshift({
             id: `n_${Date.now()}_learn_${player.id}`,
             date: state.world.currentDate,
-            title: 'DNA EvoluÃ­do',
+            title: 'DNA Evoluído',
             message: `${player.nickname} aprendeu o trait [${trait}] em seu slot de legado!`,
             type: 'success',
             read: false
@@ -1491,7 +1758,7 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
 
     // Time Machine: Increment currentDay
     world.currentDay = (world.currentDay || 0) + 1;
-    console.log(`>>> MÃQUINA DO TEMPO: AvanÃ§ando para o Dia ${world.currentDay} <<<`);
+    console.log(`>>> MÁQUINA DO TEMPO: Avançando para o Dia ${world.currentDay} <<<`);
 
     // Sync seasonStartReal if it's Day 0/1 to ensure matches align
     if (!world.seasonStartReal || new Date(world.currentDate) < new Date(world.seasonStartReal)) {
@@ -1506,9 +1773,10 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
   }
 
   // --- Genesis Draft Phase Checks ---
-  if (world.currentDay === 1) {
+  const isGenesisSeason = (world.currentSeason || 2050) === 2050 && (state.world.history?.length || 0) === 0;
+  if (isGenesisSeason && world.currentDay === 1) {
     resolveDraftConflict(state);
-  } else if (world.currentDay === 2) {
+  } else if (isGenesisSeason && world.currentDay === 2) {
     resolveDraftConflict(state);
     autoCompleteDraft(state);
     world.status = 'ACTIVE';
@@ -1521,26 +1789,20 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
   const round = getRoundFromDay(dayNumber);
 
   // Phase Management
-  if (round >= 1 && round <= 14) world.phase = 'REGULAR_SEASON';
-  else if (round >= 15 && round <= 18) world.phase = 'ELITE_CUP';
-  else if (round >= 19 && round <= 22) {
-    if (world.phase !== 'DISTRICT_CUP') {
-      initDistrictCup(state);
-    }
-    world.phase = 'DISTRICT_CUP';
-  } else if (dayNumber >= 40) {
-    if (world.phase === 'DISTRICT_CUP') {
-      finalizeDistrictCup(state);
-    }
-  }
+  if (round >= 1 && round <= SEASON_ROUNDS) world.phase = 'REGULAR_SEASON';
+  else if (round > SEASON_ROUNDS && round <= TOTAL_ROUNDS) world.phase = 'ELITE_CUP';
+  else world.phase = 'OFFSEASON';
 
   processTrainingDay(state);
 
   // Time Machine / Daily Shift: Training progress happens at the start of the day simulation
   processEndOfDayChecks(state, dayNumber);
 
-  // Market is closed during District Cup for strategic focus
-  world.transferWindowOpen = !isMatchDay && world.phase !== 'DISTRICT_CUP';
+  // Market stays open on non-match days, especially through the short offseason window.
+  world.transferWindowOpen = !isMatchDay;
+
+  ensureRecoveryFreeAgentPool(state);
+  resolveClubOfferMarket(state);
 
   if (world.transferWindowOpen) processTransferDay(state);
 
@@ -1548,6 +1810,11 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
     const round = getRoundFromDay(dayNumber);
     world.currentRound = round;
     processMatchDay(state, round);
+
+    if (round === TOTAL_ROUNDS) {
+      runDistrictCupShowcase(state);
+      world.phase = 'OFFSEASON';
+    }
   }
 
   maybeGenerateDailyWorldEvent(state);
@@ -1578,11 +1845,9 @@ export const startNewSeason = (state: GameState): GameState => {
   // 1. Reset Leagues and Regenerate Calendars
   const leagues = { ...state.world.leagues };
 
-  // Pivot date: 1 week after the current date for the new season start
   const currentWorldDate = new Date(state.world.currentDate);
   const newSeasonStartDate = new Date(currentWorldDate);
-  newSeasonStartDate.setDate(newSeasonStartDate.getDate() + 7);
-  newSeasonStartDate.setHours(0, 0, 0, 0);
+  newSeasonStartDate.setHours(8, 0, 0, 0);
 
   const leagueDistricts: Record<string, District> = {
     norte: 'NORTE',
@@ -1653,22 +1918,36 @@ export const startNewSeason = (state: GameState): GameState => {
       ...state.world,
       currentSeason: nextSeason,
       currentDay: 0,
-      currentRound: 1,
+      currentRound: 0,
       currentDate: newSeasonStartDate.toISOString(),
       seasonStartReal: newSeasonStartDate.toISOString(),
-      status: 'LOBBY',
+      status: 'ACTIVE',
       phase: 'REGULAR_SEASON',
-      transferWindowOpen: false,
+      transferWindowOpen: true,
       offseasonDecision: undefined,
+      clubOffers: [],
       leagues,
       eliteCup: { ...state.world.eliteCup, round: 0, teams: [], winnerId: null, bracket: { round1: [], quarters: [], semis: [], final: null } },
       districtCup: { ...state.world.districtCup, round: 0, teams: [], matches: [], standings: [], winnerId: null, final: null }
     },
     lastHeadline: {
       title: `Temporada ${nextSeason} Iniciada`,
-      message: `Bem-vindos ao ano de ${nextSeason}. As lendas do passado agora enfrentam novos desafios. TraÃ§os tÃ©cnicos foram recalibrados.`
+      message: `Bem-vindos ao ano de ${nextSeason}. As lendas do passado agora enfrentam novos desafios. Traços técnicos foram recalibrados.`
     }
   };
 
+  newsHeadlines.seasonStarted(finalState, nextSeason);
+  const seasonReportNewsIndex = finalState.world.news.findIndex(news =>
+    news.action?.kind === 'SEASON_REPORT' && news.action.season === seasonReport.season
+  );
+  if (seasonReportNewsIndex > 0) {
+    const [seasonReportNews] = finalState.world.news.splice(seasonReportNewsIndex, 1);
+    finalState.world.news.unshift(seasonReportNews);
+  }
+
   return finalState;
 };
+
+
+
+

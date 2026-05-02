@@ -281,20 +281,22 @@ export function simulateMatch(
   const awayWidth = clampSlider(away.width);
   const homePassing = clampSlider(home.passing);
   const awayPassing = clampSlider(away.passing);
-  const homePressureMod = 1 + (homeIntensity - 50) / 600;
-  const awayPressureMod = 1 + (awayIntensity - 50) / 600;
-  const homeStaminaDrainMod = 1 + (homeIntensity - 50) / 150;
-  const awayStaminaDrainMod = 1 + (awayIntensity - 50) / 150;
-  const homeWidthAttackMod = 1 + (homeWidth - 50) / 500;
-  const awayWidthAttackMod = 1 + (awayWidth - 50) / 500;
-  const homeWidthDefenseMod = 1 + (50 - homeWidth) / 700;
-  const awayWidthDefenseMod = 1 + (50 - awayWidth) / 700;
-  const homeWidthMidMod = 1 - Math.abs(homeWidth - 50) / 1000;
-  const awayWidthMidMod = 1 - Math.abs(awayWidth - 50) / 1000;
-  const homePassingAttackMod = 1 + (homePassing - 50) / 650;
-  const awayPassingAttackMod = 1 + (awayPassing - 50) / 650;
-  const homePassingMidMod = 1 + (50 - homePassing) / 800;
-  const awayPassingMidMod = 1 + (50 - awayPassing) / 800;
+  const homePressureMod = 1 + (homeIntensity - 50) / 450;
+  const awayPressureMod = 1 + (awayIntensity - 50) / 450;
+  const homeStaminaDrainMod = 1 + (homeIntensity - 50) / 140;
+  const awayStaminaDrainMod = 1 + (awayIntensity - 50) / 140;
+  const homeWidthAttackMod = 1 + (homeWidth - 50) / 420;
+  const awayWidthAttackMod = 1 + (awayWidth - 50) / 420;
+  const homeWidthDefenseMod = 1 + (50 - homeWidth) / 560;
+  const awayWidthDefenseMod = 1 + (50 - awayWidth) / 560;
+  const homeWidthMidMod = 1 - Math.abs(homeWidth - 50) / 850;
+  const awayWidthMidMod = 1 - Math.abs(awayWidth - 50) / 850;
+  const homePassingAttackMod = 1 + (homePassing - 50) / 480;
+  const awayPassingAttackMod = 1 + (awayPassing - 50) / 480;
+  const homePassingMidMod = 1 + (50 - homePassing) / 650;
+  const awayPassingMidMod = 1 + (50 - awayPassing) / 650;
+  const homeChemistryLinkMod = 0.92 + (home.chemistry / 625);
+  const awayChemistryLinkMod = 0.92 + (away.chemistry / 625);
 
   // Tactical Card Effects
   const getCardEffects = (slots: (TacticalCard | null)[]) => {
@@ -354,14 +356,14 @@ export function simulateMatch(
     averageAttribute: home.attack,
     chemistry: home.chemistry,
     chaosMax: 10 + homeCards.chaos,
-    tacticalBonus: ((homeEffect.att || 1.0) * (homeCards.att || 1.0) * homeWidthAttackMod * homePassingAttackMod * homePressureMod * (1 + ((home.linePosition || 50) - 50) / 200) + (homeMentality.attBonus || 0) + (home.aggressiveness / 500)) * dnaImpact(homeAttDNA.mult)
+    tacticalBonus: ((homeEffect.att || 1.0) * (homeCards.att || 1.0) * homeWidthAttackMod * homePassingAttackMod * homePressureMod * homeChemistryLinkMod * (1 + ((home.linePosition || 50) - 50) / 165) + (homeMentality.attBonus || 0) + (home.aggressiveness / 500)) * dnaImpact(homeAttDNA.mult)
   };
   const homeDefenseSector: SectorInput = {
     ...defaultSector,
     averageAttribute: home.defense,
     chemistry: home.chemistry,
     chaosMax: 10 + homeCards.chaos,
-    tacticalBonus: ((homeEffect.def || 1.0) * (homeCards.def || 1.0) * homeWidthDefenseMod * (1 + (50 - (home.linePosition || 50)) / 200) - (homeMentality.defPenalty || 0) + (home.aggressiveness / 500)) * dnaImpact(homeDefDNA.mult)
+    tacticalBonus: ((homeEffect.def || 1.0) * (homeCards.def || 1.0) * homeWidthDefenseMod * homeChemistryLinkMod * (1 + (50 - (home.linePosition || 50)) / 170) - (homeMentality.defPenalty || 0) + (home.aggressiveness / 500)) * dnaImpact(homeDefDNA.mult)
   };
 
   const awayAttackSector: SectorInput = {
@@ -369,14 +371,14 @@ export function simulateMatch(
     averageAttribute: away.attack,
     chemistry: away.chemistry,
     chaosMax: 10 + awayCards.chaos,
-    tacticalBonus: ((awayEffect.att || 1.0) * (awayCards.att || 1.0) * awayWidthAttackMod * awayPassingAttackMod * awayPressureMod * (1 + ((away.linePosition || 50) - 50) / 200) + (awayMentality.attBonus || 0) + (away.aggressiveness / 500)) * dnaImpact(awayAttDNA.mult)
+    tacticalBonus: ((awayEffect.att || 1.0) * (awayCards.att || 1.0) * awayWidthAttackMod * awayPassingAttackMod * awayPressureMod * awayChemistryLinkMod * (1 + ((away.linePosition || 50) - 50) / 165) + (awayMentality.attBonus || 0) + (away.aggressiveness / 500)) * dnaImpact(awayAttDNA.mult)
   };
   const awayDefenseSector: SectorInput = {
     ...defaultSector,
     averageAttribute: away.defense,
     chemistry: away.chemistry,
     chaosMax: 10 + awayCards.chaos,
-    tacticalBonus: ((awayEffect.def || 1.0) * (awayCards.def || 1.0) * awayWidthDefenseMod * (1 + (50 - (away.linePosition || 50)) / 200) - (awayMentality.defPenalty || 0) + (away.aggressiveness / 500)) * dnaImpact(awayDefDNA.mult)
+    tacticalBonus: ((awayEffect.def || 1.0) * (awayCards.def || 1.0) * awayWidthDefenseMod * awayChemistryLinkMod * (1 + (50 - (away.linePosition || 50)) / 170) - (awayMentality.defPenalty || 0) + (away.aggressiveness / 500)) * dnaImpact(awayDefDNA.mult)
   };
 
   // --- INJECT COMMENTARY CARDS (Distributed across the match) ---
@@ -387,7 +389,6 @@ export function simulateMatch(
     // Pick appropriate template (start/end anchored, middle randomized)
     let tmpl;
     if (i === 0) tmpl = COMMENTARY_TEMPLATES[0]; // INÍCIO
-    else if (i === COMMENTARY_COUNT - 1) tmpl = COMMENTARY_TEMPLATES[COMMENTARY_TEMPLATES.length - 1]; // FIM
     else tmpl = COMMENTARY_TEMPLATES[1 + Math.floor(Math.random() * (COMMENTARY_TEMPLATES.length - 2))];
 
     events.push({
@@ -406,8 +407,8 @@ export function simulateMatch(
     const homeLateBonus = (minute > 75) ? (homeEffect.lateBonus || 1.0) : 1.0;
     const awayLateBonus = (minute > 75) ? (awayEffect.lateBonus || 1.0) : 1.0;
 
-    const homeMid = home.midfield * homeEffect.mid * homeCards.mid * homeLateBonus * homeWidthMidMod * homePassingMidMod * homePressureMod * dnaImpact(homeMidDNA.mult) * (home.chemistry / 100);
-    const awayMid = away.midfield * awayEffect.mid * awayCards.mid * awayLateBonus * awayWidthMidMod * awayPassingMidMod * awayPressureMod * dnaImpact(awayMidDNA.mult) * (away.chemistry / 100);
+    const homeMid = home.midfield * homeEffect.mid * homeCards.mid * homeLateBonus * homeWidthMidMod * homePassingMidMod * homePressureMod * homeChemistryLinkMod * dnaImpact(homeMidDNA.mult) * (home.chemistry / 100);
+    const awayMid = away.midfield * awayEffect.mid * awayCards.mid * awayLateBonus * awayWidthMidMod * awayPassingMidMod * awayPressureMod * awayChemistryLinkMod * dnaImpact(awayMidDNA.mult) * (away.chemistry / 100);
 
     const totalMid = homeMid + awayMid;
     const possessionRoll = Math.random() * totalMid;
@@ -470,12 +471,11 @@ export function simulateMatch(
     const baseSecond = Math.floor((minute / MATCH_DURATION_MINUTES) * MATCH_REAL_TIME_SECONDS);
     const currentEventSecond = Math.max(0, Math.min(MATCH_REAL_TIME_SECONDS - 1, baseSecond + Math.floor(Math.random() * 7) - 3));
 
-    // Event chance: Increased for more realistic goal counts 
-    // Base intensity 0.18, peaks at ~0.48 at minute 90
-    let intensity = 0.17 + (minute / 330);
+    // Event cadence still reacts to tactics, but stays in a tighter football range.
+    let intensity = 0.11 + (minute / 520);
     intensity *= hasPossession === 'home'
-      ? 1 + (homeIntensity - 50) / 400
-      : 1 + (awayIntensity - 50) / 400;
+      ? 1 + (homeIntensity - 50) / 520
+      : 1 + (awayIntensity - 50) / 520;
     if (hasPossession === 'home' && awayEffect.tickReduction) intensity *= (1 - awayEffect.tickReduction);
     if (hasPossession === 'away' && homeEffect.tickReduction) intensity *= (1 - homeEffect.tickReduction);
 
@@ -542,7 +542,7 @@ export function simulateMatch(
             id: `block_${away.id}_${minute}_${Date.now()}`, minute, realTimeSecond: currentEventSecond, type: 'BLOCKED',
             title: 'BLOQUEADO!',
             description: BLOCKED_DESCRIPTIONS[Math.floor(Math.random() * BLOCKED_DESCRIPTIONS.length)].replace('{player}', mainAttacker.nickname),
-            teamId: away.id, playerId: defender.id
+            teamId: home.id, playerId: defender.id
           });
         } else {
           if (Math.random() > 0.4) homeShotsOnTarget++;
@@ -552,7 +552,7 @@ export function simulateMatch(
           events.push({
             id: `event_${away.id}_${minute}_${Date.now()}_${Math.random()}`,
             minute, realTimeSecond: currentEventSecond, type: 'CHANCE',
-            title: 'DEFESA!', description: defDesc, playerId: defender.id, teamId: away.id
+            title: 'DEFESA!', description: defDesc, playerId: defender.id, teamId: home.id
           });
         }
       } else {
@@ -668,7 +668,7 @@ export function simulateMatch(
             id: `block_${home.id}_${minute}_${Date.now()}`, minute, realTimeSecond: currentEventSecond, type: 'BLOCKED',
             title: 'BLOQUEADO!',
             description: BLOCKED_DESCRIPTIONS[Math.floor(Math.random() * BLOCKED_DESCRIPTIONS.length)].replace('{player}', mainAttacker.nickname),
-            teamId: home.id, playerId: defender.id
+            teamId: away.id, playerId: defender.id
           });
         } else {
           if (Math.random() > 0.4) awayShotsOnTarget++;
@@ -678,7 +678,7 @@ export function simulateMatch(
           events.push({
             id: `event_${home.id}_${minute}_defense`,
             minute, realTimeSecond: currentEventSecond, type: 'CHANCE',
-            title: 'DEFESA!', description: defDesc, playerId: defender.id, teamId: home.id
+            title: 'DEFESA!', description: defDesc, playerId: defender.id, teamId: away.id
           });
         }
       } else {
@@ -737,6 +737,16 @@ export function simulateMatch(
       }
     }
   }
+
+  events.push({
+    id: `full_time_${Date.now()}`,
+    minute: MATCH_DURATION_MINUTES,
+    realTimeSecond: MATCH_REAL_TIME_SECONDS,
+    type: 'COMMENTARY',
+    title: 'FIM DE PAPO',
+    description: 'Apito final do arbitro cibernetico! Batalha encerrada.',
+    teamId: 'system'
+  });
 
   const totalPossession = homePossessionWon + awayPossessionWon;
   const finalRatings: Record<string, number> = {};
@@ -853,7 +863,9 @@ export function simulateMatch(
     headline,
     scorers,
     assists,
-    events: events.map(refineEventCopy),
+    events: events
+      .sort((a, b) => a.realTimeSecond - b.realTimeSecond || a.minute - b.minute)
+      .map(refineEventCopy),
     stats: {
       possession: {
         home: homePossession,

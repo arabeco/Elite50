@@ -40,14 +40,12 @@ export const calculateMatchEvent = (
 
   const ratio = attackPower / Math.max(1, defensePower);
 
-  // Adjusted probabilities for more realistic football scores
-  // Base goal probability is 0.15, up to 0.55 if dominating.
-  // Boost base probability if it's a "High Quality" match (high average attributes)
-  const qualityFactor = (attack.averageAttribute + defense.averageAttribute) / 1600; // > 1 for elite matches
-  const baseProb = 0.13 * Math.max(1, qualityFactor);
+  // Keep team/tactic edges visible, but bring scorelines closer to football.
+  const qualityFactor = (attack.averageAttribute + defense.averageAttribute) / 1800;
+  const baseProb = 0.095 * Math.max(1, qualityFactor);
 
-  const goalProbability = clamp(baseProb + (ratio - 1) * 0.23, 0.06, 0.55);
-  const defenseProbability = clamp(0.16 + (1 / ratio - 1) * 0.12, 0.06, 0.32);
+  const goalProbability = clamp(baseProb + (ratio - 1) * 0.16, 0.035, 0.34);
+  const defenseProbability = clamp(0.19 + (1 / ratio - 1) * 0.11, 0.08, 0.34);
 
   let outcome: 'goal' | 'defense' | 'turnover' = 'turnover';
   const roll = Math.random();

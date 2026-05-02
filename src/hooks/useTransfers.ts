@@ -5,6 +5,7 @@ import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/
 import { SQUAD_SIZE_MAX } from '../constants/gameConstants';
 import { calculateTradeAcceptanceChance } from '../engine/economyLogic';
 import { addNews } from '../engine/newsService';
+import { releasePlayerBootToInventory } from '../utils/store';
 
 export const useTransfers = (userTeamId: string | null, totalPoints: number, powerCap: number) => {
     const { state, setState, isOnline } = useGame();
@@ -22,7 +23,8 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         // Check if already proposed to prevent double clicks/duplicates
         const isAlreadyProposed = state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
         if (isDraftDay && isAlreadyProposed) {
-            return; // Already in wishlist
+            addToast(`${player.nickname} ja esta reservado na sua lista. O score dele continua ocupado ate o Draft resolver.`, 'warning');
+            return;
         }
 
         if (userTeam.squad.length >= SQUAD_SIZE_MAX) {
@@ -51,6 +53,12 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
 
         const nextTotalPoints = currentPower + pendingPower + player.totalRating;
+        const exceedsPowerCap = nextTotalPoints > powerCap;
+
+        if (exceedsPowerCap) {
+            addToast(`A vinda de ${player.nickname} excederia o Score Maximo de ${powerCap} pts. Pendentes ja ocupam ${pendingPower} pts.`, 'error');
+            return;
+        }
 
         if (nextTotalPoints > powerCap) {
             addToast(`A vinda de ${player.nickname} excederia o Score Máximo de ${powerCap} pts!`, 'error');
@@ -62,9 +70,16 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                 addToast('User Manager ID não encontrado!', 'error');
                 return;
             }
-            // Genesis Draft Day 0, 1 or 2 wishlisting - No confirmation for draft to make it feel like "shopping"
+            // Draft proposals reserve score until the daily resolution accepts or rejects them.
+            const remainingAfterReserve = powerCap - nextTotalPoints;
+            const confirmMsg = `Reservar ${player.nickname} no Draft por ${player.totalRating} de score?\n\nEsse score sai da sua pool enquanto a proposta estiver pendente. Se ele nao vier na resolucao do Draft, o score volta automaticamente.\n\nScore restante apos reserva: ${remainingAfterReserve}`;
+            if (!window.confirm(confirmMsg)) {
+                return;
+            }
+
             setState(prev => submitProposals(prev, state.userManagerId!, [player.id]));
-            addToast(`${player.nickname} adicionado à Wishlist de Contratação!`, 'success');
+            addToast(`Proposta enviada para ${player.nickname}. ${player.totalRating} de score reservado e removido da pool ate o Draft resolver.`, 'success');
+            return;
         } else {
             const confirmMsg = `Deseja enviar uma proposta de roubo para ${player.nickname} por ${player.totalRating} pts? A IA responderá no próximo dia.`;
             if (window.confirm(confirmMsg)) {
@@ -127,7 +142,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                 };
 
                 setState(prev => {
-                    const newState = { ...prev };
+                    const newState = releasePlayerBootToInventory({ ...prev }, playerId);
 
                     // Update player: set teamId to null (exiled)
                     newState.players[playerId] = {
@@ -234,7 +249,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             if (isDraft) {
                 // Instant trade during draft
                 setState(prev => {
-                    const newState = { ...prev };
+                    const newState = releasePlayerBootToInventory({ ...prev }, offeredPlayerId);
                     const myTeam = newState.teams[userTeam.id];
                     const aiTeam = newState.teams[targetTeamId];
 
@@ -271,7 +286,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                 if (Math.random() < acceptanceChance) {
                     addToast(`O ${state.teams[targetTeamId].name} aceitou a proposta! A troca foi efetuada.`, 'success');
                     setState(prev => {
-                        const newState = { ...prev };
+                        const newState = releasePlayerBootToInventory({ ...prev }, offeredPlayerId);
                         const myTeam = newState.teams[userTeam.id];
                         const aiTeam = newState.teams[targetTeamId];
 

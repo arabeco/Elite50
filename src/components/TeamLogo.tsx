@@ -117,11 +117,17 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
   patternId,
   symbolId,
   secondarySymbolId,
-  size = 40,
+  size = 50,
   className = '',
   showCircle = true
 }) => {
-  const assetPath = symbolId.startsWith('asset:') ? symbolId.slice('asset:'.length) : null;
+  const resolvedSymbolId = typeof symbolId === 'string' && symbolId.trim().length > 0
+    ? symbolId
+    : 'Shield';
+  const resolvedSecondarySymbolId = typeof secondarySymbolId === 'string' && secondarySymbolId.trim().length > 0
+    ? secondarySymbolId
+    : undefined;
+  const assetPath = resolvedSymbolId.startsWith('asset:') ? resolvedSymbolId.slice('asset:'.length) : null;
 
   if (assetPath) {
     return (
@@ -138,11 +144,11 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
     );
   }
 
-  const SymbolIcon = ((Icons as any)[symbolId] as LucideIcon) || Icons.Shield;
-  const SecondarySymbolIcon = secondarySymbolId ? ((Icons as any)[secondarySymbolId] as LucideIcon) : null;
+  const SymbolIcon = ((Icons as any)[resolvedSymbolId] as LucideIcon) || Icons.Shield;
+  const SecondarySymbolIcon = resolvedSecondarySymbolId ? ((Icons as any)[resolvedSecondarySymbolId] as LucideIcon) : null;
   const id = React.useId().replace(/:/g, '');
   const resolvedAccent = accentColor || deriveAccentColor(primaryColor, secondaryColor);
-  const resolvedShape = shapeId || deriveShapeFromSignature(`${primaryColor}-${secondaryColor}-${patternId}-${symbolId}-${secondarySymbolId || 'solo'}`);
+  const resolvedShape = shapeId || deriveShapeFromSignature(`${primaryColor}-${secondaryColor}-${patternId}-${resolvedSymbolId}-${resolvedSecondarySymbolId || 'solo'}`);
   const outerPath = getShapePath(resolvedShape);
   const innerPath = getInnerShapePath(resolvedShape);
   const borderColor = deriveAccentColor(resolvedAccent, '#ffffff');

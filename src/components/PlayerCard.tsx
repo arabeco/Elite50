@@ -6,6 +6,8 @@ import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
 import { useGame } from '../store/GameContext';
 import { useTransfers } from '../hooks/useTransfers';
+import { getBootImagePath } from '../utils/store';
+import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 
 interface PlayerCardProps {
   player: Player;
@@ -26,6 +28,10 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
 
   const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
   const resolvedTeamLogo = teamLogo || playerTeam?.logo;
+  const bootImagePath = getBootImagePath(player.id, state);
+  const globalRank = getPlayerGlobalRank(state, player.id);
+  const eliteBadgeLabel = getEliteBadgeLabel(globalRank);
+  const eliteTier = getEliteTier(globalRank);
   const visualSeed = Math.abs(player.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
   const isLegacyDefaultAppearance = player.appearance.bodyId === 1 && player.appearance.hairId === 1 && player.appearance.bootId === 1;
   const visualGender = isLegacyDefaultAppearance ? (visualSeed % 2 === 0 ? 'M' : 'F') : player.appearance.gender;
@@ -134,6 +140,9 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           <div className={`absolute -bottom-2 -right-2 w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] ${style.bg} ${style.border} ${style.text} border shadow-lg`}>
             {player.totalRating}
           </div>
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-md border border-white/10 bg-black/70 p-0.5 shadow-lg">
+            <img src={bootImagePath} alt="Boot" className="w-full h-full object-contain" />
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col justify-center min-w-0">
@@ -201,6 +210,11 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
               <Mars size={6} className="text-blue-400" />
             )}
           </div>
+          {eliteBadgeLabel && (
+            <span className="mt-0.5 inline-flex w-fit rounded-full border border-amber-400/30 bg-amber-500/12 px-1.5 py-0.5 text-[6px] font-black uppercase tracking-[0.25em] text-amber-100">
+              {eliteBadgeLabel}
+            </span>
+          )}
         </div>
       </motion.div>
     );
@@ -238,6 +252,9 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           </div>
           <div className="text-right flex flex-col items-end gap-1">
             <span className="text-[4px] sm:text-[5px] font-mono text-white/50 bg-black/40 px-1 py-0.5 rounded-lg border border-white/10">#{player.id.replace('p_', '')}</span>
+            <div className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-black/40 border border-white/10 p-0.5 overflow-hidden">
+              <img src={bootImagePath} alt="Boot" className="w-full h-full object-contain" />
+            </div>
             {resolvedTeamLogo && (
               <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
                 <TeamLogo
@@ -272,6 +289,13 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
                 <Mars size={5} className="text-blue-400 sm:size-[6px]" />
               )}
             </div>
+            {eliteBadgeLabel && (
+              <div className="mt-0.5 flex justify-center">
+                <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 text-[4px] sm:text-[5px] font-black uppercase tracking-[0.28em] text-amber-100">
+                  {eliteBadgeLabel}
+                </span>
+              </div>
+            )}
             <div
               onClick={(e) => {
                 if (player.contract.teamId && onTeamClick) {
@@ -297,7 +321,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
       onDragStart={(e: any) => onDragStart && onDragStart(e, player)}
       className={`relative w-full aspect-[1/1.4] sm:aspect-[1/1.6] rounded-xl sm:rounded-2xl glass-card-neon overflow-hidden group 
         ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} 
-        hover:scale-[1.05] hover:-translate-y-2 transition-all duration-500 shadow-2xl`}
+        hover:scale-[1.05] hover:-translate-y-2 transition-all duration-500 shadow-2xl ${eliteTier === 'top50' ? 'shadow-[0_0_24px_rgba(34,211,238,0.18)]' : ''} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_28px_rgba(245,158,11,0.22)]' : ''}`}
     >
       {isDraftPending && (
         <div className="absolute inset-0 bg-amber-500/10 backdrop-blur-[2px] z-[60] flex flex-col items-center justify-center p-4 text-center">
@@ -333,6 +357,9 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a15] via-[#0a0a15]/20 to-transparent z-20" />
         <div className="absolute inset-0 bg-black/5 z-20" />
+        {eliteBadgeLabel && (
+          <div className={`absolute inset-0 z-20 ${eliteTier === 'top10' || eliteTier === 'top3' ? 'bg-gradient-to-t from-amber-500/10 via-transparent to-transparent' : 'bg-gradient-to-t from-cyan-500/8 via-transparent to-transparent'}`} />
+        )}
       </div>
 
       {/* Top Bar: Rating & Badges */}
@@ -347,9 +374,17 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-white/50 mt-0.5 sm:mt-1">
             {player.role === 'GOL' ? 'GOL' : player.role === 'ZAG' ? 'ZAG' : player.role === 'MEI' ? 'MEI' : 'ATA'}
           </span>
+          {eliteBadgeLabel && (
+            <span className={`mt-1 rounded-full border px-2 py-0.5 text-[6px] sm:text-[7px] font-black uppercase tracking-[0.3em] ${eliteTier === 'top10' || eliteTier === 'top3' ? 'border-amber-400/35 bg-amber-500/12 text-amber-100' : 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100'}`}>
+              {eliteBadgeLabel}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-2">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-1 backdrop-blur-2xl shadow-inner">
+            <img src={bootImagePath} alt="Boot" className="w-full h-full object-contain" />
+          </div>
           {resolvedTeamLogo && (
             <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-1 sm:p-1.5 backdrop-blur-2xl shadow-inner group-hover:border-white/30 transition-all">
               <TeamLogo

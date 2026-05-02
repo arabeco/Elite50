@@ -186,6 +186,57 @@ describe('Supabase multiplayer smoke', () => {
     expect(state?.participants?.some(participant => participant.userId === 'user_joiner' && participant.isObserver)).toBe(true);
   });
 
+  it('merges participant-founded clubs into the shared world without creator privileges', async () => {
+    const master = mockDb.records[0];
+    master.world_state.leagues = {
+      norte: {
+        id: 'norte',
+        name: 'Liga Norte',
+        standings: [{ teamId: 't_1', points: 0, goalsFor: 0, goalsAgainst: 0 }],
+        matches: [{ id: 'm_1', homeTeamId: 't_1', awayTeamId: 't_creator', played: false }]
+      }
+    };
+
+    mockDb.records.push({
+      ...master,
+      user_id: 'user_joiner',
+      is_creator: false,
+      is_public: false,
+      user_team_id: 't_founder_1',
+      user_manager_id: 'user_joiner',
+      teams_data: {
+        t_founder_1: {
+          ...master.teams_data.t_1,
+          id: 't_founder_1',
+          name: 'Joiner FC',
+          managerId: 'user_joiner',
+          squad: [],
+          replacedTeamId: 't_1'
+        }
+      },
+      players_data: {},
+      managers_data: {
+        user_joiner: {
+          ...master.managers_data.m_npc,
+          id: 'user_joiner',
+          name: 'Joiner Manager',
+          isNPC: false,
+          career: { ...master.managers_data.m_npc.career, currentTeamId: 't_founder_1', historyTeamIds: [] }
+        }
+      }
+    });
+
+    const { loadGameState } = await import('../lib/supabase');
+
+    const state = await loadGameState('world_1');
+
+    expect(state?.isCreator).toBe(false);
+    expect(state?.teams.t_founder_1.name).toBe('Joiner FC');
+    expect(state?.teams.t_1).toBeUndefined();
+    expect((state?.world.leagues as any).norte.standings[0].teamId).toBe('t_founder_1');
+    expect((state?.world.leagues as any).norte.matches[0].homeTeamId).toBe('t_founder_1');
+  });
+
   it('blocks claiming a club already owned by another participant', async () => {
     mockDb.records.push({
       ...createMasterRecord(),

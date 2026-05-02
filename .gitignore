@@ -6,3 +6,18 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Generated diagnostics and simulation dumps
+*_output*.txt
+*_results.json
+*_report.txt
+final_refinement_check.txt
+multiplayer_result.txt
+simutest.txt
+stress_test_ascii.txt
+test_out.txt
+test_output.txt
+tsc_out*.txt
+tsc_output*.txt
+universe_state.json
+vitest-report.json

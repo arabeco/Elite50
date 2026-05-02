@@ -262,7 +262,7 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
               <div
                 key={slot.id}
                 onClick={(e) => handleSlotClick(e, slot.id)}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center transition-all duration-500 w-16 h-20 sm:w-24 sm:h-32 z-10 cursor-pointer ${canReceiveDrop
+                className={`absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center transition-all duration-500 w-20 h-24 sm:w-28 sm:h-36 z-10 cursor-pointer ${canReceiveDrop
                     ? 'scale-110 z-20'
                     : 'hover:scale-105'
                   }`}
@@ -312,7 +312,16 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
                       </button>
                     </div>
 
-                    <div className={`mt-2 sm:mt-3 whitespace-nowrap px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[7px] sm:text-[9px] font-black backdrop-blur-xl border uppercase tracking-[0.2em] shadow-2xl transition-all ${player.role === slot.label
+                    <div className="mt-2 max-w-[86px] sm:max-w-[118px] rounded-xl border border-white/10 bg-black/75 px-2 py-1 text-center shadow-2xl backdrop-blur-xl">
+                      <p className="truncate text-[8px] font-black uppercase tracking-[0.08em] text-white sm:text-[10px]">
+                        {player.nickname}
+                      </p>
+                      <p className="mt-0.5 truncate text-[6px] font-black uppercase tracking-[0.18em] text-cyan-300/80 sm:text-[7px]">
+                        {player.role} / {player.totalRating}
+                      </p>
+                    </div>
+
+                    <div className={`mt-1 whitespace-nowrap px-2 sm:px-3 py-0.5 rounded-lg sm:rounded-xl text-[7px] sm:text-[8px] font-black backdrop-blur-xl border uppercase tracking-[0.18em] shadow-2xl transition-all ${player.role === slot.label
                         ? 'bg-black/60 text-cyan-400 border-white/10 neon-text-cyan'
                         : 'bg-red-500/20 text-red-500 border-red-500/30 animate-pulse'
                       }`}>

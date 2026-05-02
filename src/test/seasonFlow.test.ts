@@ -44,13 +44,12 @@ const runCompleteSeason = (state: GameState) => {
   for (let day = 0; day < SEASON_DAYS; day += 1) {
     nextState = advanceGameDay(nextState);
   }
-  nextState = advanceGameDay(nextState);
   expect(nextState.world.phase).toBe('OFFSEASON');
   return nextState;
 };
 
 describe('full season QA flow', () => {
-  it('runs draft, league, Elite Cup, District Cup, offseason and next season without dead state', () => {
+  it('runs draft, short league, Elite Cup, district showcase, offseason and next season without dead state', () => {
     let state = generateInitialState();
     attachUserManager(state);
 
@@ -65,7 +64,7 @@ describe('full season QA flow', () => {
     Object.values(state.world.leagues).forEach(league => {
       expect(league.standings).toHaveLength(8);
       expect(league.matches.every(match => match.played)).toBe(true);
-      expect(league.standings.every(row => row.played === 14)).toBe(true);
+      expect(league.standings.every(row => row.played === 7)).toBe(true);
     });
 
     expect(state.world.currentRound).toBe(TOTAL_ROUNDS);
@@ -84,9 +83,6 @@ describe('full season QA flow', () => {
     expect(leagueChampions.every(teamId => (state.teams[teamId].titles?.league || 0) >= 1)).toBe(true);
     expect(Object.values(state.players).some(player => player.achievements.some(achievement => achievement.title.includes('Artilheiro')))).toBe(true);
 
-    state = advanceGameDay(state);
-    expect(state.world.phase).toBe('OFFSEASON');
-
     const nextState = startNewSeason(state);
     expect(nextState.world.history[0].season).toBe(state.world.currentSeason || 2050);
     expect(nextState.world.news[0].title).toBe('TEMPORADA ENCERRADA');
@@ -95,9 +91,9 @@ describe('full season QA flow', () => {
       season: state.world.currentSeason || 2050
     });
     expect(nextState.world.currentSeason).toBe((state.world.currentSeason || 2050) + 1);
-    expect(nextState.world.status).toBe('LOBBY');
+    expect(nextState.world.status).toBe('ACTIVE');
     expect(nextState.world.currentDay).toBe(0);
-    expect(nextState.world.currentRound).toBe(1);
+    expect(nextState.world.currentRound).toBe(0);
     expect(nextState.world.eliteCup.winnerId).toBeNull();
     expect(nextState.world.districtCup.winnerId).toBeNull();
     expect(nextState.world.offseasonDecision).toBeUndefined();

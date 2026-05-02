@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { HomeTab } from '../components/dashboard/HomeTab';
 import { GameProvider, useGame } from '../store/GameContext';
@@ -106,7 +106,7 @@ const StateInjector = ({ state }: { state: GameState }) => {
   return null;
 };
 
-const renderHome = (state: GameState) => render(
+const renderHome = (state: GameState, overrides?: Partial<React.ComponentProps<typeof HomeTab>>) => render(
   <GameProvider>
     <StateInjector state={state} />
     <HomeTab
@@ -115,6 +115,7 @@ const renderHome = (state: GameState) => render(
       onOpenLineup={() => undefined}
       onOpenTactics={() => undefined}
       onOpenLeague={() => undefined}
+      {...overrides}
     />
   </GameProvider>
 );
@@ -141,9 +142,9 @@ describe('HomeTab gameplay GPS smoke', () => {
 
     expect(await screen.findByText(/Prepare o proximo compromisso/i)).toBeInTheDocument();
     expect(screen.getByText(/TEMPORADA/i)).toBeInTheDocument();
-    expect(screen.getByText(/Elenco completo/i)).toBeInTheDocument();
-    expect(screen.getByText(/Escalacao minima/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tatica definida/i)).toBeInTheDocument();
+    expect(screen.getByText(/Time pronto/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Proximo jogo/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Mercado/i)).toBeInTheDocument();
     expect(screen.getByText(/Depois disso: quando o relogio chegar/i)).toBeInTheDocument();
 
     await waitFor(() => {
@@ -151,5 +152,15 @@ describe('HomeTab gameplay GPS smoke', () => {
       expect(primaryAction).toBeInTheDocument();
       expect(primaryAction).toHaveTextContent(/Preparar Time|Revisar Escalacao/i);
     });
+  });
+
+  it('opens tactics when clicking the next match confrontation card before kickoff', async () => {
+    const onOpenTactics = vi.fn();
+    renderHome(makeActiveSeasonState(), { onOpenTactics });
+
+    const confrontationCard = await screen.findByRole('button', { name: /próximo jogo/i });
+    fireEvent.click(confrontationCard);
+
+    expect(onOpenTactics).toHaveBeenCalledTimes(1);
   });
 });

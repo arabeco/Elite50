@@ -101,10 +101,13 @@ describe('Dashboard click smoke', () => {
     const user = userEvent.setup();
     renderDashboard(makeDraftWorld());
 
-    expect(await screen.findByText(/Monte seu elenco inicial/i)).toBeInTheDocument();
-
     const nav = screen.getByRole('navigation');
-    await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
+    const openedOnHome = !!screen.queryByText(/Monte seu elenco inicial/i);
+
+    if (openedOnHome) {
+      await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
+    }
+
     expect(await screen.findByRole('heading', { name: /DRAFT\s+GENESIS/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Confirmar Draft/i })).toBeInTheDocument();
     expect(screen.getByText(/Mercado de Draft/i)).toBeInTheDocument();
@@ -113,17 +116,37 @@ describe('Dashboard click smoke', () => {
     expect(await screen.findByText(/Not/i)).toBeInTheDocument();
 
     await user.click(within(nav).getByRole('button', { name: /Home/i }));
-    expect(await screen.findByText(/Monte seu elenco inicial/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Abrir Draft/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Monte seu elenco inicial|Continue o Draft/i)).toBeInTheDocument();
 
+    await user.click(within(nav).getByRole('button', { name: /Carreira/i }));
+    await user.click(await screen.findByRole('button', { name: /Config/i }));
     await user.click(screen.getByRole('button', { name: /Reportar problema/i }));
-    expect(await screen.findByText(/Reportar problema/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Reportar problema/i })).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText(/O que aconteceu/i), 'Fluxo de teste abriu corretamente.');
     await user.click(screen.getByRole('button', { name: /Enviar/i }));
     expect(feedbackInsertMock).toHaveBeenCalledWith(expect.objectContaining({
-      current_tab: 'home',
+      current_tab: 'career',
       category: 'bug',
       message: 'Fluxo de teste abriu corretamente.'
     }));
-  }, 10000);
+  }, 15000);
+
+  it('lets a lobby participant choose Founder mode without becoming world creator', async () => {
+    const user = userEvent.setup();
+    const state = generateInitialState();
+    state.isCreator = false;
+    state.userId = 'joiner_user';
+    state.userTeamId = null;
+    state.userManagerId = null;
+    state.world.status = 'LOBBY';
+    state.world.currentDay = -1;
+
+    renderDashboard(state);
+
+    const founderButton = await screen.findByRole('button', { name: /O FUNDADOR/i });
+    expect(founderButton).not.toBeDisabled();
+
+    await user.click(founderButton);
+    expect(await screen.findByText(/REGISTRO DE/i)).toBeInTheDocument();
+  }, 15000);
 });

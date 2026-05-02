@@ -19,6 +19,7 @@ import { seedUniverse } from './seed_universe';
 import { generateTeamStyle } from '../utils/logoUtils';
 import { applyTeamLogoAsset, applyTeamLogoAssets } from '../utils/teamIdentity';
 import { HAIR_COUNT_BY_GENDER } from '../constants/avatarAssets';
+import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 
 // --- Seeded Random Engine (Fixed Base) ---
 let _seed = 1234567; // Fixed seed for "Base Fixa"
@@ -630,6 +631,11 @@ export const generateInitialState = (): GameState => {
       currentRound: 1,
       currentDate: gameNow.toISOString(),
       seasonStartReal: seasonStartReal,
+      clock: {
+        profile: 'REAL',
+        timeSpeed: DEFAULT_TIME_SPEED,
+        label: '1 dia a cada 10 min'
+      },
       isInitialSeed: true, // Marker for first run
     },
     worldId: 'default',

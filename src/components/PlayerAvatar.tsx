@@ -1,40 +1,42 @@
 import React from 'react';
 import { Player, District } from '../types';
 import { getHairAssetPath, getHairOffset, HAIR_FILES_BY_GENDER } from '../constants/avatarAssets';
+import { useGame } from '../store/GameContext';
+import { getBootAssetPathByVisualId, getResolvedKitAssetPath } from '../utils/store';
 
 export const TEAM_UNIFORM_FILES = [
-  'Cópia_de_Design_sem_nome__6_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__7_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__8_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__9_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__10_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__11_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__12_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__13_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__14_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__15_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__16_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__17_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__18_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__19_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__20_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__21_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__22_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__23_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__26_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__27_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__28_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__29_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__30_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__31_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__32_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__34_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__35_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__36_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__37_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__39_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__40_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__41_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__6_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__7_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__8_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__9_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__10_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__11_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__12_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__13_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__14_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__15_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__16_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__17_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__18_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__19_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__20_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__21_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__22_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__23_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__26_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__27_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__28_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__29_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__30_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__31_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__32_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__34_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__35_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__36_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__37_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__39_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__40_-removebg-preview.png',
+  'CÃ³pia_de_Design_sem_nome__41_-removebg-preview.png',
 ];
 
 export const getTeamUniformFile = (teamId?: string | null) => {
@@ -42,45 +44,25 @@ export const getTeamUniformFile = (teamId?: string | null) => {
   if (!match) return null;
 
   const teamNumber = Number(match[1]);
-  if (!Number.isInteger(teamNumber) || teamNumber < 1 || teamNumber > TEAM_UNIFORM_FILES.length) {
+  if (!Number.isInteger(teamNumber) || teamNumber < 1) {
     return null;
   }
 
-  return TEAM_UNIFORM_FILES[teamNumber - 1];
+  const safeUniforms = [
+    'uniform_cyan.png',
+    'uniform_orange.png',
+    'uniform_green.png',
+    'uniform_purple.png',
+    'special1.png',
+    'special2.png',
+    'special3.png',
+    'sspecial4.png',
+    'special5.png',
+    'special6.png',
+  ];
+
+  return safeUniforms[(teamNumber - 1) % safeUniforms.length];
 };
-
-const MALE_HAIR_FILES = [
-  'hair_1.png',
-  'f6-removebg-preview.png',
-  'f9-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__9_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__10_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__11_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__12_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__13_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__14_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__15_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__18_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__19_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__20_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__21_-removebg-preview.png',
-];
-
-const FEMALE_HAIR_FILES = [
-  'f1-removebg-preview.png',
-  'f2-removebg-preview.png',
-  'f3-removebg-preview.png',
-  'f4-removebg-preview.png',
-  'f7-removebg-preview.png',
-  'f8-removebg-preview.png',
-  'f10-removebg-preview.png',
-  'f11-removebg-preview.png',
-  'f13-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__5_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__6_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__7_-removebg-preview.png',
-  'Cópia_de_Design_sem_nome__8_-removebg-preview.png',
-];
 
 interface PlayerAvatarProps {
   player: Player;
@@ -90,13 +72,14 @@ interface PlayerAvatarProps {
   className?: string;
 }
 
-export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ 
-  player, 
-  size = 'md', 
+export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
+  player,
+  size = 'md',
   mode = 'full',
   cropBottomPercent = 33,
-  className = ''
+  className = '',
 }) => {
+  const { state } = useGame();
   const { appearance, district } = player;
   const visualSeed = Math.abs(player.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
   const isLegacyDefaultAppearance = appearance.bodyId === 1 && appearance.hairId === 1 && appearance.bootId === 1;
@@ -108,15 +91,19 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   const hairOffset = getHairOffset(visualGender, hairFile);
   const hairOffsetX = `${hairOffset.x}%`;
   const hairOffsetY = `${hairOffset.y}%`;
-  
-  // Mapeamento de cores de uniforme por distrito
-  const getUniformSuffix = (d: District) => {
-    switch (d) {
-      case 'NORTE': return 'cyan';
-      case 'SUL': return 'orange';
-      case 'LESTE': return 'green';
-      case 'OESTE': return 'purple';
-      default: return 'cyan';
+
+  const getUniformSuffix = (value: District) => {
+    switch (value) {
+      case 'NORTE':
+        return 'cyan';
+      case 'SUL':
+        return 'orange';
+      case 'LESTE':
+        return 'green';
+      case 'OESTE':
+        return 'purple';
+      default:
+        return 'cyan';
     }
   };
 
@@ -125,30 +112,26 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
     sm: 'w-12 h-12',
     md: 'w-24 h-24',
     lg: 'w-48 h-48',
-    xl: 'w-64 h-64'
+    xl: 'w-64 h-64',
   };
 
   const uniformSuffix = getUniformSuffix(district);
   const genderKey = visualGender === 'M' ? 'm' : 'f';
-
-  // Assets paths - usando a pasta 'assetas' conforme solicitado
   const assetsBase = '/assetas/avatars';
   const bodyPath = `${assetsBase}/bodies/body_${genderKey}_${visualBodyId}.png`;
   const hairPath = getHairAssetPath(visualGender, hairFile);
   const teamUniformFile = getTeamUniformFile(player.contract.teamId);
-  const uniformPath = teamUniformFile
+  const equippedKitPath = getResolvedKitAssetPath(state, player.contract.teamId);
+  const uniformPath = equippedKitPath || (teamUniformFile
     ? encodeURI(`${assetsBase}/uniforms/${teamUniformFile}`)
-    : `${assetsBase}/uniforms/uniform_${uniformSuffix}.png`;
-  
-  // Fallback para chuteiras
-  const bootId = 1; // FORÇANDO BOOT 1 PARA TESTE GLOBAL
-  const bootPath = `${assetsBase}/boots/boot_1.png`;
+    : `${assetsBase}/uniforms/uniform_${uniformSuffix}.png`);
+  const bootId = Math.max(1, appearance.bootId || 1);
+  const bootPath = getBootAssetPathByVisualId(bootId);
 
-  // Estilo para o modo 'head' (rosto)
   const headStyle: React.CSSProperties = mode === 'head' ? {
     objectFit: 'cover',
-    objectPosition: 'center 1%', // Foca no rosto
-    transform: 'scale(2.5)', // Dá zoom no rosto
+    objectPosition: 'center 1%',
+    transform: 'scale(2.5)',
     transformOrigin: 'center 5%',
   } : {};
 
@@ -170,35 +153,31 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   return (
     <div className={`relative overflow-hidden rounded-xl ${sizes[size]} ${className}`}>
       <div className="absolute inset-0" style={avatarCropStyle}>
-        {/* Camada 1: Corpo */}
-        <img 
-          src={bodyPath} 
-          alt="Body" 
+        <img
+          src={bodyPath}
+          alt="Body"
           className="absolute inset-0 w-full h-full object-contain z-10"
           style={headStyle}
         />
-        
-        {/* Camada 2: Uniforme */}
-        <img 
-          src={uniformPath} 
-          alt="Uniform" 
+
+        <img
+          src={uniformPath}
+          alt="Uniform"
           className="absolute inset-0 w-full h-full object-contain z-20"
           style={headStyle}
         />
 
-        {/* Camada 3: Cabelo */}
-        <img 
-          src={hairPath} 
-          alt="Hair" 
+        <img
+          src={hairPath}
+          alt="Hair"
           className="absolute w-full h-full object-contain z-30"
           style={hairStyle}
         />
 
-        {/* Camada 4: Chuteiras */}
         {mode === 'full' && (
-          <img 
-            src={bootPath} 
-            alt="Boots" 
+          <img
+            src={bootPath}
+            alt="Boots"
             style={{
               position: 'absolute',
               bottom: '5%',
@@ -208,7 +187,7 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
               transform: 'translateX(-50%)',
               objectFit: 'contain',
               zIndex: 100,
-              pointerEvents: 'none'
+              pointerEvents: 'none',
             }}
           />
         )}

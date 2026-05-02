@@ -1,6 +1,6 @@
 import React from 'react';
 import { Player, District, Match } from '../types';
-import { X, TrendingUp, Zap, Lock, Activity, Shield, Trophy, Clock, BarChart3, Coins, Target } from 'lucide-react';
+import { X, TrendingUp, Zap, Lock, Activity, Shield, Trophy, Clock, BarChart3, Coins, Target, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -10,6 +10,8 @@ import { calculateTeamPower } from '../engine/gameLogic';
 import { useTransfers } from '../hooks/useTransfers';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { TRAIT_DESCRIPTIONS } from '../constants/traitDescriptions';
+import { equipBootOnPlayer, getBootImagePath, getStoreItem, getStoreState, releasePlayerBootToInventory } from '../utils/store';
+import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 
 interface PlayerModalProps {
   player: Player;
@@ -60,6 +62,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   };
 
   const theme = getTheme(player.district);
+  const globalRank = getPlayerGlobalRank(state, player.id);
+  const eliteBadgeLabel = getEliteBadgeLabel(globalRank);
+  const eliteTier = getEliteTier(globalRank);
 
   const lastRatings = player.history.lastMatchRatings || [];
   const currentForm = lastRatings.length > 0
@@ -149,6 +154,18 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const [selectedOfferId, setSelectedOfferId] = React.useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = React.useState<string | null>(null);
   const [activePlayerTab, setActivePlayerTab] = React.useState<'profile' | 'stats' | 'economy'>('profile');
+  const [showBootPicker, setShowBootPicker] = React.useState(false);
+  const store = getStoreState(state);
+  const equippedBootItemId = store.equippedBootByPlayerId[player.id] || null;
+  const equippedBootItem = getStoreItem(equippedBootItemId);
+  const ownedBootItems = store.ownedItemIds
+    .map(itemId => getStoreItem(itemId))
+    .filter((item): item is NonNullable<typeof item> => !!item && item.category === 'BOOT');
+  const bootOwnerByItemId = Object.entries(store.equippedBootByPlayerId).reduce<Record<string, Player | undefined>>((acc, [assignedPlayerId, assignedItemId]) => {
+    if (!assignedItemId) return acc;
+    acc[assignedItemId] = state.players[assignedPlayerId];
+    return acc;
+  }, {});
 
   const handleProposal = async () => {
     if (!userTeam || isMyPlayer || player.satisfaction >= 80) return;
@@ -162,7 +179,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 1200));
 
-    const newState = { ...state };
+    const newState = releasePlayerBootToInventory({ ...state }, player.id);
     newState.teams[userTeam.id] = {
       ...newState.teams[userTeam.id],
       squad: [...newState.teams[userTeam.id].squad, player.id]
@@ -229,7 +246,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     if (!userTeam || !isMyPlayer) return;
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 500));
-    const newState = { ...state };
+    const newState = releasePlayerBootToInventory({ ...state }, player.id);
     newState.teams[userTeam.id].squad = newState.teams[userTeam.id].squad.filter(id => id !== player.id);
     newState.players[player.id].contract.teamId = null;
     newState.notifications.unshift({
@@ -246,6 +263,20 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     onClose();
   };
 
+  const handleEquipBoot = async (itemId: string | null) => {
+    if (!isMyPlayer || !userTeam) return;
+    const result = equipBootOnPlayer(state, player.id, itemId);
+    if (!result.ok) {
+      addToast(result.message, 'warning');
+      return;
+    }
+
+    setState(result.state);
+    await saveGame(result.state);
+    addToast(result.message, 'success');
+    setShowBootPicker(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/90 backdrop-blur-md" onClick={onClose}>
       <motion.div
@@ -254,7 +285,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-md max-h-[90vh] bg-slate-950/70 backdrop-blur-2xl rounded-xl border ${theme.border} shadow-[0_0_30px_rgba(0,0,0,0.6)] flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
+        className={`relative w-full max-w-md max-h-[90vh] bg-slate-950/70 backdrop-blur-2xl rounded-xl border ${theme.border} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_35px_rgba(245,158,11,0.22)]' : eliteTier === 'top50' ? 'shadow-[0_0_35px_rgba(34,211,238,0.18)]' : 'shadow-[0_0_30px_rgba(0,0,0,0.6)]'} flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
       >
         <button onClick={onClose} className="absolute top-3 right-3 z-20 p-1.5 bg-black/60 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors">
           <X size={16} />
@@ -265,6 +296,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
             <PlayerAvatar player={player} size="xl" mode="full" cropBottomPercent={8} className="w-full h-full scale-[1.22] translate-y-10" />
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+          {eliteBadgeLabel && (
+            <div className={`absolute inset-0 ${eliteTier === 'top10' || eliteTier === 'top3' ? 'bg-gradient-to-br from-amber-500/18 via-transparent to-transparent' : 'bg-gradient-to-br from-cyan-500/14 via-transparent to-transparent'}`} />
+          )}
           <div className="relative z-10 flex items-end gap-3 sm:gap-4 w-full">
             <div className={`w-28 h-36 sm:w-36 sm:h-44 rounded-2xl sm:rounded-[1.75rem] border ${theme.border} bg-black/60 shadow-2xl overflow-hidden flex-shrink-0 group relative`}>
               <PlayerAvatar player={player} size="xl" mode="full" cropBottomPercent={0} className="w-full h-full scale-[1.42] translate-y-9 sm:translate-y-12 group-hover:scale-[1.5] transition-transform duration-500" />
@@ -273,6 +307,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
             <div className="flex-1 mb-1">
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
                 <span className={`text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] uppercase ${theme.main}`}>{player.district} CLAN</span>
+                {eliteBadgeLabel && (
+                  <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-[0.25em] ${eliteTier === 'top10' || eliteTier === 'top3' ? 'border-amber-400/35 bg-amber-500/12 text-amber-100' : 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100'}`}>
+                    {eliteBadgeLabel}
+                  </span>
+                )}
               </div>
               <h2 className="text-xl sm:text-2xl font-black italic text-white leading-none uppercase tracking-tighter drop-shadow-lg flex items-center gap-2 sm:gap-3">
                 {player.nickname}
@@ -300,6 +339,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                     )}
                     <span className="max-w-[120px] truncate">{playerTeam.name}</span>
                   </button>
+                )}
+                {globalRank && (
+                  <span className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Rank global #{globalRank}</span>
                 )}
               </div>
             </div>
@@ -549,6 +591,134 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
 
           {activePlayerTab === 'profile' && (
             <>
+          <div className="bg-black/50 border border-white/10 rounded-xl p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-[0.25em] font-semibold">Chuteira</p>
+                <p className="mt-1 text-xs font-black uppercase tracking-widest text-white">
+                  {equippedBootItem?.name || 'Padrao do clube'}
+                </p>
+                {equippedBootItem?.collectionLabel && (
+                  <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/55">
+                    {equippedBootItem.collectionLabel}
+                  </p>
+                )}
+                {equippedBootItem?.effectLabel && (
+                  <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                    {equippedBootItem.effectLabel}
+                  </p>
+                )}
+                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+                  Equipe no atleta e, se ele sair do clube, o item volta ao inventario.
+                </p>
+              </div>
+              <div className="w-16 h-16 rounded-xl border border-cyan-500/25 bg-white/[0.03] flex items-center justify-center overflow-hidden">
+                <img
+                  src={getBootImagePath(player.id, state)}
+                  alt={equippedBootItem?.name || 'Chuteira'}
+                  className="w-full h-full object-contain p-2"
+                />
+              </div>
+            </div>
+
+            {isMyPlayer ? (
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBootPicker(prev => !prev)}
+                  className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.25em] text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  {showBootPicker ? 'Fechar lista de chuteiras' : 'Equipar chuteira'}
+                </button>
+
+                {showBootPicker && (
+                  <div className="space-y-2 rounded-xl border border-white/10 bg-black/35 p-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleEquipBoot(null)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest transition ${
+                        !equippedBootItemId
+                          ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+                          : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      Remover chuteira especial
+                    </button>
+
+                    {ownedBootItems.map(item => (
+                      (() => {
+                        const assignedPlayer = bootOwnerByItemId[item.id];
+                        const equippedHere = equippedBootItemId === item.id;
+                        const equippedElsewhere = !!assignedPlayer && assignedPlayer.id !== player.id;
+
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleEquipBoot(item.id)}
+                            className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                              equippedHere
+                                ? 'border-cyan-400/40 bg-cyan-500/10'
+                                : equippedElsewhere
+                                  ? 'border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/15'
+                                  : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-lg border border-white/10 bg-black/35 overflow-hidden flex items-center justify-center">
+                              <img src={item.imagePath} alt={item.name} className="w-full h-full object-contain p-1.5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-white">{item.name}</p>
+                              {item.collectionLabel && (
+                                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/45">
+                                  {item.collectionLabel}
+                                </p>
+                              )}
+                              <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">{item.rarity}</p>
+                              {item.effectLabel && (
+                                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-cyan-300/90">
+                                  {item.effectLabel}
+                                </p>
+                              )}
+                              {equippedElsewhere && assignedPlayer && (
+                                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-amber-200/80">
+                                  Equipada em {assignedPlayer.nickname}
+                                </p>
+                              )}
+                              {equippedHere && (
+                                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-cyan-200/80">
+                                  Equipada neste atleta
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              {equippedHere && (
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                                  <CheckCircle2 size={12} />
+                                  Equipada
+                                </span>
+                              )}
+                              {equippedElsewhere && (
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-amber-200">
+                                  <ArrowRightLeft size={12} />
+                                  Mover
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })()
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="mt-3 text-[8px] font-bold uppercase tracking-widest text-white/30">
+                So atletas do seu clube podem receber chuteiras especiais.
+              </p>
+            )}
+          </div>
+
           <div className="bg-black/50 border border-white/10 rounded-xl p-3 sm:p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">

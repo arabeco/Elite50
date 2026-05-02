@@ -1,10 +1,10 @@
-import React from 'react';
+﻿import React from 'react';
 import { useGame } from '../../store/GameContext';
+import { useGameDispatch } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
 import { useTransfers } from '../../hooks/useTransfers';
 import { useTactics } from '../../hooks/useTactics';
-import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
@@ -12,11 +12,12 @@ import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getCountdown, getLiveMatchSecond, getMatchDateTime, getNextMatch } from '../../utils/matchUtils';
-import { calculateTeamPower } from '../../engine/gameLogic';
-import { MATCH_REAL_TIME_SECONDS } from '../../constants/gameConstants';
-import { Team, Player, Match } from '../../types';
+import { calculateTeamPower, isJoinWindowOpen } from '../../engine/gameLogic';
+import { MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
+import { buildHomeChecklistItems, buildHomeFlowSteps, resolveHomePhase } from '../../utils/homeFlow';
+import { Team, Player, Match, ClubOffer, LeagueState } from '../../types';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle } = LucideIcons;
+const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle, Mail, Check, XCircle, Copy } = LucideIcons;
 
 interface HomeTabProps {
   onOpenDraft?: () => void;
@@ -26,10 +27,9 @@ interface HomeTabProps {
   onOpenLeague?: () => void;
 }
 
-type TodayPhase = 'preseason' | 'season' | 'matchday' | 'postgame';
-
 export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague }: HomeTabProps) => {
-  const { state, setState, isSyncing } = useGame();
+  const { state, setState, saveGame, isSyncing } = useGame();
+  const { respondToClubOffer } = useGameDispatch();
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches, pastMatches, totalPoints, powerCap, pointsLeft } = dashData;
   const daysPassed = React.useMemo(() => {
@@ -49,33 +49,59 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   } = useMatchSimulation(userTeam?.id || null);
   const { handleUpdateTactics } = useTactics(userTeam?.id || null);
   const { handleSetFocus, handleStartCardLab, handleChemistryBoost } = useTraining(userTeam?.id || null);
-  const { handleAdvanceDay } = useGameDay();
   const { handleMakeProposal } = useTransfers(userTeam?.id || null, totalPoints, powerCap);
+  const pendingDraftScore = React.useMemo(() => {
+    if (!state.userManagerId) return 0;
+    return (state.world.draftProposals || [])
+      .filter(proposal => proposal.managerId === state.userManagerId)
+      .reduce((sum, proposal) => sum + (state.players[proposal.playerId]?.totalRating || 0), 0);
+  }, [state.players, state.userManagerId, state.world.draftProposals]);
+  const occupiedScore = totalPoints + pendingDraftScore;
+  const reservedScoreLeft = powerCap - occupiedScore;
+  const occupiedScorePercent = powerCap > 0 ? Math.min(100, Math.max(0, (occupiedScore / powerCap) * 100)) : 0;
+  const isUnemployed = !userTeam;
+  const [showHomeGuide, setShowHomeGuide] = React.useState(() => localStorage.getItem('elite.homeGuideHidden') !== 'true');
+  const [actingOfferId, setActingOfferId] = React.useState<string | null>(null);
 
-  const handleRevealMatch = (matchId: string) => {
-    setState(prev => {
-      const newState = { ...prev };
+  const toggleHomeGuide = () => {
+    const next = !showHomeGuide;
+    setShowHomeGuide(next);
+    localStorage.setItem('elite.homeGuideHidden', next ? 'false' : 'true');
+  };
+
+  const handleRevealMatch = async (matchId: string) => {
+    const nextState = (() => {
+      let revealedState: any = null;
+      setState(prev => {
+        const newState = { ...prev };
       // Search in all leagues
-      Object.keys(newState.world.leagues).forEach(key => {
-        const league = newState.world.leagues[key as any];
-        const match = league.matches.find(m => m.id === matchId);
-        if (match) match.revealed = true;
-      });
+        Object.keys(newState.world.leagues).forEach(key => {
+          const league = newState.world.leagues[key as any];
+          const match = league.matches.find(m => m.id === matchId);
+          if (match) match.revealed = true;
+        });
       // Search in cups
-      const ecMatch = [
-        ...(newState.world.eliteCup.bracket.round1 || []),
-        ...(newState.world.eliteCup.bracket.quarters || []),
-        ...(newState.world.eliteCup.bracket.semis || []),
-        newState.world.eliteCup.bracket.final
-      ].find(m => m?.id === matchId);
-      if (ecMatch) ecMatch.revealed = true;
+        const ecMatch = [
+          ...(newState.world.eliteCup.bracket.round1 || []),
+          ...(newState.world.eliteCup.bracket.quarters || []),
+          ...(newState.world.eliteCup.bracket.semis || []),
+          newState.world.eliteCup.bracket.final
+        ].find(m => m?.id === matchId);
+        if (ecMatch) ecMatch.revealed = true;
 
-      const dcMatch = newState.world.districtCup.matches.find(m => m.id === matchId);
-      if (dcMatch) dcMatch.revealed = true;
-      if (newState.world.districtCup.final?.id === matchId) newState.world.districtCup.final.revealed = true;
+        const dcMatch = newState.world.districtCup.matches.find(m => m.id === matchId);
+        if (dcMatch) dcMatch.revealed = true;
+        if (newState.world.districtCup.final?.id === matchId) newState.world.districtCup.final.revealed = true;
 
-      return newState;
-    });
+        revealedState = newState;
+        return newState;
+      });
+      return revealedState;
+    })();
+
+    if (nextState) {
+      await saveGame(nextState);
+    }
   };
 
   const [clockAnchor, setClockAnchor] = React.useState(() => ({
@@ -108,6 +134,16 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   const isRevealed = lastMatch?.revealed !== false;
 
   const headlineData = React.useMemo(() => {
+    const latestSeasonReport = state.world.history?.[0];
+    if (state.world.phase === 'OFFSEASON' && latestSeasonReport) {
+      return {
+        type: 'news',
+        title: `Season ${latestSeasonReport.season} arquivada`,
+        message: 'A offseason esta viva: veja o season report, acompanhe a Copa dos Distritos e prepare a entrada na proxima temporada.',
+        revealed: true
+      };
+    }
+
     if (lastMatch) {
       const isHome = lastMatch.homeId === userTeam?.id;
       const userScore = isHome ? lastMatch.homeScore : lastMatch.awayScore;
@@ -119,7 +155,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
       return {
         type: 'match',
-        title: !isRevealed ? "Partida Encerrada" : (isWin ? "Vitória Espetacular!" : isDraw ? "Empate Tático" : "Derrota Amarga"),
+        title: !isRevealed ? "Partida encerrada" : (isWin ? "Vitória espetacular!" : isDraw ? "Empate tático" : "Derrota Amarga"),
         message: !isRevealed
           ? `O relato da partida contra o ${opponentName} já está disponível na mesa do treinador.`
           : `O ${userTeam?.name} ${isWin ? 'dominou' : isDraw ? 'empatou com' : 'tropeçou contra'} o ${opponentName} no placar de ${lastMatch.homeScore}-${lastMatch.awayScore}.`,
@@ -169,8 +205,23 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       });
     }
 
-    return feed;
-  }, [pastMatches, userTeam]);
+    (state.world.news || []).slice(0, 4).forEach(item => {
+      feed.push({
+        id: item.id,
+        type: 'news',
+        title: item.title,
+        subtitle: item.content,
+        score: item.type,
+        date: item.date,
+        importance: item.importance,
+        action: item.action
+      });
+    });
+
+    return feed
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 8);
+  }, [pastMatches, state.world.news, userTeam]);
 
   const userRelevantMatches = React.useMemo(() => {
     if (!userTeam) return [];
@@ -216,10 +267,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     let eventBadge = nextEvent.status === 'LOCKED' ? 'Partida próxima' : 'Próximo evento';
     let countdownLabel = `Começa em ${getCountdown(nextEvent.msUntilStart)}`;
     let ctaLabel = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000 ? 'Revisar Escalação' : 'Preparar Time';
-    let ctaAction = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000
-      ? (onOpenLineup || onOpenTactics || onOpenTeam || onOpenLeague)
-      : (onOpenTeam || onOpenTactics || onOpenLeague);
-    let ctaIcon = nextEvent.msUntilStart <= 3 * 60 * 60 * 1000 ? Shield : Users;
+    let ctaAction = onOpenTactics || onOpenLineup || onOpenTeam || onOpenLeague;
+    let ctaIcon = Brain;
 
     if (nextEvent.phase === 'live') {
       eventTitle = 'EM JOGO AGORA';
@@ -274,36 +323,90 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   // Remote redundant mock logic and duplicate state calls
   const isLobby = state.world.status === 'LOBBY';
   const isPreseason = state.world.status === 'LOBBY' || state.world.currentDay < 3;
+  const isOffseason = state.world.phase === 'OFFSEASON';
   const isMatchDay = !isPreseason && nextMatchData?.phase === 'live';
   const isPostGame = !isPreseason && (
     (!!nextMatchData && nextMatchData.phase === 'after') ||
     (!!lastMatch && lastMatch.revealed === false)
   );
+  const joinWindowOpen = isJoinWindowOpen(state);
+  const userClubOffers = React.useMemo(
+    () => ((state.world.clubOffers || []).filter(offer => offer.targetUserId === state.userId) as ClubOffer[])
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [state.userId, state.world.clubOffers]
+  );
+  const spotlightOffer = userClubOffers.find(offer => offer.status === 'ACCEPTED')
+    || userClubOffers.find(offer => offer.status === 'PENDING')
+    || userClubOffers.find(offer => offer.status === 'WAITING_NEXT_SEASON')
+    || null;
+  const clubOpportunityCards = React.useMemo(() => {
+    const leagues = Object.values(state.world.leagues || {}) as LeagueState[];
+    const leagueByTeam = new Map<string, { name: string; position: number }>();
+    leagues.forEach(league => {
+      const sorted = [...(league.standings || [])].sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        const gdA = a.goalsFor - a.goalsAgainst;
+        const gdB = b.goalsFor - b.goalsAgainst;
+        return gdB - gdA;
+      });
+      sorted.forEach((row, index) => leagueByTeam.set(row.teamId, { name: league.name, position: index + 1 }));
+    });
 
-  const todayPhase: TodayPhase = isPreseason
-    ? 'preseason'
-    : isMatchDay
-      ? 'matchday'
-      : isPostGame
-        ? 'postgame'
-        : 'season';
+    return (Object.values(state.teams) as Team[])
+      .filter(team => team.id.startsWith('t_'))
+      .filter(team => {
+        const manager = team.managerId ? state.managers[team.managerId] : null;
+        return !manager || manager.isNPC !== false;
+      })
+      .map(team => {
+        const squad = (team.squad || []).map(id => state.players[id]).filter(Boolean);
+        const average = squad.length ? Math.round(squad.reduce((sum, player) => sum + player.totalRating, 0) / squad.length) : 0;
+        return {
+          team,
+          average,
+          league: leagueByTeam.get(team.id),
+          existingOffer: userClubOffers.find(offer => offer.teamId === team.id)
+        };
+      })
+      .sort((a, b) => {
+        const posA = a.league?.position || 99;
+        const posB = b.league?.position || 99;
+        return posB - posA;
+      })
+      .slice(0, 3);
+  }, [state.managers, state.players, state.teams, state.world.leagues, userClubOffers]);
+  const offseasonDay = Math.max(1, daysPassed - (SEASON_DAYS - OFFSEASON_DAYS));
 
   const draftCount = state.world.draftProposals?.filter(p => p.managerId === state.userManagerId).length || 0;
   const squadSize = userTeam?.squad?.length || 0;
   const canAdvancePreseason = state.isCreator && state.world.currentDay === -1;
+  const worldJoinCode = state.world.access?.joinCode || (state.worldId ? `ELITE-${state.worldId.slice(-6)}` : 'ELITE-LOCAL');
   const lineupCount = userTeam ? Object.values(userTeam.lineup || {}).filter(Boolean).length : 0;
   const isSquadComplete = squadSize >= 15;
   const isDraftResolved = !isPreseason || isSquadComplete || state.world.currentDay >= 2;
   const isLineupReady = lineupCount >= 11;
   const isTacticReady = !!userTeam?.tactics?.playStyle && !!userTeam?.tactics?.mentality;
-  const checklistItems = [
-    { label: 'Elenco completo', done: isSquadComplete, detail: `${squadSize}/15` },
-    { label: 'Draft resolvido', done: isDraftResolved, detail: draftCount > 0 ? `${draftCount} na lista` : 'sem pendencia' },
-    { label: 'Escalacao minima', done: isLineupReady, detail: `${lineupCount}/11` },
-    { label: 'Tatica definida', done: isTacticReady, detail: userTeam?.tactics?.playStyle || 'pendente' },
-    { label: 'Proximo jogo', done: !!nextMatchData || isPreseason, detail: nextMatchData?.dateLabel || (isPreseason ? 'apos abertura' : 'sem evento') },
-  ];
   const playedUserMatches = userRelevantMatches.filter(match => match.played);
+  const todayPhase = resolveHomePhase({
+    isPreseason,
+    isOffseason,
+    isMatchDay,
+    isPostGame,
+  });
+  const checklistItems = buildHomeChecklistItems({
+    phase: todayPhase,
+    squadSize,
+    draftCount,
+    lineupCount,
+    isSquadComplete,
+    isDraftResolved,
+    isLineupReady,
+    isTacticReady,
+    hasPendingPostGame: playedUserMatches.some(match => match.revealed === false),
+    joinWindowOpen,
+    tacticLabel: userTeam?.tactics?.playStyle || null,
+    nextGameDetail: nextMatchData?.dateLabel || null,
+  });
   const firstUserMatch = [...userRelevantMatches].sort((a, b) => {
     const dateDiff = getMatchDateTime(a).getTime() - getMatchDateTime(b).getTime();
     return dateDiff || (a.round || 0) - (b.round || 0);
@@ -316,15 +419,17 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       : nextMatchData?.phase === 'live'
         ? 'live'
         : 'report';
-  const flowSteps = [
-    { key: 'draft', label: 'Draft', done: isDraftResolved, active: todayPhase === 'preseason' && !isDraftResolved },
-    { key: 'squad', label: 'Elenco', done: isSquadComplete, active: todayPhase === 'preseason' && isDraftResolved && !isSquadComplete },
-    { key: 'lineup', label: 'Escalacao', done: isLineupReady, active: todayPhase === 'preseason' && isSquadComplete && !isLineupReady },
-    { key: 'tactics', label: 'Tatica', done: isTacticReady, active: todayPhase === 'preseason' && isLineupReady && !isTacticReady },
-    { key: 'match', label: 'Jogo', done: playedUserMatches.length > 0, active: todayPhase === 'matchday' || firstMatchStage === 'preview' },
-    { key: 'postgame', label: 'Pos-jogo', done: playedUserMatches.some(match => match.revealed !== false), active: todayPhase === 'postgame' || firstMatchStage === 'report' },
-    { key: 'offseason', label: 'Offseason', done: state.world.phase === 'OFFSEASON', active: state.world.phase === 'OFFSEASON' },
-  ];
+  const flowSteps = buildHomeFlowSteps({
+    phase: todayPhase,
+    isDraftResolved,
+    isSquadComplete,
+    isLineupReady,
+    isTacticReady,
+    hasPlayedMatch: playedUserMatches.length > 0,
+    hasRevealedMatch: playedUserMatches.some(match => match.revealed !== false),
+    isOffseasonActive: state.world.phase === 'OFFSEASON',
+    firstMatchStage,
+  });
 
   const handleStartSeason = () => {
     if (!state.isCreator) {
@@ -332,9 +437,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       return;
     }
 
-    const nextDay = new Date();
+    const nextDay = new Date(state.world.currentDate || Date.now());
     nextDay.setDate(nextDay.getDate() + 1);
-    nextDay.setHours(0, 0, 0, 0);
 
     setState(prev => ({
       ...prev,
@@ -346,6 +450,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         currentDate: new Date().toISOString()
       }
     }));
+  };
+
+  const handleCopyJoinCode = async () => {
+    try {
+      await navigator.clipboard.writeText(worldJoinCode);
+    } catch {
+      alert(`Codigo do mundo: ${worldJoinCode}`);
+    }
   };
 
   const todayCopy = {
@@ -382,6 +494,15 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       message: 'Existe um resultado recente para revelar. Veja o relatorio antes de seguir para o proximo dia.',
       status: 'Relatorio pendente',
       consequence: 'Conseq.: placar revelado e proximo dia liberado.',
+    },
+    offseason: {
+      eyebrow: 'OFFSEASON',
+      title: 'O mundo nao para entre temporadas',
+      message: joinWindowOpen
+        ? `A janela curta esta aberta. Ainda da para entrar em clube ou preparar a base para a proxima temporada ate a rodada ${MIDSEASON_JOIN_MAX_ROUND}.`
+        : 'A offseason esta correndo e a nova temporada entra sozinha quando a janela fechar.',
+      status: `Dia ${Math.min(offseasonDay, OFFSEASON_DAYS)}/${OFFSEASON_DAYS} da offseason`,
+      consequence: 'Conseq.: a proxima temporada comeca automaticamente.',
     }
   }[todayPhase];
 
@@ -410,6 +531,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       ];
     }
 
+    if (todayPhase === 'offseason') {
+      return [
+        { label: 'Ver Calendario', icon: Calendar, onClick: onOpenLeague, primary: true, disabled: !onOpenLeague },
+        { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
+        { label: 'Ver Elenco', icon: Users, onClick: onOpenTeam, disabled: !onOpenTeam },
+      ];
+    }
+
     if (nextMatchData) {
       return [
         { label: nextMatchData.ctaLabel, icon: nextMatchData.ctaIcon, onClick: nextMatchData.ctaAction, primary: true, disabled: !nextMatchData.ctaAction },
@@ -426,6 +555,29 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   })();
 
   const guidedTodayCopy = (() => {
+    if (isUnemployed) {
+      const spotlightTeam = spotlightOffer ? state.teams[spotlightOffer.teamId] : null;
+      return {
+        eyebrow: 'SEM CLUBE',
+        title: spotlightOffer?.status === 'ACCEPTED' ? 'Contrato na mesa' : 'Escolha seu proximo destino',
+        message: spotlightOffer?.status === 'ACCEPTED'
+          ? `${spotlightTeam?.name || 'Um clube'} topou conversar. Assine no timing certo ou recuse e siga observando o mercado.`
+          : joinWindowOpen
+            ? 'Voce esta livre no mercado. Veja os clubes disponiveis, envie proposta e acompanhe as respostas no inbox.'
+            : 'A janela atual fechou, mas voce ainda pode entrar na fila da proxima temporada e acompanhar o mundo enquanto espera.',
+        status: spotlightOffer?.status === 'WAITING_NEXT_SEASON'
+          ? 'Fila da proxima temporada'
+          : spotlightOffer?.status === 'PENDING'
+            ? 'Aguardando resposta'
+            : spotlightOffer?.status === 'ACCEPTED'
+              ? 'Assinatura disponivel'
+              : joinWindowOpen ? 'Mercado aberto' : 'Janela fechada',
+        consequence: spotlightOffer?.status === 'ACCEPTED'
+          ? 'Depois disso: voce entra no clube e o mundo segue normalmente.'
+          : 'Depois disso: o clube responde no timing da janela, nunca na hora.',
+      };
+    }
+
     if (todayPhase === 'preseason') {
       if (state.world.currentDay === -1) {
         return {
@@ -498,6 +650,18 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       };
     }
 
+    if (todayPhase === 'offseason') {
+      return {
+        eyebrow: 'OFFSEASON VIVA',
+        title: 'Transicao curta, mundo continuo',
+        message: joinWindowOpen
+          ? `A temporada acabou, mas o mundo segue. Ha ${OFFSEASON_DAYS} dias de janela para ajustes, leitura do season report e entrada em clubes ate a rodada ${MIDSEASON_JOIN_MAX_ROUND}.`
+          : 'A janela principal ja passou e o mundo esta alinhando a virada automatica para a proxima temporada.',
+        status: `Dia ${Math.min(offseasonDay, OFFSEASON_DAYS)}/${OFFSEASON_DAYS} da offseason`,
+        consequence: 'Depois disso: a nova temporada entra automaticamente sem resetar os clubes.',
+      };
+    }
+
     return {
       eyebrow: 'TEMPORADA',
       title: nextMatchData?.opponent ? 'Prepare o proximo compromisso' : 'Gerencie a rotina do clube',
@@ -510,6 +674,33 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   })();
 
   const guidedTodayActions = (() => {
+    if (isUnemployed) {
+      const canSignSpotlight = !!spotlightOffer
+        && spotlightOffer.status === 'ACCEPTED'
+        && joinWindowOpen
+        && (state.world.currentDay || 0) >= spotlightOffer.availableOnDay;
+      return [
+        {
+          label: canSignSpotlight ? 'Assinar contrato' : 'Ver clubes',
+          icon: canSignSpotlight ? CheckCircle2 : Shield,
+          onClick: canSignSpotlight
+            ? async () => {
+              setActingOfferId(spotlightOffer!.id);
+              try {
+                await respondToClubOffer(spotlightOffer!.id, true);
+              } finally {
+                setActingOfferId(null);
+              }
+            }
+            : onOpenTeam,
+          primary: true,
+          disabled: canSignSpotlight ? actingOfferId === spotlightOffer?.id : !onOpenTeam
+        },
+        { label: 'Ver liga', icon: Calendar, onClick: onOpenLeague, disabled: !onOpenLeague },
+        { label: 'Mercado de tecnicos', icon: Users, onClick: onOpenTeam, disabled: !onOpenTeam },
+      ];
+    }
+
     if (todayPhase === 'preseason') {
       if (state.world.currentDay === -1) {
         return [
@@ -552,6 +743,165 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
     return todayActions;
   })();
+
+  const nextStepCards = React.useMemo(() => {
+    if (isUnemployed) {
+      return [
+        {
+          title: '1. Ler o inbox',
+          detail: spotlightOffer
+            ? spotlightOffer.note || 'Existe uma movimentacao aberta envolvendo seu nome.'
+            : 'Sem resposta ainda. Fique de olho nas noticias e nas ofertas.',
+          icon: Mail,
+          accent: 'cyan'
+        },
+        {
+          title: '2. Escolher destino',
+          detail: joinWindowOpen ? 'Voce pode mandar proposta agora para um clube livre.' : 'Hoje voce entra na fila da proxima temporada.',
+          icon: Shield,
+          accent: joinWindowOpen ? 'emerald' : 'fuchsia'
+        },
+        {
+          title: '3. Continuar acompanhando',
+          detail: 'Mesmo sem clube, tabela, noticias e relatorios continuam valendo para sua leitura do mundo.',
+          icon: Globe,
+          accent: 'amber'
+        }
+      ];
+    }
+
+    if (todayPhase === 'preseason') {
+      return [
+        {
+          title: !isSquadComplete ? '1. Feche o elenco' : !isLineupReady ? '1. Monte a escalacao' : !isTacticReady ? '1. Defina a tatica' : '1. Confirme a base',
+          detail: !isSquadComplete
+            ? 'Use o Draft para completar 15 jogadores.'
+            : !isLineupReady
+              ? 'Escolha os 11 titulares para o primeiro ciclo.'
+              : !isTacticReady
+                ? 'Escolha estilo e mentalidade para render melhor.'
+                : 'Seu time esta pronto para sair da pre-temporada.',
+          icon: !isSquadComplete ? Rocket : !isLineupReady ? Shield : Brain,
+          accent: 'cyan'
+        },
+        {
+          title: '2. Entenda o limite',
+          detail: pointsLeft < 0 ? 'Seu score passou do teto. Ajuste antes de seguir.' : `${pointsLeft} pontos ainda livres dentro do teto.`,
+          icon: Target,
+          accent: pointsLeft < 0 ? 'rose' : 'fuchsia'
+        },
+        {
+          title: '3. Abra o mundo',
+          detail: state.isCreator ? 'Quando tudo estiver certo, o mundo entra no ciclo automatico.' : 'Aguarde o criador abrir a temporada e acompanhe a estreia.',
+          icon: Play,
+          accent: 'amber'
+        }
+      ];
+    }
+
+    if (todayPhase === 'offseason') {
+      return [
+        {
+          title: '1. Leia o fechamento',
+          detail: 'Confira o season report e os campeoes antes da virada.',
+          icon: Newspaper,
+          accent: 'cyan'
+        },
+        {
+          title: '2. Ajuste o clube',
+          detail: 'Treino e tatica contam logo no comeco da nova season.',
+          icon: Brain,
+          accent: 'fuchsia'
+        },
+        {
+          title: '3. Aproveite a janela',
+          detail: joinWindowOpen ? `Ainda da para entrar em clube ate a rodada ${MIDSEASON_JOIN_MAX_ROUND}.` : 'A janela principal de entrada ja fechou.',
+          icon: Shield,
+          accent: joinWindowOpen ? 'emerald' : 'slate'
+        }
+      ];
+    }
+
+    return [
+      {
+        title: '1. Veja o proximo impacto',
+        detail: nextMatchData?.opponent ? `${nextMatchData.opponent.name} e o proximo gatilho do seu ciclo.` : 'Use a Home para identificar o proximo compromisso.',
+        icon: Calendar,
+        accent: 'cyan'
+      },
+      {
+        title: '2. Melhore o rendimento',
+        detail: 'Tatica, treino e lineup sao onde a gestao ativa vira vantagem.',
+        icon: Brain,
+        accent: 'fuchsia'
+      },
+      {
+        title: '3. Acompanhe o mundo',
+        detail: 'Feed, tabela e radar mostram o que mudou sem precisar caçar telas.',
+        icon: Globe,
+        accent: 'amber'
+      }
+    ];
+  }, [
+    isLineupReady,
+    isSquadComplete,
+    isTacticReady,
+    joinWindowOpen,
+    nextMatchData?.opponent,
+    pointsLeft,
+    state.isCreator,
+    todayPhase
+  ]);
+
+  const seasonPanelItems = React.useMemo(() => {
+    const phaseLabel = isPreseason
+      ? 'Genesis'
+      : isOffseason
+        ? `Offseason D${Math.min(offseasonDay, OFFSEASON_DAYS)}`
+        : state.world.phase === 'ELITE_CUP'
+          ? 'Copa Elite'
+          : `Rodada ${Math.max(1, state.world.currentRound || 1)}`;
+
+    const recommendation = isUnemployed
+      ? (spotlightOffer?.status === 'ACCEPTED'
+        ? 'Assinar ou recusar proposta'
+        : joinWindowOpen
+          ? 'Pedir contrato a um clube'
+          : 'Entrar na fila da proxima temporada')
+      : todayPhase === 'preseason'
+      ? (!isSquadComplete ? 'Fechar elenco' : !isLineupReady ? 'Montar escalacao' : !isTacticReady ? 'Definir tatica' : 'Abrir temporada')
+      : todayPhase === 'offseason'
+        ? 'Ler season report e ajustar base'
+        : nextMatchData?.phase === 'after'
+          ? 'Ver pos-jogo'
+          : nextMatchData?.phase === 'live'
+            ? 'Acompanhar partida'
+            : nextMatchData?.phase === 'before'
+              ? 'Preparar proximo jogo'
+              : 'Ajustar tatica e treino';
+
+    return [
+      { label: 'Fase', value: phaseLabel, tone: 'text-cyan-300', icon: Trophy },
+      { label: 'Mercado', value: state.world.transferWindowOpen ? 'Aberto' : 'Fechado', tone: state.world.transferWindowOpen ? 'text-emerald-300' : 'text-slate-300', icon: ShoppingCart },
+      { label: 'Entrada', value: isUnemployed ? (joinWindowOpen ? 'Negociando agora' : 'Fila da prox temporada') : (joinWindowOpen ? `Livre ate R${MIDSEASON_JOIN_MAX_ROUND}` : 'Janela fechada'), tone: joinWindowOpen ? 'text-amber-300' : 'text-rose-300', icon: Shield },
+      { label: 'Agora', value: recommendation, tone: 'text-fuchsia-300', icon: Brain },
+    ];
+  }, [
+    isUnemployed,
+    isPreseason,
+    isOffseason,
+    offseasonDay,
+    spotlightOffer?.status,
+    todayPhase,
+    isSquadComplete,
+    isLineupReady,
+    isTacticReady,
+    nextMatchData?.phase,
+    state.world.currentRound,
+    state.world.phase,
+    state.world.transferWindowOpen,
+    joinWindowOpen
+  ]);
 
   if (selectedMatchReport) {
     const homeTeam = state.teams[selectedMatchReport.homeTeamId];
@@ -645,23 +995,13 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[8px] font-black uppercase tracking-[0.25em] text-slate-400">
                 {guidedTodayCopy.status}
               </span>
-            </div>
-            <div className="grid grid-cols-4 gap-1 rounded-2xl border border-white/10 bg-black/25 p-1 sm:grid-cols-7">
-              {flowSteps.map((step, index) => (
-                <div
-                  key={step.key}
-                  className={`relative flex min-h-[46px] items-center justify-center rounded-xl px-1.5 text-center text-[7px] font-black uppercase tracking-[0.12em] transition-all sm:text-[8px] ${
-                    step.active
-                      ? 'bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.28)]'
-                      : step.done
-                        ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                        : 'border border-white/5 bg-white/[0.025] text-white/30'
-                  }`}
-                >
-                  {index > 0 && <div className="absolute -left-1 top-1/2 hidden h-px w-2 -translate-y-1/2 bg-white/15 sm:block" />}
-                  <span className="truncate">{step.label}</span>
-                </div>
-              ))}
+              <button
+                type="button"
+                onClick={toggleHomeGuide}
+                className="ml-auto rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/45 transition hover:border-cyan-400/30 hover:text-cyan-100"
+              >
+                {showHomeGuide ? 'Ocultar guia' : 'Mostrar guia'}
+              </button>
             </div>
             <div>
               <h2 className="text-2xl sm:text-4xl font-black uppercase italic tracking-tighter text-white">
@@ -673,31 +1013,141 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               <p className="mt-2 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300/80">
                 {guidedTodayCopy.consequence}
               </p>
-              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {checklistItems.map((item) => (
-                  <div
-                    key={item.label}
-                    className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${item.done
-                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
-                      : 'border-white/10 bg-white/[0.035] text-slate-300'
-                      }`}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      {item.done ? (
-                        <CheckCircle2 size={13} className="shrink-0 text-emerald-300" />
-                      ) : (
-                        <Circle size={13} className="shrink-0 text-slate-500" />
-                      )}
-                      <span className="truncate text-[9px] font-black uppercase tracking-[0.18em]">{item.label}</span>
-                    </div>
-                    <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.16em] text-white/45">{item.detail}</span>
-                  </div>
-                ))}
-              </div>
             </div>
+            {isLobby && state.isCreator && (
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100/70">Codigo do mundo</p>
+                    <p className="mt-1 font-mono text-base sm:text-lg font-black tracking-[0.18em] text-white">{worldJoinCode}</p>
+                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-cyan-100/45">
+                      Use esse codigo para alguem entrar antes da temporada comecar.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyJoinCode}
+                    className="shrink-0 rounded-xl border border-cyan-400/25 bg-black/30 p-3 text-cyan-100 transition hover:bg-cyan-400 hover:text-black"
+                    title="Copiar codigo do mundo"
+                  >
+                    <Copy size={15} />
+                  </button>
+                </div>
+              </div>
+            )}
+            {showHomeGuide && (
+              <div className="space-y-3 rounded-2xl border border-white/10 bg-black/25 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Guia inicial</p>
+                  <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200/60">pode ocultar</p>
+                </div>
+                <div className="grid grid-cols-4 gap-1 rounded-2xl border border-white/10 bg-black/25 p-1 sm:grid-cols-7">
+                  {flowSteps.map((step, index) => (
+                    <div
+                      key={step.key}
+                      className={`relative flex min-h-[46px] items-center justify-center rounded-xl px-1.5 text-center text-[7px] font-black uppercase tracking-[0.12em] transition-all sm:text-[8px] ${
+                        step.active
+                          ? 'bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.28)]'
+                          : step.done
+                            ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                            : 'border border-white/5 bg-white/[0.025] text-white/30'
+                      }`}
+                    >
+                      {index > 0 && <div className="absolute -left-1 top-1/2 hidden h-px w-2 -translate-y-1/2 bg-white/15 sm:block" />}
+                      <span className="truncate">{step.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {checklistItems.map((item) => (
+                    <div
+                      key={item.label}
+                      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+                        item.status === 'done'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+                          : item.status === 'warning'
+                            ? 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+                            : item.status === 'danger'
+                              ? 'border-rose-400/25 bg-rose-500/10 text-rose-100'
+                              : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100'
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {item.status === 'done' ? (
+                          <CheckCircle2 size={13} className="shrink-0 text-emerald-300" />
+                        ) : item.status === 'warning' ? (
+                          <Circle size={13} className="shrink-0 text-amber-300 fill-amber-300/30" />
+                        ) : item.status === 'danger' ? (
+                          <Circle size={13} className="shrink-0 text-rose-300 fill-rose-300/30" />
+                        ) : (
+                          <Circle size={13} className="shrink-0 text-cyan-300 fill-cyan-300/20" />
+                        )}
+                        <span className="truncate text-[9px] font-black uppercase tracking-[0.18em]">{item.label}</span>
+                      </div>
+                      <span className={`shrink-0 text-[8px] font-black uppercase tracking-[0.16em] ${
+                        item.status === 'done'
+                          ? 'text-emerald-200/80'
+                          : item.status === 'warning'
+                            ? 'text-amber-100/80'
+                            : item.status === 'danger'
+                              ? 'text-rose-100/80'
+                              : 'text-cyan-100/80'
+                      }`}>{item.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 lg:min-w-[420px] lg:max-w-[460px]">
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-cyan-400/25 bg-gradient-to-br from-cyan-500/12 via-black/30 to-fuchsia-500/10 p-4 sm:p-5">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-400/10 blur-[60px]" />
+              <div className="relative z-10">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+                      <Target size={13} />
+                      {isUnemployed ? 'Status do tecnico' : 'Score do Clube'}
+                    </div>
+                    <p className="mt-2 text-3xl font-black italic tracking-tighter text-white">
+                      {isUnemployed ? `${userClubOffers.length}` : `${occupiedScore.toLocaleString()} / ${powerCap.toLocaleString()}`}
+                    </p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/40">
+                      {isUnemployed
+                        ? `${userClubOffers.filter(offer => ['PENDING', 'ACCEPTED', 'WAITING_NEXT_SEASON'].includes(offer.status)).length} negociacoes vivas`
+                        : `${totalPoints.toLocaleString()} no elenco${pendingDraftScore > 0 ? ` + ${pendingDraftScore.toLocaleString()} reservado no draft` : ' / nada reservado'}`}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl border px-3 py-2 text-right ${
+                    reservedScoreLeft >= 0
+                      ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
+                      : 'border-rose-400/25 bg-rose-500/10 text-rose-200'
+                  }`}>
+                    <p className="text-[7px] font-black uppercase tracking-[0.18em] opacity-70">{isUnemployed ? 'Janela' : 'Livre'}</p>
+                    <p className="text-xl font-black italic">{isUnemployed ? (joinWindowOpen ? 'ABERTA' : 'FECHADA') : `${reservedScoreLeft >= 0 ? '+' : ''}${reservedScoreLeft.toLocaleString()}`}</p>
+                  </div>
+                </div>
+                {isUnemployed ? (
+                  <p className="mt-4 text-[8px] font-black uppercase tracking-[0.18em] text-white/30">
+                    Sem clube voce acompanha o mundo, le o inbox e escolhe o melhor timing para entrar.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-4 h-3 overflow-hidden rounded-full border border-white/10 bg-black/45">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${reservedScoreLeft >= 0 ? 'bg-cyan-400' : 'bg-rose-500'}`}
+                        style={{ width: `${occupiedScorePercent}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[8px] font-black uppercase tracking-[0.18em] text-white/30">
+                      Proposta pendente segura score ate aceitar ou recusar.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-4 sm:p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -705,7 +1155,23 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                     <Clock size={13} />
                     Próximo Evento
                   </div>
-                  {nextMatchData?.opponent ? (
+                  {isUnemployed ? (
+                    <>
+                      <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
+                        {spotlightOffer?.status === 'ACCEPTED'
+                          ? `${state.teams[spotlightOffer.teamId]?.name || 'Um clube'} quer fechar`
+                          : joinWindowOpen
+                            ? 'Mercado de tecnicos aberto'
+                            : 'Fila da proxima temporada'}
+                      </div>
+                      <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        {spotlightOffer?.note || (joinWindowOpen ? 'Use a aba de clubes para enviar proposta' : 'Voce pode escolher destinos e esperar a proxima virada')}
+                      </div>
+                      <div className="mt-2 text-sm sm:text-base font-black text-cyan-300">
+                        {joinWindowOpen ? 'Resposta nunca sai na hora' : 'Pedidos novos ficam enfileirados'}
+                      </div>
+                    </>
+                  ) : nextMatchData?.opponent ? (
                     <>
                       <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
                         {nextMatchData.eventTitle}
@@ -767,6 +1233,137 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
           </div>
         </div>
       </div>
+
+      {isUnemployed && (
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <section className="rounded-[1.9rem] border border-cyan-400/20 bg-black/30 p-4 sm:p-5">
+            <div className="flex items-center gap-2">
+              <Mail size={15} className="text-cyan-300" />
+              <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Inbox de propostas</h3>
+            </div>
+            <div className="mt-4 space-y-3">
+              {userClubOffers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 p-4 text-center">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Nenhuma proposta no momento.</p>
+                </div>
+              ) : (
+                userClubOffers.slice(0, 3).map((offer) => {
+                  const team = state.teams[offer.teamId];
+                  if (!team) return null;
+                  const canSign = offer.status === 'ACCEPTED' && joinWindowOpen && (state.world.currentDay || 0) >= offer.availableOnDay;
+                  return (
+                    <div key={offer.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">{team.district}</p>
+                          <h4 className="mt-1 text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
+                          <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">{offer.note || 'Sem detalhe adicional.'}</p>
+                        </div>
+                        <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-white/60">
+                          {offer.status === 'ACCEPTED' ? 'Aceita' : offer.status === 'PENDING' ? 'Pendente' : offer.status === 'WAITING_NEXT_SEASON' ? 'Fila' : offer.status}
+                        </div>
+                      </div>
+                      {(offer.status === 'ACCEPTED' || offer.status === 'PENDING' || offer.status === 'WAITING_NEXT_SEASON') && (
+                        <div className="mt-3 flex gap-2">
+                          {offer.status === 'ACCEPTED' && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setActingOfferId(offer.id);
+                                try {
+                                  await respondToClubOffer(offer.id, true);
+                                } finally {
+                                  setActingOfferId(null);
+                                }
+                              }}
+                              disabled={!canSign || actingOfferId === offer.id}
+                              className={`flex-1 rounded-xl px-3 py-3 text-[8px] font-black uppercase tracking-[0.24em] transition ${
+                                canSign
+                                  ? 'border border-emerald-400/35 bg-emerald-400 text-black hover:bg-emerald-300'
+                                  : 'cursor-not-allowed border border-white/10 bg-white/[0.04] text-white/30'
+                              }`}
+                            >
+                              <Check size={13} className="mx-auto mb-1" />
+                              {canSign ? 'Assinar' : 'No timing certo'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setActingOfferId(offer.id);
+                              try {
+                                await respondToClubOffer(offer.id, false);
+                              } finally {
+                                setActingOfferId(null);
+                              }
+                            }}
+                            disabled={actingOfferId === offer.id}
+                            className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-[8px] font-black uppercase tracking-[0.24em] text-white/60 transition hover:bg-white/[0.07]"
+                          >
+                            <XCircle size={13} className="mx-auto mb-1" />
+                            Recusar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-[1.9rem] border border-white/10 bg-black/25 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-white/55">Clubes em destaque</h3>
+                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/30">atalho para escolher melhor o proximo destino</p>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenTeam}
+                disabled={!onOpenTeam}
+                className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.22em] text-cyan-100 transition hover:bg-cyan-500/18 disabled:opacity-35"
+              >
+                Ver todos
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {clubOpportunityCards.map(({ team, average, league, existingOffer }) => (
+                <button
+                  key={team.id}
+                  type="button"
+                  onClick={onOpenTeam}
+                  disabled={!onOpenTeam}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.05] disabled:opacity-35"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                      <TeamLogo
+                        primaryColor={team.logo?.primary || team.colors.primary || '#fff'}
+                        secondaryColor={team.logo?.secondary || team.colors.secondary || '#111'}
+                        accentColor={team.logo?.accent}
+                        shapeId={team.logo?.shapeId}
+                        patternId={(team.logo?.patternId || 'none') as any}
+                        symbolId={team.logo?.symbolId || 'Shield'}
+                        size={38}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[8px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                        {team.district} {league ? `- ${league.position}o ${league.name}` : ''}
+                      </p>
+                      <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
+                      <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+                        media {average} {existingOffer ? `- ${existingOffer.status.toLowerCase()}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
       {isFirstMatchFlow && nextMatchData?.opponent && (
         <div className="relative overflow-hidden rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-500/10 via-white/[0.035] to-cyan-500/10 p-5 shadow-[0_0_35px_rgba(245,158,11,0.10)]">
@@ -847,6 +1444,53 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         </div>
       )}
 
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {nextStepCards.map((item) => (
+          <div
+            key={item.title}
+            className="relative overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/[0.035] p-4"
+          >
+            <div className={`absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full blur-[50px] ${
+              item.accent === 'cyan'
+                ? 'bg-cyan-500/10'
+                : item.accent === 'fuchsia'
+                  ? 'bg-fuchsia-500/10'
+                  : item.accent === 'emerald'
+                    ? 'bg-emerald-500/10'
+                    : item.accent === 'rose'
+                      ? 'bg-rose-500/10'
+                      : item.accent === 'amber'
+                        ? 'bg-amber-500/10'
+                        : 'bg-slate-500/10'
+            }`} />
+            <div className="relative z-10 flex items-start gap-3">
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
+                <item.icon
+                  size={16}
+                  className={
+                    item.accent === 'cyan'
+                      ? 'text-cyan-300'
+                      : item.accent === 'fuchsia'
+                        ? 'text-fuchsia-300'
+                        : item.accent === 'emerald'
+                          ? 'text-emerald-300'
+                          : item.accent === 'rose'
+                            ? 'text-rose-300'
+                            : item.accent === 'amber'
+                              ? 'text-amber-300'
+                              : 'text-slate-300'
+                  }
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">{item.title}</p>
+                <p className="mt-1 text-[11px] font-bold leading-relaxed text-slate-400">{item.detail}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* SECONDARY CONTEXT: one glance, no command noise */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
         <button
@@ -914,406 +1558,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         </button>
       </div>
 
-      {state.isCreator && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-amber-300">
-              <FastForward size={12} />
-              GM / Teste
-            </div>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              O mundo roda em tempo real. Use isto so para testar mecanicas.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleAdvanceDay}
-            className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-[9px] font-black uppercase tracking-[0.22em] text-amber-200 transition-all hover:bg-amber-400/20"
-          >
-            Avancar Dia
-          </button>
-        </div>
-      )}
-
-      {false && (<>
-      {/* TOP ROW: Premium Status Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-        {/* CARD 1: PRÓXIMO CONFRONTO - FUTURISTIC REDESIGN */}
-        <div className="relative group overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-card-neon neon-border-cyan white-gradient-sheen p-4 sm:p-8 transition-all duration-700 min-h-[160px] sm:min-h-[220px] flex flex-col justify-center">
-          {/* Neon Glow Effects */}
-          <div className="absolute top-0 left-0 w-32 h-32 bg-cyan-500/20 blur-[80px] -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-32 h-32 bg-fuchsia-500/20 blur-[80px] translate-x-1/2 translate-y-1/2" />
-
-          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="flex-1 space-y-4 text-center sm:text-left">
-              <div className="space-y-1">
-                <div className="flex items-center justify-center sm:justify-start gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-cyan-400 italic">
-                    PRÓXIMO JOGO
-                  </span>
-                  {nextMatchData?.status === 'PLAYING' && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">AO VIVO</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-4xl sm:text-6xl font-black text-white tracking-tighter italic">
-                  {isLobby ? (
-                    <span className="text-white/20 text-2xl sm:text-4xl">—</span>
-                  ) : nextMatchData?.status === 'PLAYING' ? (
-                    <div className="flex items-center gap-4">
-                      <span>{nextMatchData.match.homeScore}</span>
-                      <span className="text-white/20">-</span>
-                      <span>{nextMatchData.match.awayScore}</span>
-                    </div>
-                  ) : nextMatchData?.status === 'FINISHED' && nextMatchData.match.revealed === false ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-white/20">??</span>
-                      <span className="text-white/10">-</span>
-                      <span className="text-white/20">??</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleRevealMatch(nextMatchData.match.id); }}
-                        className="ml-4 px-3 py-1 bg-white/10 rounded-full text-[8px] font-black uppercase text-white hover:bg-white/20 border border-white/10"
-                      >
-                        REVELAR
-                      </button>
-                    </div>
-                  ) : nextMatchData?.status === 'FINISHED' ? (
-                    <div className="flex items-center gap-4">
-                      <span>{nextMatchData.match.homeScore}</span>
-                      <span className="text-white/20">-</span>
-                      <span>{nextMatchData.match.awayScore}</span>
-                    </div>
-                  ) : (
-                    nextMatchData?.countdown || 'Aguardando...'
-                  )}
-                </div>
-              </div>
-
-              {nextMatchData ? (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 font-black text-xs sm:text-base uppercase tracking-tight italic">
-                    <span className={nextMatchData.isHome ? 'text-cyan-400' : ''}>{userTeam?.name}</span>
-                    <span className="text-white/20">VS</span>
-                    <span className={!nextMatchData.isHome ? 'text-cyan-400' : ''}>{nextMatchData.opponent?.name}</span>
-                  </div>
-                  <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">
-                    {isLobby ? '--/--' : getMatchDateTime(nextMatchData.match).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()} • {isLobby ? '--:--' : nextMatchData.match.time}
-                  </p>
-                </div>
-              ) : (
-                <div className="text-[10px] text-white/20 italic font-black uppercase tracking-widest">
-                  Aguardando Calendário...
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="relative group/team-1">
-                <div className="absolute inset-0 bg-cyan-500/10 blur-xl rounded-full opacity-0 group-hover/team-1:opacity-100 transition-opacity" />
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md group-hover:border-cyan-500/40 transition-all">
-                  {userTeam?.logo && (
-                    <TeamLogo
-                      primaryColor={userTeam.logo.primary}
-                      secondaryColor={userTeam.logo.secondary}
-                      accentColor={userTeam.logo.accent}
-                      shapeId={userTeam.logo.shapeId}
-                      patternId={userTeam.logo.patternId as any}
-                      symbolId={userTeam.logo.symbolId}
-                      size={window.innerWidth < 640 ? 32 : 40}
-                    />
-                  )}
-                </div>
-              </div>
-              <div className="relative group/team-2">
-                <div className="absolute inset-0 bg-purple-500/10 blur-xl rounded-full opacity-0 group-hover/team-2:opacity-100 transition-opacity" />
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md group-hover:border-purple-500/40 transition-all">
-                  {nextMatchData?.opponent?.logo && (
-                    <TeamLogo
-                      primaryColor={nextMatchData.opponent.logo.primary}
-                      secondaryColor={nextMatchData.opponent.logo.secondary}
-                      accentColor={nextMatchData.opponent.logo.accent}
-                      shapeId={nextMatchData.opponent.logo.shapeId}
-                      patternId={nextMatchData.opponent.logo.patternId as any}
-                      symbolId={nextMatchData.opponent.logo.symbolId}
-                      size={window.innerWidth < 640 ? 32 : 40}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CARD 2: SCORE BALANCE / TETO DE PODER */}
-        <div className="relative group overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-card-neon neon-border-magenta white-gradient-sheen p-4 sm:p-8 transition-all hover:scale-[1.02] duration-500 min-h-[160px] sm:min-h-[220px] flex flex-col justify-between">
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-fuchsia-500/20 blur-[100px] group-hover:bg-fuchsia-500/30 transition-all duration-700" />
-          <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/20 blur-[100px] group-hover:bg-cyan-500/30 transition-all duration-700" />
-
-          <div className="relative z-10 flex flex-col h-full justify-between gap-6">
-            <div className="flex justify-between items-start">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-fuchsia-400 neon-text-magenta">
-                  BALANÇO DE SCORE
-                </span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${pointsLeft < 0 ? 'text-red-500' : 'text-emerald-400'}`}>
-                    {pointsLeft < 0 ? 'LIMITE EXCEDIDO' : 'DENTRO DO TETO'}
-                  </span>
-                </div>
-              </div>
-              <div className="p-2 glass-card rounded-xl border-white/10 bg-white/5 shadow-inner">
-                <Target size={16} className="text-fuchsia-400" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col gap-1 sm:gap-2">
-                <div className="text-2xl sm:text-4xl font-black text-white tracking-tighter italic neon-text-white">
-                  {totalPoints}<span className="text-lg sm:text-xl opacity-40 ml-1">/ {powerCap}</span>
-                </div>
-                <span className="text-[9px] sm:text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                  Score Total do Elenco
-                </span>
-              </div>
-
-              <div className="flex-1 max-w-[120px]">
-                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 shadow-inner p-[1px]">
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ${pointsLeft < 0 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]' :
-                      pointsLeft < 500 ? 'bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.6)]' :
-                        'bg-gradient-to-r from-cyan-500 to-fuchsia-500 shadow-[0_0_15px_rgba(34,211,238,0.6)]'
-                      }`}
-                    style={{ width: `${Math.min((totalPoints / powerCap) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* News & History Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
-        {/* Left: Main Headline */}
-        <div className="lg:col-span-2">
-          <div
-            onClick={() => headlineData.type === 'match' && headlineData.match ? setSelectedMatchReport(headlineData.match) : null}
-            className={`relative group overflow-hidden rounded-[2rem] glass-card-neon white-gradient-sheen border border-magenta-500/20 p-4 sm:p-6 transition-all hover:border-magenta-500/50 shadow-[0_0_30px_rgba(217,70,239,0.15)] ${headlineData.type === 'match' ? 'cursor-pointer' : ''}`}
-          >
-            {/* Background Accent */}
-            <div className="absolute top-0 right-0 w-48 h-48 bg-magenta-500/10 blur-[80px] -mr-24 -mt-24 group-hover:bg-magenta-500/20 transition-all" />
-
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="px-2 py-0.5 rounded-full bg-magenta-500/20 border border-magenta-500/30">
-                  <span className="text-[8px] font-black text-magenta-400 uppercase tracking-widest">
-                    {headlineData.type === 'match' ? 'Último Resultado' : 'Feed Global'}
-                  </span>
-                </div>
-                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center">
-                  {headlineData.type === 'match' ? <Trophy size={14} className="text-purple-400" /> : <Newspaper size="14" className="text-purple-400" />}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-0.5 h-4 bg-magenta-500" />
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-[0.1em]">
-                    {headlineData.type === 'match' ? 'Resumo da Rodada' : 'Urgente'}
-                  </span>
-                </div>
-                <h2 className="text-xl sm:text-3xl font-black text-white uppercase tracking-tighter italic leading-none group-hover:text-magenta-400 transition-colors">
-                  {headlineData.title}
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-400 max-w-xl font-medium leading-tight">
-                  {headlineData.message}
-                </p>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {!isRevealed ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRevealMatch(lastMatch!.id); }}
-                      className="flex items-center gap-2 px-4 py-1.5 bg-magenta-500 rounded-full text-[10px] font-black text-black uppercase hover:scale-105 transition-all shadow-[0_0_15px_rgba(217,70,239,0.4)]"
-                    >
-                      <Eye size={12} /> Revelar Placar
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <div className="flex -space-x-1.5">
-                        {[1, 2, 3].map(i => (
-                          <div key={i} className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-[8px] font-bold text-white">
-                            {String.fromCharCode(64 + i)}
-                          </div>
-                        ))}
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-500">
-                        Clique para ver Relatório
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <ChevronRight size={18} className="text-magenta-500 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Recent History / VOD Cards */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-[10px] font-black text-white uppercase tracking-[0.1em] flex items-center gap-1.5">
-              <History size={12} className="text-magenta-400" />
-              Histórico
-            </h3>
-            <button className="text-[9px] font-bold text-slate-500 uppercase hover:text-white transition-colors">Ver Todos</button>
-          </div>
-
-          <div className="space-y-2">
-            {newsFeed.length > 0 ? newsFeed.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => setSelectedMatchReport(item.match)}
-                className="group relative overflow-hidden rounded-lg glass-card border-white/5 p-2.5 cursor-pointer hover:border-magenta-500/30 hover:bg-white/5 transition-all"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${item.title === 'Vitória' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : item.title === 'Empate' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-                      {item.title === 'Vitória' ? <Trophy size={14} /> : item.title === 'Empate' ? <Zap size={14} /> : <AlertCircle size={14} />}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-[10px] font-black text-white uppercase truncate leading-tight">{item.title} <span className="text-slate-500 ml-1">{item.score}</span></h4>
-                      <p className="text-[9px] text-slate-500 font-bold truncate">{item.subtitle}</p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-1.5">
-                    <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-magenta-500/20 transition-all">
-                      <Play size={10} className="text-white group-hover:text-magenta-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="rounded-xl border border-dashed border-white/10 p-6 flex flex-col items-center justify-center text-center gap-2 opacity-50">
-                <Calendar size={20} className="text-slate-600" />
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-tight">Nenhuma partida<br />disputada ainda</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* BOTTOM SECTION: Agenda and Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
-        {/* Agenda de Jogos */}
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
-              <div className="w-3 h-[1px] bg-cyan-500/50" />
-              Calendário
-            </h3>
-            <button className="text-[8px] text-white/30 hover:text-cyan-400 font-black uppercase tracking-[0.1em] transition-all flex items-center gap-1.5 group">
-              Histórico <ChevronRight size={8} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {upcomingMatches.slice(0, 4).map((m, i) => {
-              const homeTeam = state.teams[m.homeTeamId];
-              const awayTeam = state.teams[m.awayTeamId];
-              return (
-                <div key={i} className="group relative glass-card-neon white-gradient-sheen border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:border-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all cursor-pointer overflow-hidden">
-                  <div className="absolute top-0 right-0 w-12 h-12 bg-cyan-500/10 blur-xl group-hover:bg-cyan-500/20 transition-all" />
-
-                  <div className="relative z-10">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-[7px] text-cyan-400 font-black uppercase tracking-widest italic">{isLobby ? '--/--' : m.date.split('-').reverse().slice(0, 2).join('/')}</span>
-                      <span className="text-[7px] text-white font-black tabular-nums">{isLobby ? '--:--' : m.time}</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {homeTeam?.logo && (
-                            <div className="shrink-0">
-                              <TeamLogo
-                                primaryColor={homeTeam.logo.primary}
-                                secondaryColor={homeTeam.logo.secondary}
-                                accentColor={homeTeam.logo.accent}
-                                shapeId={homeTeam.logo.shapeId}
-                                patternId={homeTeam.logo.patternId as any}
-                                symbolId={homeTeam.logo.symbolId}
-                                size={10}
-                              />
-                            </div>
-                          )}
-                          <span className="text-[9px] text-white/60 font-black truncate uppercase tracking-tighter">{m.home}</span>
-                        </div>
-                        <span className="text-[9px] text-white font-black tabular-nums">0</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {awayTeam?.logo && (
-                            <div className="shrink-0">
-                              <TeamLogo
-                                primaryColor={awayTeam.logo.primary}
-                                secondaryColor={awayTeam.logo.secondary}
-                                accentColor={awayTeam.logo.accent}
-                                shapeId={awayTeam.logo.shapeId}
-                                patternId={awayTeam.logo.patternId as any}
-                                symbolId={awayTeam.logo.symbolId}
-                                size={10}
-                              />
-                            </div>
-                          )}
-                          <span className="text-[9px] text-white/60 font-black truncate uppercase tracking-tighter">{m.away}</span>
-                        </div>
-                        <span className="text-[9px] text-white font-black tabular-nums">0</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Logs de Sistema / Atividades */}
-        <div className="space-y-3">
-          <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2 px-1">
-            <div className="w-3 h-[1px] bg-purple-500/50" />
-            Sistema
-          </h3>
-          <div className="glass-card-neon white-gradient-sheen border-purple-500/20 rounded-xl sm:rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(168,85,247,0.1)]">
-            <div className="divide-y divide-white/5">
-              {[
-                { label: 'Otimização Tática', time: 'AGORA', status: 'cyan', icon: Zap },
-                { label: 'Mercado Aberto', time: '12m', status: 'emerald', icon: ShoppingCart },
-                { label: 'Scout Norte', time: '45m', status: 'purple', icon: Search },
-                { label: 'Sincronização', time: '2h', status: 'slate', icon: Database },
-              ].map((n, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2 hover:bg-white/[0.03] transition-all cursor-pointer group">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-1 rounded-lg glass-card border-white/5 bg-white/5 group-hover:neon-border-${n.status}`}>
-                      <n.icon size={10} className={`text-${n.status}-500 group-hover:scale-110 transition-transform`} />
-                    </div>
-                    <span className="text-[9px] text-white/40 group-hover:text-white transition-colors font-black uppercase tracking-tight">{n.label}</span>
-                  </div>
-                  <span className="text-[7px] text-white/20 font-black tabular-nums group-hover:text-white/40 transition-colors">{n.time}</span>
-                </div>
-              ))}
-            </div>
-            <div className="p-2 bg-white/[0.02] border-t border-white/5 flex items-center justify-center">
-              <button className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] hover:text-white transition-colors">Ver Console</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      </>)}
       {/* Match Report Modal */}
       {selectedMatchReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">
@@ -1395,3 +1639,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     </div>
   );
 };
+
+
+
+
+

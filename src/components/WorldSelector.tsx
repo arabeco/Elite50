@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { Globe, Plus, Clock, ChevronRight, LogOut, Users, Trash2, KeyRound } from 'lucide-react';
 import { generateInitialState } from '../engine/generator';
+import { DEFAULT_TIME_SPEED, TEST_TIME_SPEED } from '../constants/gameConstants';
 
 export const WorldSelector: React.FC = () => {
   const { worlds, publicWorlds, setWorldId, loadGame, joinGame, joinGameByCode, setState, saveGame, refreshWorlds, deleteWorld, logout, isSyncing } = useGame();
   const [isCreating, setIsCreating] = useState(false);
   const [newWorldName, setNewWorldName] = useState('');
   const [isPublicWorld, setIsPublicWorld] = useState(false);
+  const [newWorldClockProfile, setNewWorldClockProfile] = useState<'REAL' | 'TEST'>('REAL');
   const [activeTab, setActiveTab] = useState<'my-worlds' | 'community'>('my-worlds');
   const [joinCode, setJoinCode] = useState('');
 
@@ -25,10 +27,14 @@ export const WorldSelector: React.FC = () => {
     const id = Date.now().toString();
     const joinCode = `ELITE-${id.slice(-6)}`;
     const initialState = generateInitialState();
+    const clockConfig = newWorldClockProfile === 'TEST'
+      ? { profile: 'TEST' as const, timeSpeed: TEST_TIME_SPEED, label: '1 dia a cada 5 min' }
+      : { profile: 'REAL' as const, timeSpeed: DEFAULT_TIME_SPEED, label: '1 dia a cada 10 min' };
     (initialState.world as any).name = newWorldName;
 
     // Set status to LOBBY to trigger onboarding via Dashboard -> NewGameFlow
     initialState.world.status = 'LOBBY';
+    initialState.world.clock = clockConfig;
     initialState.world.isPublic = isPublicWorld;
     initialState.world.access = {
       visibility: isPublicWorld ? 'PUBLIC' : 'PRIVATE',
@@ -52,6 +58,7 @@ export const WorldSelector: React.FC = () => {
     setIsCreating(false);
     setNewWorldName('');
     setIsPublicWorld(false);
+    setNewWorldClockProfile('REAL');
   };
 
   const handleJoinByCode = async () => {
@@ -143,9 +150,22 @@ export const WorldSelector: React.FC = () => {
 
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-xl font-black text-white uppercase tracking-wider group-hover:text-cyan-400 transition-colors">
-                        {world.name}
-                      </h3>
+                      <div className="min-w-0">
+                        <h3 className="text-xl font-black text-white uppercase tracking-wider group-hover:text-cyan-400 transition-colors truncate">
+                          {world.name}
+                        </h3>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase tracking-[0.18em] ${
+                              world.isLocalOnly
+                                ? 'border-amber-400/30 bg-amber-500/10 text-amber-200'
+                                : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+                            }`}
+                          >
+                            {world.isLocalOnly ? 'Cache Local' : 'Sincronizado'}
+                          </span>
+                        </div>
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -200,6 +220,35 @@ export const WorldSelector: React.FC = () => {
                     />
                     Mostrar na comunidade
                   </label>
+                  <div className="mb-4">
+                    <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Ritmo do mundo
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewWorldClockProfile('REAL')}
+                        className={`rounded-xl border px-3 py-3 text-left transition-all ${newWorldClockProfile === 'REAL'
+                          ? 'border-cyan-400/50 bg-cyan-500/12 text-white'
+                          : 'border-white/10 bg-black/30 text-slate-500 hover:border-white/20 hover:text-slate-300'
+                          }`}
+                      >
+                        <div className="text-[10px] font-black uppercase tracking-widest">Real</div>
+                        <div className={`mt-1 text-[9px] font-bold uppercase tracking-wide ${newWorldClockProfile === 'REAL' ? 'text-cyan-200' : 'text-slate-600'}`}>1 dia = 10 min</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewWorldClockProfile('TEST')}
+                        className={`rounded-xl border px-3 py-3 text-left transition-all ${newWorldClockProfile === 'TEST'
+                          ? 'border-amber-400/50 bg-amber-500/12 text-white'
+                          : 'border-white/10 bg-black/30 text-slate-500 hover:border-white/20 hover:text-slate-300'
+                          }`}
+                      >
+                        <div className="text-[10px] font-black uppercase tracking-widest">Teste</div>
+                        <div className={`mt-1 text-[9px] font-bold uppercase tracking-wide ${newWorldClockProfile === 'TEST' ? 'text-amber-200' : 'text-slate-600'}`}>1 dia = 5 min</div>
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleCreateWorld}
@@ -258,7 +307,7 @@ export const WorldSelector: React.FC = () => {
 
                     <div className="mt-6 flex items-center justify-between">
                       <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
-                        Entrar como observador
+                        Entrar no mundo
                       </span>
                       <ChevronRight size={16} className="text-purple-500 transform group-hover:translate-x-1 transition-transform" />
                     </div>

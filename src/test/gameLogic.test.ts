@@ -86,7 +86,7 @@ describe('gameLogic', () => {
         expect(newState).toBe(initialState); // Pre-season lock returns exactly the same reference
     });
 
-    it('startNewSeason should increment season and reset status to LOBBY', () => {
+    it('startNewSeason should increment season and reopen the world already active', () => {
         const initialState = {
             world: {
                 status: 'FINISHED',
@@ -109,8 +109,8 @@ describe('gameLogic', () => {
         const newState = startNewSeason(initialState);
 
         expect(newState.world.currentSeason).toBe(2051);
-        expect(newState.world.status).toBe('LOBBY');
-        expect(newState.world.currentRound).toBe(1);
+        expect(newState.world.status).toBe('ACTIVE');
+        expect(newState.world.currentRound).toBe(0);
 
         // Verify player history resets
         expect(newState.players['p_1'].history.goals).toBe(0);
@@ -159,5 +159,52 @@ describe('gameLogic', () => {
         expect(state.players[humanOwnedPlayerId].contract.teamId).toBe('t_32');
         expect(state.teams.t_31.squad).not.toContain(humanOwnedPlayerId);
         expect(state.teams.t_32.squad).toContain(humanOwnedPlayerId);
+    });
+
+    it('promotes queued club applications when the offseason window opens', () => {
+        const state = generateInitialState();
+        state.userId = 'u_waiting';
+        state.userManagerId = 'u_waiting';
+        state.userTeamId = null;
+        state.world.status = 'ACTIVE';
+        state.world.phase = 'OFFSEASON';
+        state.world.currentDay = 1;
+        state.managers.u_waiting = {
+            id: 'u_waiting',
+            name: 'Fila Manager',
+            district: 'NORTE',
+            reputation: 55,
+            isNPC: false,
+            attributes: { evolution: 50, negotiation: 50, scout: 50 },
+            career: {
+                titlesWon: 0,
+                totalLeagueTitles: 0,
+                totalCupTitles: 0,
+                hallOfFameEntries: 0,
+                consecutiveTitles: 0,
+                currentTeamId: null,
+                historyTeamIds: []
+            },
+            achievements: []
+        };
+        state.world.clubOffers = [{
+            id: 'queued_offer',
+            teamId: 't_31',
+            targetUserId: 'u_waiting',
+            managerId: 'u_waiting',
+            managerName: 'Fila Manager',
+            source: 'APPLICATION',
+            status: 'WAITING_NEXT_SEASON',
+            createdAt: state.world.currentDate,
+            availableOnDay: -1,
+            note: 'Na fila para a proxima temporada.'
+        }];
+
+        const nextState = advanceGameDay(state);
+        const queuedOffer = nextState.world.clubOffers?.find(offer => offer.id === 'queued_offer');
+
+        expect(queuedOffer?.status).toBe('PENDING');
+        expect(queuedOffer?.availableOnDay).toBe((nextState.world.currentDay || 0) + 1);
+        expect(queuedOffer?.note).toMatch(/fila andou/i);
     });
 });

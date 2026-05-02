@@ -39,17 +39,34 @@ const LAST_NAMES = [
     'Costa', 'Ribeiro', 'Martins', 'Carvalho', 'Almeida', 'Lopes', 'Soares', 'Fernandes', 'Vieira', 'Barbosa'
 ];
 
+const EXPANDED_NICKNAMES = [
+    ...NICKNAMES,
+    'Rayo', 'Trovador', 'Canhoto', 'Pivete', 'Bruxo', 'Tanque', 'Motor', 'Raiz', 'Cometa', 'Nave',
+    'Coringa', 'Bala', 'Doutor', 'Maestro', 'Parede', 'Luva', 'Fera', 'Raio', 'Nobre', 'Veloz',
+    'Cromo', 'Nix', 'Aero', 'Neon', 'Pixel', 'Atlas', 'Kael', 'Jax', 'Rune', 'Zen',
+    'Milo', 'Nico', 'Orion', 'Talon', 'Nova', 'Skye', 'Iris', 'Juno', 'Lyra', 'Kira',
+    'Zara', 'Cleo', 'Freya', 'Sasha', 'Luna', 'Vesper'
+];
+
+const EXPANDED_LAST_NAMES = [
+    ...LAST_NAMES,
+    'Azevedo', 'Teixeira', 'Moura', 'Duarte', 'Nogueira', 'Castro', 'Mendes', 'Cardoso', 'Batista', 'Correia',
+    'Vargas', 'Torres', 'Monteiro', 'Rocha', 'Farias', 'Macedo', 'Freitas', 'Cavalcanti', 'Sales', 'Borges',
+    'Aegis', 'Cipher', 'Dynamo', 'Helix', 'Kinetic', 'Lumina', 'Photon', 'Quantum', 'Vector', 'Zenith',
+    'Chrome', 'Frost', 'Matrix', 'Neon', 'Onyx', 'Phantom', 'Razor', 'Shadow', 'Viper', 'Wraith'
+];
+
 const generatePlayer = (tier: keyof typeof TIERS | 'EXILED', id?: string): Player => {
     const isExiled = tier === 'EXILED';
-    const range = isExiled ? { min: 400, max: 400 } : TIERS[tier];
+    const range = isExiled ? { min: 520, max: 780 } : TIERS[tier];
     const rating = randomInt(range.min, range.max);
 
     const roles: PlayerRole[] = ['GOL', 'ZAG', 'MEI', 'ATA'];
     const role = roles[Math.floor(rand() * roles.length)];
     const position: PositionType = role === 'GOL' ? 'Goleiro' : 'Linha';
 
-    const nickname = NICKNAMES[Math.floor(rand() * NICKNAMES.length)] + ' ' + (Math.floor(rand() * 99));
-    const name = nickname + ' ' + LAST_NAMES[Math.floor(rand() * LAST_NAMES.length)];
+    const nickname = EXPANDED_NICKNAMES[Math.floor(rand() * EXPANDED_NICKNAMES.length)] + ' ' + (Math.floor(rand() * 99));
+    const name = nickname + ' ' + EXPANDED_LAST_NAMES[Math.floor(rand() * EXPANDED_LAST_NAMES.length)];
     const gender = rand() < 0.5 ? 'M' : 'F';
 
     const player: Player = {

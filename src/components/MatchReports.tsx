@@ -20,6 +20,15 @@ interface LiveReportProps {
   onPlayerClick?: (player: Player) => void;
 }
 
+const SHOT_EVENT_TYPES: MatchEvent['type'][] = ['GOAL', 'CHANCE', 'WOODWORK', 'BLOCKED'];
+const SHOT_ON_TARGET_EVENT_TYPES: MatchEvent['type'][] = ['GOAL', 'CHANCE'];
+
+const countTeamEvents = (
+  events: MatchEvent[],
+  teamId: string,
+  acceptedTypes: MatchEvent['type'][]
+) => events.filter(event => event.teamId === teamId && acceptedTypes.includes(event.type)).length;
+
 export const LiveReport: React.FC<LiveReportProps> = ({
   match,
   homeTeam,
@@ -45,11 +54,13 @@ export const LiveReport: React.FC<LiveReportProps> = ({
     .filter(e => e.type === 'GOAL' && e.teamId === awayTeam.id && e.realTimeSecond <= currentSecond)
     .length;
 
+  const liveHomeShots = countTeamEvents(visibleEvents, homeTeam.id, SHOT_EVENT_TYPES);
+  const liveAwayShots = countTeamEvents(visibleEvents, awayTeam.id, SHOT_EVENT_TYPES);
+  const liveHomeShotsOnTarget = countTeamEvents(visibleEvents, homeTeam.id, SHOT_ON_TARGET_EVENT_TYPES);
+  const liveAwayShotsOnTarget = countTeamEvents(visibleEvents, awayTeam.id, SHOT_ON_TARGET_EVENT_TYPES);
+
   const progress = (currentSecond / MATCH_REAL_TIME_SECONDS) * 100;
   const matchMinute = Math.floor((currentSecond / MATCH_REAL_TIME_SECONDS) * 90);
-
-  // Stats interpolation based on time
-  const interpolateStat = (finalValue: number) => Math.round(finalValue * (currentSecond / MATCH_REAL_TIME_SECONDS));
 
   return (
     <div className="flex flex-col h-full bg-slate-950 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
@@ -141,7 +152,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
       <div className="px-6 py-4 bg-black/40 border-b border-white/5 grid grid-cols-3 gap-4">
         <div className="flex flex-col items-center">
           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Finalizações</span>
-          <span className="text-xs font-black text-white italic">{interpolateStat(result.stats.shots.home)} - {interpolateStat(result.stats.shots.away)}</span>
+          <span className="text-xs font-black text-white italic">{liveHomeShots} - {liveAwayShots}</span>
         </div>
         <div className="flex flex-col items-center">
           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Posse</span>
@@ -149,7 +160,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
         </div>
         <div className="flex flex-col items-center">
           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">No Alvo</span>
-          <span className="text-xs font-black text-white italic">{interpolateStat(result.stats.shotsOnTarget.home)} - {interpolateStat(result.stats.shotsOnTarget.away)}</span>
+          <span className="text-xs font-black text-white italic">{liveHomeShotsOnTarget} - {liveAwayShotsOnTarget}</span>
         </div>
       </div>
 
@@ -248,6 +259,34 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
   </div>
 );
 
+const getWidthReading = (team: Team) => {
+  const width = team.tactics?.width ?? 50;
+  if (width >= 68) return 'abriu o campo e esticou a defesa rival';
+  if (width <= 35) return 'apertou por dentro e protegeu melhor o corredor central';
+  return 'equilibrou largura e cobertura sem expor demais os lados';
+};
+
+const getPassingReading = (team: Team) => {
+  const passing = team.tactics?.passing ?? 50;
+  if (passing >= 68) return 'acelerou a jogada e buscou o ultimo terco com mais verticalidade';
+  if (passing <= 35) return 'girou a posse com mais calma e reduziu perdas precipitadas';
+  return 'alternou ritmo sem prender o time a uma rota unica';
+};
+
+const getLineReading = (team: Team) => {
+  const linePosition = team.tactics?.linePosition ?? 50;
+  if (linePosition >= 68) return 'subiu a linha para empurrar o jogo para frente';
+  if (linePosition <= 35) return 'baixou o bloco e convidou o rival a correr mais risco';
+  return 'manteve uma altura de bloco mais equilibrada';
+};
+
+const getIntensityReading = (team: Team) => {
+  const intensity = team.tactics?.intensity ?? team.tactics?.aggressiveness ?? 50;
+  if (intensity >= 68) return 'pressionou forte e tentou recuperar cedo';
+  if (intensity <= 35) return 'escolheu melhor os botes e segurou a estrutura';
+  return 'dosou bem a pressao ao longo do jogo';
+};
+
 const getTacticalReading = (result: NonNullable<Match['result']>, homeTeam: Team, awayTeam: Team) => {
   const homeWon = result.homeScore > result.awayScore;
   const awayWon = result.awayScore > result.homeScore;
@@ -264,6 +303,13 @@ const getTacticalReading = (result: NonNullable<Match['result']>, homeTeam: Team
   const winnerShots = winningSide === 'home' ? homeShots : winningSide === 'away' ? awayShots : 0;
   const loserShots = winningSide === 'home' ? awayShots : winningSide === 'away' ? homeShots : 0;
   const winnerStyle = winningTeam?.tactics?.playStyle;
+  const widthReading = winningTeam ? getWidthReading(winningTeam) : null;
+  const passingReading = winningTeam ? getPassingReading(winningTeam) : null;
+  const lineReading = winningTeam ? getLineReading(winningTeam) : null;
+  const intensityReading = winningTeam ? getIntensityReading(winningTeam) : null;
+  const winnerTacticalAddon = winningTeam
+    ? ` ${winningTeam.name} ${lineReading}, ${widthReading} e ${passingReading}.`
+    : '';
 
   if (!winningTeam) {
     if (possessionGap >= 16) {
@@ -274,26 +320,26 @@ const getTacticalReading = (result: NonNullable<Match['result']>, homeTeam: Team
   }
 
   if ((winnerStyle === 'Retranca Armada' || winnerStyle === 'Catenaccio') && winnerPossession < 47) {
-    return `${winningTeam.name} baixou as linhas, protegeu a entrada da area e escolheu poucos momentos para sair. A vitoria veio de eficiencia, nao de volume.`;
+    return `${winningTeam.name} baixou as linhas, protegeu a entrada da area e escolheu poucos momentos para sair. A vitoria veio de eficiencia, nao de volume.${winnerTacticalAddon}`;
   }
 
   if ((winnerStyle === 'Gegenpressing' || (winningTeam.tactics?.intensity || 0) >= 70) && winnerShots >= loserShots) {
-    return `${winningTeam.name} pressionou mais alto e recuperou bolas em zonas boas sem abrir demais o campo. Esse detalhe empurrou o jogo para o lado vencedor.`;
+    return `${winningTeam.name} pressionou mais alto e recuperou bolas em zonas boas sem abrir demais o campo. Esse detalhe empurrou o jogo para o lado vencedor. ${winningTeam.name} ${intensityReading}.`;
   }
 
   if (winnerStyle === 'Tiki-Taka' && winnerPossession >= 55) {
-    return `${winningTeam.name} esfriou o ritmo com posse e paciencia. O placar cresceu quando a circulacao encontrou espaco entre meio e defesa.`;
+    return `${winningTeam.name} esfriou o ritmo com posse e paciencia. O placar cresceu quando a circulacao encontrou espaco entre meio e defesa.${winnerTacticalAddon}`;
   }
 
   if (shotGap >= 6) {
-    return `${winningTeam.name} produziu mais chances e sustentou presenca no ultimo terco. ${losingTeam?.name} resistiu por partes, mas cedeu finalizacoes demais.`;
+    return `${winningTeam.name} produziu mais chances e sustentou presenca no ultimo terco. ${losingTeam?.name} resistiu por partes, mas cedeu finalizacoes demais.${winnerTacticalAddon}`;
   }
 
   if (Math.abs(result.homeScore - result.awayScore) === 1) {
-    return `${winningTeam.name} venceu num detalhe. A diferenca foi pequena, mas a equipe foi mais limpa nas decisoes perto da area.`;
+    return `${winningTeam.name} venceu num detalhe. A diferenca foi pequena, mas a equipe foi mais limpa nas decisoes perto da area. ${winningTeam.name} ${intensityReading} e ${passingReading}.`;
   }
 
-  return `${winningTeam.name} foi superior nos momentos-chave. O jogo nao precisou de exagero: melhor ocupacao, menos perda perigosa e finalizacao mais clara.`;
+  return `${winningTeam.name} foi superior nos momentos-chave. O jogo nao precisou de exagero: melhor ocupacao, menos perda perigosa e finalizacao mais clara.${winnerTacticalAddon}`;
 };
 
 interface PostGameReportProps {

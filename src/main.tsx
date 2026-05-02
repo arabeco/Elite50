@@ -7,6 +7,12 @@ import './index.css';
 import { polyfill } from "mobile-drag-drop";
 import { scrollBehaviourDragImageTranslateOverride } from "mobile-drag-drop/scroll-behaviour";
 
+if ('serviceWorker' in navigator && import.meta.env.DEV) {
+  navigator.serviceWorker.getRegistrations()
+    .then(registrations => registrations.forEach(registration => registration.unregister()))
+    .catch(error => console.warn('Service worker cleanup failed:', error));
+}
+
 polyfill({
     dragImageTranslateOverride: scrollBehaviourDragImageTranslateOverride
 });

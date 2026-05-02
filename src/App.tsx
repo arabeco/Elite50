@@ -11,8 +11,6 @@ import { WorldSelector } from './components/WorldSelector';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/ToastContainer';
 
-import { DevTimeController } from './components/DevTimeController';
-
 function AppContent() {
   const { isAuthenticated, worldId } = useGame();
 
@@ -34,7 +32,6 @@ function AppContent() {
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
       <ToastContainer />
-      {isAuthenticated && worldId && <DevTimeController />}
     </>
   );
 }
