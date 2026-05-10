@@ -247,6 +247,7 @@ export interface Manager {
     historyTeamIds: string[];
   };
   achievements: Achievement[];
+  tacticalMemory?: Record<string, number>;
 }
 
 export type MatchStatus = 'SCHEDULED' | 'LOCKED' | 'PLAYING' | 'FINISHED';

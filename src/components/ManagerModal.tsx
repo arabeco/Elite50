@@ -20,6 +20,10 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
     const powerCap = userTeam?.powerCap || 0;
     const squadFillPercent = powerCap > 0 ? (teamPower / powerCap) * 100 : 0;
     const commandReadout = getManagerCommandReadout(manager);
+    const tacticalMemoryRows = Object.entries(manager.tacticalMemory || {})
+        .map(([style, value]) => [style, Number(value) || 0] as const)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 4);
 
     return (
         <div
@@ -187,6 +191,27 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                                 <p className="mt-1 text-sm font-black italic text-white">{commandReadout.draftInfluence >= 0 ? '+' : ''}{commandReadout.draftInfluence}</p>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-2xl p-4">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Target size={16} className="text-emerald-400" />
+                            <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Memoria Tatica</h3>
+                        </div>
+                        {tacticalMemoryRows.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Nenhum metodo cravado no curriculo ainda.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {tacticalMemoryRows.map(([style, value]) => (
+                                    <div key={style} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.04] px-3 py-2">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/70">{style}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">{value}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                 </div>

@@ -1,4 +1,6 @@
 import { useGame } from '../store/GameContext';
+import { PlayStyle } from '../types';
+import { applyManagerTacticalMemoryFloor } from '../utils/managerTacticalMemory';
 
 export const useTraining = (userTeamId: string | null) => {
     const { state, setState, addToast } = useGame();
@@ -48,16 +50,20 @@ export const useTraining = (userTeamId: string | null) => {
     };
 
     const handleSetPlaystyleTraining = (style: string | null) => {
-        setState(prev => ({
-            ...prev,
-            training: {
-                ...prev.training,
-                playstyleTraining: {
-                    ...prev.training.playstyleTraining,
-                    currentStyle: style as any
-                }
+        setState(prev => {
+            const manager = prev.userManagerId ? prev.managers[prev.userManagerId] : null;
+            const nextTraining = applyManagerTacticalMemoryFloor(prev.training, manager, style as PlayStyle | null);
+            const nextUnderstanding = style ? (nextTraining.playstyleTraining.understanding[style] || 0) : 0;
+
+            if (style && nextUnderstanding > (prev.training.playstyleTraining.understanding[style] || 0)) {
+                addToast(`${style} recuperado do curriculo do manager: ${nextUnderstanding}% de base.`, 'success');
             }
-        }));
+
+            return {
+                ...prev,
+                training: nextTraining
+            };
+        });
     };
 
     const handleStartLegacyTraining = (playerId: string, type: 'CURE' | 'LEARN', trait?: string) => {

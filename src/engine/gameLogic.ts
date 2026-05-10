@@ -26,6 +26,7 @@ import {
   SQUAD_SIZE_MAX
 } from '../constants/gameConstants';
 import { getManagerDraftInfluence } from '../utils/managerStats';
+import { recordManagerTacticalMemory } from '../utils/managerTacticalMemory';
 
 // --- Helpers ---
 
@@ -995,6 +996,13 @@ const processTrainingDay = (state: GameState) => {
     const newUnderstanding = Math.min(100, currentUnderstanding + increment);
 
     state.training.playstyleTraining.understanding[currentStyle] = newUnderstanding;
+
+    const managerId = state.userManagerId;
+    const manager = managerId ? state.managers[managerId] : null;
+    const nextManager = recordManagerTacticalMemory(manager, currentStyle, newUnderstanding);
+    if (managerId && nextManager && nextManager !== manager) {
+      state.managers[managerId] = nextManager;
+    }
   }
 };
 
