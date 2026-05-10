@@ -226,6 +226,52 @@ const cosmeticItems: StoreItem[] = [
   },
 ];
 
-export const STORE_ITEMS: StoreItem[] = [...bootItems, ...cosmeticItems];
+const profileItems: StoreItem[] = [
+  {
+    id: 'accessory_founder_whistle',
+    category: 'ACCESSORY',
+    name: 'Apito de Fundador',
+    description: 'Acessorio de perfil para manager que carrega mundos nas costas.',
+    collectionLabel: 'Perfil Global',
+    effectLabel: 'Aura de Manager',
+    effectDescription: 'Marca publica de prestigio. Bonus leve de reputacao visual entre mundos.',
+    rarity: 'RARE',
+    currency: 'GOLD',
+    price: 32,
+    imagePath: '/logo.png',
+    managerBonus: { reputationAura: 1 },
+  },
+  {
+    id: 'accessory_scout_lens',
+    category: 'ACCESSORY',
+    name: 'Lente de Scout',
+    description: 'Acessorio transversal para deixar o perfil com cara de observador elite.',
+    collectionLabel: 'Perfil Global',
+    effectLabel: 'Clareza de Scout',
+    effectDescription: 'Futuro bonus leve de leitura e filtros. Nao aumenta rating nem resultado de partida.',
+    rarity: 'EPIC',
+    currency: 'FRAGMENT',
+    price: 12,
+    imagePath: '/logo.png',
+    managerBonus: { scoutingClarityPct: 5 },
+  },
+  {
+    id: 'badge_elite_original_s1',
+    category: 'BADGE',
+    name: 'Elite Original S1',
+    description: 'Badge de perfil para quem fechou o primeiro circuito com honra.',
+    collectionLabel: 'Perfil Global',
+    effectLabel: 'Prova Social',
+    effectDescription: 'Item de perfil atravessando mundos. Valor de historia, nao de poder.',
+    rarity: 'LEGENDARY',
+    currency: 'FRAGMENT',
+    price: 0,
+    premiumOnly: true,
+    imagePath: '/logo.png',
+    circuitTag: APP_CIRCUIT.id,
+  },
+];
+
+export const STORE_ITEMS: StoreItem[] = [...bootItems, ...cosmeticItems, ...profileItems];
 
 export const STORE_ITEMS_BY_ID = Object.fromEntries(STORE_ITEMS.map(item => [item.id, item]));

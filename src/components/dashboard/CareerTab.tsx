@@ -45,7 +45,7 @@ export const CareerTab = (props: any) => {
   const [isCareerModalOpen, setIsCareerModalOpen] = useState(false);
   const [gmRandomPlayer, setGmRandomPlayer] = useState<Player | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [careerSection, setCareerSection] = useState<'store' | 'inventory' | 'circuit' | 'hall' | 'settings'>('store');
+  const [careerSection, setCareerSection] = useState<'store' | 'inventory' | 'circuit' | 'profile' | 'settings'>('store');
   const [selectedStoreItem, setSelectedStoreItem] = useState<StoreItem | null>(null);
   const [selectedGoldPack, setSelectedGoldPack] = useState<BillingCatalogEntry | null>(null);
   const [isBillingBusy, setIsBillingBusy] = useState(false);
@@ -58,6 +58,7 @@ export const CareerTab = (props: any) => {
   const shopBoots = STORE_ITEMS.filter(item => item.category === 'BOOT');
   const shopKits = STORE_ITEMS.filter(item => item.category === 'KIT');
   const shopLogos = STORE_ITEMS.filter(item => item.category === 'LOGO');
+  const shopProfileItems = STORE_ITEMS.filter(item => item.category === 'ACCESSORY' || item.category === 'BADGE');
   const userManager = state.userManagerId ? state.managers[state.userManagerId] : null;
   const worldClockDisplayDate = useMemo(() => {
     const baseDate = new Date(
@@ -128,6 +129,16 @@ export const CareerTab = (props: any) => {
   };
 
   const ownedItems = STORE_ITEMS.filter(item => isOwnedInView(item.id));
+  const ownedProfileItems = ownedItems.filter(item => item.category === 'ACCESSORY' || item.category === 'BADGE');
+  const highRarityOwnedItems = ownedItems.filter(item => ['RARE', 'EPIC', 'LEGENDARY'].includes(item.rarity));
+  const profileHonorScore = Math.round(
+    (userManager?.career.titlesWon || 0) * 18 +
+    (userManager?.career.hallOfFameEntries || 0) * 35 +
+    (viewCircuit.seasonRunsCompleted || 0) * 12 +
+    highRarityOwnedItems.length * 7 +
+    ownedProfileItems.length * 14
+  );
+  const profileTier = profileHonorScore >= 220 ? 'Lenda urbana' : profileHonorScore >= 120 ? 'Nome respeitado' : profileHonorScore >= 45 ? 'Em ascensao' : 'Primeiros passos';
 
   const handleSimulateGameReport = (mode: 'live' | 'finished') => {
     handleMockReport(mode, "MANCHETE GM: Escândalo em Neo-City! Time mockado vence de goleada histórica!");
@@ -395,7 +406,7 @@ export const CareerTab = (props: any) => {
             { id: 'store' as const, label: 'Loja', icon: ShoppingCart },
             { id: 'inventory' as const, label: 'Inventario', icon: Briefcase },
             { id: 'circuit' as const, label: 'Circuito', icon: Crown },
-            { id: 'hall' as const, label: 'Hall da Fama', icon: Trophy },
+            { id: 'profile' as const, label: 'Perfil', icon: Trophy },
             { id: 'settings' as const, label: 'Config', icon: Sliders },
           ].map(section => (
             <button
@@ -677,7 +688,7 @@ export const CareerTab = (props: any) => {
                           ? 'Circuito'
                           : careerSection === 'settings'
                             ? 'Config'
-                            : 'Hall da Fama'}
+                            : 'Perfil'}
                   </h3>
                 </div>
                 <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">
@@ -689,7 +700,7 @@ export const CareerTab = (props: any) => {
                         ? 'Campanha global do app que corre por fora das temporadas dos mundos.'
                         : careerSection === 'settings'
                           ? 'Preferencias simples e suporte ficam aqui, fora do fluxo principal.'
-                          : 'Prestigio acumulado do manager e do clube ao longo da carreira.'}
+                          : 'Honra, colecao e identidade do manager atravessando mundos.'}
                 </p>
               </div>
               <div className="text-right">
@@ -750,6 +761,7 @@ export const CareerTab = (props: any) => {
                   { title: 'Chuteiras', items: shopBoots, onEquip: null as null | ((itemId: string) => Promise<void>) },
                   { title: 'Uniformes', items: shopKits, onEquip: handleEquipKit },
                   { title: 'Logos', items: shopLogos, onEquip: handleEquipLogo },
+                  { title: 'Perfil', items: shopProfileItems, onEquip: null as null | ((itemId: string) => Promise<void>) },
                 ].map(section => (
                   <div key={section.title} className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -972,20 +984,78 @@ export const CareerTab = (props: any) => {
               </div>
             )}
 
-            {careerSection === 'hall' && (
+            {careerSection === 'profile' && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-200">Titulos do manager</p>
-                    <p className="mt-1 text-2xl font-black italic text-white">{userManager?.career.titlesWon || 0}</p>
+                <div className="rounded-[1.75rem] border border-amber-400/20 bg-black/45 p-4 shadow-[0_0_28px_rgba(251,191,36,0.1)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-amber-200">Perfil global</p>
+                      <h3 className="mt-2 text-2xl font-black uppercase italic tracking-tight text-white">
+                        {userManager?.name || 'Manager Elite'}
+                      </h3>
+                      <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/45">
+                        {profileTier} - honra {profileHonorScore}
+                      </p>
+                    </div>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 text-amber-100">
+                      <Crown size={24} />
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Hall of fame</p>
-                    <p className="mt-1 text-2xl font-black italic text-white">{userManager?.career.hallOfFameEntries || 0}</p>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Titulos</p>
+                      <p className="mt-1 text-xl font-black italic text-white">{userManager?.career.titlesWon || 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Hall</p>
+                      <p className="mt-1 text-xl font-black italic text-white">{userManager?.career.hallOfFameEntries || 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Colecao</p>
+                      <p className="mt-1 text-xl font-black italic text-white">{ownedItems.length}</p>
+                    </div>
                   </div>
                 </div>
+
+                <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100">Acessorios de manager</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                        Itens do perfil atravessam mundos. Bonus aqui e leve, de identidade e leitura, nao de placar.
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-lg font-black italic text-white">{ownedProfileItems.length}/{shopProfileItems.length}</p>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {shopProfileItems.map(item => {
+                      const owned = isOwnedInView(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSelectedStoreItem(item)}
+                          className={`aspect-square rounded-xl border p-2 text-left transition ${
+                            owned
+                              ? 'border-cyan-300/35 bg-cyan-300/12'
+                              : 'border-white/10 bg-black/35 hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/45 text-white/70">
+                            {item.category === 'BADGE' ? <Award size={16} /> : <Shield size={16} />}
+                          </div>
+                          <p className="mt-2 truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
+                          <p className="text-[6px] font-black uppercase tracking-widest text-white/35">{owned ? 'seu' : item.rarity}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-white/10 bg-black/35 p-3">
-                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Clube atual</p>
+                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Clube deste mundo</p>
                   <div className="mt-3 space-y-2">
                     <div className="rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-[8px] font-black uppercase tracking-widest text-white/55">
                       Liga: {userTeam?.titles?.league || 0}

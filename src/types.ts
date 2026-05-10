@@ -98,7 +98,7 @@ export interface TacticalCard {
   effect: string;
 }
 
-export type StoreItemCategory = 'BOOT' | 'KIT' | 'LOGO' | 'PASS' | 'BADGE';
+export type StoreItemCategory = 'BOOT' | 'KIT' | 'LOGO' | 'PASS' | 'BADGE' | 'ACCESSORY';
 export type StoreCurrency = 'GOLD' | 'FRAGMENT';
 export type StoreItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
@@ -123,6 +123,11 @@ export interface StoreItem {
   assetPath?: string;
   bootVisualId?: number;
   bootBonus?: StoreBootBonus;
+  managerBonus?: {
+    seasonGoldPct?: number;
+    scoutingClarityPct?: number;
+    reputationAura?: number;
+  };
   logoPreview?: Partial<TeamLogoMetadata>;
   circuitTag?: string;
 }
