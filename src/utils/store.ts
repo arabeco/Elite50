@@ -175,6 +175,19 @@ export const purchaseStoreItem = (state: GameState, itemId: string) => {
   };
 };
 
+export const addGoldToStore = (state: GameState, amount: number) => {
+  const store = getStoreState(state);
+  const safeAmount = Math.max(0, Math.round(amount));
+
+  return {
+    ...state,
+    store: {
+      ...store,
+      gold: store.gold + safeAmount,
+    },
+  };
+};
+
 export const equipBootOnPlayer = (state: GameState, playerId: string, itemId: string | null) => {
   const player = state.players[playerId];
   if (!player) {

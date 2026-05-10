@@ -83,6 +83,41 @@ export const purchaseCatalogItemWithBalance = async (itemId: string) => {
   return data as { ok: boolean; reason?: string; itemId?: string; currency?: string; price?: number };
 };
 
+export const grantMobilePurchase = async (
+  productCode: string,
+  options: {
+    purchaseToken?: string | null;
+    orderId?: string | null;
+    platform?: string;
+    packageName?: string | null;
+    purchaseState?: string | null;
+    expiresAt?: string | null;
+    rawPayload?: Record<string, unknown>;
+  } = {}
+) => {
+  const { data, error } = await supabase.rpc('grant_mobile_purchase', {
+    p_product_code: productCode,
+    p_purchase_token: options.purchaseToken || null,
+    p_order_id: options.orderId || null,
+    p_platform: options.platform || 'web_preview',
+    p_package_name: options.packageName || null,
+    p_purchase_state: options.purchaseState || 'purchased',
+    p_expires_at: options.expiresAt || null,
+    p_raw_payload: options.rawPayload || {},
+  });
+
+  if (error) throw error;
+  return data as {
+    ok: boolean;
+    reason?: string;
+    productCode?: string;
+    premium?: boolean;
+    premiumUntil?: string;
+    gold?: number;
+    fragments?: number;
+  };
+};
+
 export const grantSeasonCompletionRewards = async (
   season: number,
   gold: number,

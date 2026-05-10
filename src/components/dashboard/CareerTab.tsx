@@ -15,10 +15,12 @@ import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, StoreItem } from '../../types';
 import { APP_CIRCUIT, STORE_ITEMS } from '../../constants/storeCatalog';
-import { equipTeamKit, equipTeamLogo, getStoreState, isItemOwned, purchaseStoreItem } from '../../utils/store';
-import { loadMetaStoreSnapshot, purchaseCatalogItemWithBalance, type MetaStoreSnapshot } from '../../lib/metaStore';
+import { GOLD_PACKS, type BillingCatalogEntry } from '../../constants/billingCatalog';
+import { addGoldToStore, equipTeamKit, equipTeamLogo, getStoreState, isItemOwned, purchaseStoreItem } from '../../utils/store';
+import { loadMetaStoreSnapshot, grantMobilePurchase, purchaseCatalogItemWithBalance, type MetaStoreSnapshot } from '../../lib/metaStore';
+import { canUseDevBillingPreview, formatBrl, getBillingReadinessCopy, getCheckoutChannelLabel } from '../../lib/billing';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy, Coins } = LucideIcons;
 
 
 export const CareerTab = (props: any) => {
@@ -45,6 +47,8 @@ export const CareerTab = (props: any) => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [careerSection, setCareerSection] = useState<'store' | 'inventory' | 'circuit' | 'hall' | 'settings'>('store');
   const [selectedStoreItem, setSelectedStoreItem] = useState<StoreItem | null>(null);
+  const [selectedGoldPack, setSelectedGoldPack] = useState<BillingCatalogEntry | null>(null);
+  const [isBillingBusy, setIsBillingBusy] = useState(false);
   const [metaSnapshot, setMetaSnapshot] = useState<MetaStoreSnapshot | null>(null);
   const [isMetaLoading, setIsMetaLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('elite.sound') !== 'off');
@@ -195,6 +199,51 @@ export const CareerTab = (props: any) => {
     setState(result.state);
     await saveGame(result.state);
     addToast(result.message, 'success');
+  };
+
+  const handleGoldPackCheckout = async (pack: BillingCatalogEntry) => {
+    if (!pack.goldAmount || isBillingBusy) return;
+
+    const canPreview = canUseDevBillingPreview();
+    if (!canPreview) {
+      addToast('Checkout real ainda nao esta ligado neste build. O catalogo ja esta pronto para Google Play/App Store.', 'warning');
+      return;
+    }
+
+    setIsBillingBusy(true);
+    try {
+      if (isAuthenticated) {
+        const result = await grantMobilePurchase(pack.code, {
+          platform: 'web_preview',
+          purchaseToken: `dev_${pack.code}_${Date.now()}`,
+          orderId: `DEV-${Date.now()}`,
+          rawPayload: {
+            mode: 'dev_preview',
+            note: 'Credito de teste local. Nao representa cobranca real.',
+          },
+        });
+
+        if (!result?.ok) {
+          addToast(result?.reason || 'Nao foi possivel creditar o pacote.', 'warning');
+          return;
+        }
+
+        await refreshMetaSnapshot();
+        addToast(`${pack.amountLabel} creditado no perfil online de teste.`, 'success');
+      } else {
+        const nextState = addGoldToStore(state, pack.goldAmount);
+        setState(nextState);
+        await saveGame(nextState);
+        addToast(`${pack.amountLabel} creditado neste save local de teste.`, 'success');
+      }
+
+      setSelectedGoldPack(null);
+    } catch (error) {
+      console.error('CareerTab: billing preview failed', error);
+      addToast('Falha ao testar compra de ouro.', 'error');
+    } finally {
+      setIsBillingBusy(false);
+    }
   };
 
   const handleEquipKit = async (itemId: string) => {
@@ -647,11 +696,39 @@ export const CareerTab = (props: any) => {
                 <p className="text-[7px] font-black uppercase tracking-[0.25em] text-amber-200">Ouro</p>
                 <p className="text-lg font-black italic text-white">{viewGoldBalance}</p>
                 <p className="text-[7px] font-black uppercase tracking-[0.25em] text-cyan-200">{viewFragmentBalance} frag</p>
+                {careerSection === 'store' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGoldPack(GOLD_PACKS[1] || GOLD_PACKS[0] || null)}
+                    className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[7px] font-black uppercase tracking-widest text-amber-100 transition hover:bg-amber-400/15"
+                  >
+                    <Coins size={10} />
+                    Comprar
+                  </button>
+                )}
               </div>
             </div>
 
             {careerSection === 'store' && (
               <>
+                <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-amber-200">Ouro da loja</p>
+                      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white">
+                        Dinheiro real compra ouro. Ouro compra skins, logos e chuteiras. Poder bruto nao entra na loja.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGoldPack(GOLD_PACKS[1] || GOLD_PACKS[0] || null)}
+                      className="shrink-0 rounded-xl border border-amber-300/30 bg-amber-300/15 px-3 py-2 text-[8px] font-black uppercase tracking-widest text-amber-100 transition hover:bg-amber-300/20"
+                    >
+                      Pacotes
+                    </button>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1306,6 +1383,84 @@ export const CareerTab = (props: any) => {
           </div>
             );
           })()}
+        </div>
+      )}
+
+      {selectedGoldPack && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setSelectedGoldPack(null)}>
+          <div
+            className="w-full max-w-md overflow-hidden rounded-[2rem] border border-amber-300/25 bg-slate-950/95 shadow-[0_0_40px_rgba(251,191,36,0.16)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative border-b border-white/10 bg-gradient-to-br from-amber-400/16 via-slate-950 to-black p-5">
+              <button
+                type="button"
+                onClick={() => setSelectedGoldPack(null)}
+                className="absolute right-4 top-4 rounded-full border border-white/10 bg-black/40 p-2 text-white/50 transition hover:text-white"
+              >
+                <X size={14} />
+              </button>
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                <Coins size={26} />
+              </div>
+              <p className="mt-4 text-[8px] font-black uppercase tracking-[0.3em] text-amber-200">{getCheckoutChannelLabel()}</p>
+              <h3 className="mt-2 text-2xl font-black uppercase italic tracking-tight text-white">{selectedGoldPack.displayName}</h3>
+              <p className="mt-2 text-[11px] font-bold leading-relaxed text-white/72">{selectedGoldPack.description}</p>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-3 gap-2">
+                {GOLD_PACKS.map(pack => (
+                  <button
+                    key={pack.code}
+                    type="button"
+                    onClick={() => setSelectedGoldPack(pack)}
+                    className={`rounded-2xl border p-3 text-left transition ${
+                      selectedGoldPack.code === pack.code
+                        ? 'border-amber-300/45 bg-amber-300/12'
+                        : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    <p className="text-sm font-black italic text-white">{pack.goldAmount}</p>
+                    <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-amber-200">ouro</p>
+                    <p className="mt-2 text-[8px] font-black uppercase tracking-widest text-white/45">{formatBrl(pack.brlPrice)}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Regra do produto</p>
+                <p className="mt-2 text-[11px] font-bold leading-relaxed text-white/75">
+                  {getBillingReadinessCopy(selectedGoldPack)} Chuteiras com bonus continuam microscopicas, ligadas a evolucao leve, nunca a vitoria garantida.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3">
+                <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100">Separacao limpa</p>
+                <p className="mt-2 text-[11px] font-bold leading-relaxed text-cyan-50/80">
+                  A loja real vende ouro. A loja interna vende cosmeticos. Isso evita vender poder direto e deixa Google Play/App Store mais simples.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedGoldPack(null)}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-white/65 transition hover:bg-white/[0.06]"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGoldPackCheckout(selectedGoldPack)}
+                  disabled={isBillingBusy}
+                  className="flex-1 rounded-xl border border-amber-300/35 bg-amber-300/15 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-amber-100 transition hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isBillingBusy ? 'Processando' : canUseDevBillingPreview() ? 'Testar pacote' : 'Continuar'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
