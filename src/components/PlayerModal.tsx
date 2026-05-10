@@ -135,6 +135,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const playerTitleCount = playerAchievements.filter(achievement => achievement.type === 'Clube' || achievement.type === 'Distrito').length;
   const playerIndividualCount = playerAchievements.filter(achievement => achievement.type === 'Individual').length;
   const seasonDelta = player.history.seasonRatingDelta || 0;
+  const careerGames = player.history.careerGamesPlayed || player.history.gamesPlayed || 0;
+  const careerGoals = player.history.careerGoals || player.history.goals || 0;
+  const careerAssists = player.history.careerAssists || player.history.assists || 0;
+  const careerAverage = player.history.careerAverageRating || player.history.averageRating || 0;
+  const peakRating = player.history.peakRating || player.totalRating;
   const seasonStartValue = Math.max(0, player.totalRating - seasonDelta);
   const valueProgress = Math.min(100, Math.max(0, (player.totalRating / Math.max(player.potential, 1)) * 100));
   const teamPower = playerTeam ? calculateTeamPower(playerTeam, state.players) : 0;
@@ -404,6 +409,37 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Forma</p>
                   <p className={`mt-1 text-xl font-black italic ${theme.main}`}>{currentForm}</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Trophy size={14} className="text-amber-300" />
+                    <p className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-200">Passado de carreira</p>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-amber-100/45">
+                    {player.history.legacyTag || 'Trajetoria aberta'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/45">Jogos</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{careerGames}</p>
+                  </div>
+                  <div>
+                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/45">Gols/Ass</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{careerGoals}/{careerAssists}</p>
+                  </div>
+                  <div>
+                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/45">Pico</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{peakRating}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[8px] font-black uppercase tracking-widest text-amber-100/55">
+                  <span>Media {careerAverage ? careerAverage.toFixed(2) : '--'}</span>
+                  <span>{player.history.formerClubCount || 0} clubes anteriores</span>
+                  <span>{playerTitleCount} titulos</span>
                 </div>
               </div>
 

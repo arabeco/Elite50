@@ -53,6 +53,13 @@ export interface PlayerHistory {
   lastMatchRatings: number[]; // Array of last 5 match ratings (0.0 - 10.0)
   benchGamesCount: number; // For satisfaction logic
   seasonRatingDelta: number; // Cap at +/- 90
+  careerGoals?: number;
+  careerAssists?: number;
+  careerGamesPlayed?: number;
+  careerAverageRating?: number;
+  peakRating?: number;
+  legacyTag?: string;
+  formerClubCount?: number;
 }
 
 export interface Player {
@@ -224,6 +231,13 @@ export interface Team {
   };
   achievements?: Achievement[];
   powerCap?: number; // Teto de score dinâmico
+  legacy?: {
+    seasonsPlayed: number;
+    peakScore: number;
+    scoreDeltaAllTime: number;
+    tacticalMastery: Partial<Record<PlayStyle, number>>;
+    signatureStyle?: PlayStyle;
+  };
 }
 
 export interface Manager {

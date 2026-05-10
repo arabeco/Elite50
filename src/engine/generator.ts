@@ -263,6 +263,14 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
     lastMatchRatings.push(Number((Math.random() * 5.5 + 4.0).toFixed(1)));
   }
 
+  const careerGamesPlayed = randomInt(12, 120);
+  const careerGoalsBase = role === 'ATA' ? 18 : role === 'MEI' ? 30 : role === 'ZAG' ? 58 : 180;
+  const careerAssistsBase = role === 'MEI' ? 20 : role === 'ATA' ? 34 : role === 'ZAG' ? 55 : 160;
+  const careerGoals = Math.max(0, Math.round((baseRating - 420) / careerGoalsBase) + randomInt(0, role === 'ATA' ? 28 : role === 'MEI' ? 14 : 5));
+  const careerAssists = Math.max(0, Math.round((baseRating - 430) / careerAssistsBase) + randomInt(0, role === 'MEI' ? 30 : role === 'ATA' ? 16 : 7));
+  const careerAverageRating = Number((5.8 + Math.min(2.4, Math.max(0, (baseRating - 450) / 250))).toFixed(2));
+  const legacyTags = ['Joia lapidada', 'Veterano de arena', 'Especialista tatico', 'Criado em base forte', 'Nome de vestiario'];
+
   const player: Player = {
     id,
     name,
@@ -288,7 +296,14 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
       gamesPlayed: 0,
       lastMatchRatings,
       benchGamesCount: 0,
-      seasonRatingDelta: 0
+      seasonRatingDelta: 0,
+      careerGoals,
+      careerAssists,
+      careerGamesPlayed,
+      careerAverageRating,
+      peakRating: Math.max(baseRating, baseRating + randomInt(0, 35)),
+      legacyTag: legacyTags[randomInt(0, legacyTags.length - 1)],
+      formerClubCount: randomInt(0, 3)
     },
     satisfaction: randomInt(50, 100),
     trainingProgress: 0,
@@ -357,6 +372,9 @@ const getLeagueForDistrict = (district: District): LeagueColor => {
 export const generateTeam = (id: string, index: number, district: District): Team => {
   const name = teamNames[index] || `Team ${index}`;
   const logo = applyTeamLogoAsset(id, generateTeamStyle(name, district))!;
+  const targetScore = teamTargets[name] || 8000;
+  const startingPeakScore = Math.max(targetScore, targetScore + randomInt(0, 700));
+  const startingSeasonCount = randomInt(1, 8);
   const colors = {
     primary: logo.primary,
     secondary: logo.secondary,
@@ -391,6 +409,15 @@ export const generateTeam = (id: string, index: number, district: District): Tea
       { id: 'card_3', name: 'Meio-Campo Criativo', type: 'BUFF', rarity: 'COMMON', effect: 'Aumenta o meio-campo em 10%' }
     ],
     powerCap: getLeagueForDistrict(district) === 'Cyan' ? 12000 : (getLeagueForDistrict(district) === 'Orange' || getLeagueForDistrict(district) === 'Purple') ? 10000 : 8000,
+    legacy: {
+      seasonsPlayed: startingSeasonCount,
+      peakScore: startingPeakScore,
+      scoreDeltaAllTime: randomInt(-120, 480),
+      tacticalMastery: {
+        Equilibrado: randomInt(35, 72),
+      },
+      signatureStyle: 'Equilibrado',
+    },
   };
 };
 

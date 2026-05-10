@@ -1,5 +1,6 @@
 ﻿import { GameState, Team, Player, PlayerRole, LeagueTeamStats, GameNotification, District, MatchResult, TeamStats, Match, TacticalCard } from '../types';
 import { simulateMatch, TeamStats as MatchTeamStats } from './MatchEngine';
+import type { PlayStyle } from '../types';
 import { calculateEvolution } from './simulation';
 import { generateCalendar } from './CalendarGenerator';
 import { generateBadges, generatePlayer } from './generator';
@@ -361,6 +362,26 @@ export const calculateTeamPower = (team: Team, players: Record<string, Player>):
   }, 0);
 };
 
+const getSignatureStyle = (mastery: Partial<Record<PlayStyle, number>>, fallback: PlayStyle): PlayStyle => {
+  return (Object.entries(mastery) as [PlayStyle, number][])
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))[0]?.[0] || fallback;
+};
+
+const ensureTeamLegacy = (team: Team, players: Record<string, Player>) => {
+  const currentScore = calculateTeamPower(team, players);
+  team.legacy = team.legacy || {
+    seasonsPlayed: 0,
+    peakScore: currentScore,
+    scoreDeltaAllTime: 0,
+    tacticalMastery: {},
+    signatureStyle: team.tactics.playStyle,
+  };
+  team.legacy.peakScore = Math.max(team.legacy.peakScore || currentScore, currentScore);
+  team.legacy.tacticalMastery = team.legacy.tacticalMastery || {};
+  team.legacy.signatureStyle = team.legacy.signatureStyle || team.tactics.playStyle;
+  return team.legacy;
+};
+
 export const checkPowerCap = (team: Team, players: Record<string, Player>): boolean => {
   const total = calculateTeamPower(team, players);
 
@@ -482,13 +503,18 @@ const updatePlayerEvolutions = (
 
 const updateSinglePlayerEvolution = (state: GameState, player: Player, result: MatchResult, difficulty: number) => {
   // 1. Basic Stats
+  const previousCareerGames = player.history.careerGamesPlayed || 0;
+  const previousCareerAverage = player.history.careerAverageRating || player.history.averageRating || 0;
   player.history.gamesPlayed++;
+  player.history.careerGamesPlayed = previousCareerGames + 1;
 
   // 2. Goals & Assists
   const goals = result.scorers.filter(s => s.playerId === player.id).length;
   const assists = result.assists.filter(a => a.playerId === player.id).length;
   player.history.goals += goals;
   player.history.assists += assists;
+  player.history.careerGoals = (player.history.careerGoals || 0) + goals;
+  player.history.careerAssists = (player.history.careerAssists || 0) + assists;
 
   // 3. Rating Evolution
   let matchRating = result.ratings?.[player.id];
@@ -512,6 +538,7 @@ const updateSinglePlayerEvolution = (state: GameState, player: Player, result: M
 
   // Ensure rating is within bounds
   matchRating = Math.max(3, Math.min(10, matchRating));
+  player.history.careerAverageRating = Number(((previousCareerAverage * previousCareerGames + matchRating) / player.history.careerGamesPlayed).toFixed(2));
 
   const delta = calculatePostMatchProgression(player, matchRating, state);
   const newRating = player.totalRating + delta;
@@ -547,6 +574,7 @@ const updateSinglePlayerEvolution = (state: GameState, player: Player, result: M
   }
 
   player.totalRating = newRating;
+  player.history.peakRating = Math.max(player.history.peakRating || newRating, newRating);
 
   // Shadow Pool Rotation: If falls below 400, swap with an Exiled player
   if (newRating < 400) {
@@ -1002,6 +1030,13 @@ const processTrainingDay = (state: GameState) => {
     const nextManager = recordManagerTacticalMemory(manager, currentStyle, newUnderstanding);
     if (managerId && nextManager && nextManager !== manager) {
       state.managers[managerId] = nextManager;
+    }
+
+    const trainedTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
+    if (trainedTeam) {
+      const legacy = ensureTeamLegacy(trainedTeam, state.players);
+      legacy.tacticalMastery[currentStyle] = Math.max(legacy.tacticalMastery[currentStyle] || 0, newUnderstanding);
+      legacy.signatureStyle = getSignatureStyle(legacy.tacticalMastery, trainedTeam.tactics.playStyle);
     }
   }
 };
@@ -1850,6 +1885,29 @@ export const startNewSeason = (state: GameState): GameState => {
   // Generate Season Report (The Pulse)
   const seasonReport = generateSeasonReport(state, reallocations);
   newsHeadlines.seasonEnded(state, seasonReport);
+
+  Object.values(state.teams)
+    .filter(team => team.id.startsWith('t_'))
+    .forEach(team => {
+      const legacy = ensureTeamLegacy(team, state.players);
+      const currentScore = calculateTeamPower(team, state.players);
+      const seasonDelta = team.squad.reduce((sum, playerId) => {
+        return sum + (state.players[playerId]?.history?.seasonRatingDelta || 0);
+      }, 0);
+      legacy.seasonsPlayed += 1;
+      legacy.peakScore = Math.max(legacy.peakScore || currentScore, currentScore);
+      legacy.scoreDeltaAllTime = (legacy.scoreDeltaAllTime || 0) + seasonDelta;
+
+      if (state.userTeamId === team.id && state.training?.playstyleTraining?.understanding) {
+        Object.entries(state.training.playstyleTraining.understanding).forEach(([style, value]) => {
+          if (value === undefined) return;
+          const playStyle = style as PlayStyle;
+          legacy.tacticalMastery[playStyle] = Math.max(legacy.tacticalMastery[playStyle] || 0, value);
+        });
+      }
+
+      legacy.signatureStyle = getSignatureStyle(legacy.tacticalMastery, team.tactics.playStyle);
+    });
 
   // 1. Reset Leagues and Regenerate Calendars
   const leagues = { ...state.world.leagues };

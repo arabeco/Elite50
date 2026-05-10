@@ -42,6 +42,9 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
   const leaguePosition = sortedStandings.findIndex(row => row.teamId === team.id) + 1;
   const titles = team.titles || { league: 0, cup: 0, total: 0 };
   const achievements = team.achievements || [];
+  const teamLegacy = team.legacy;
+  const signatureStyle = teamLegacy?.signatureStyle || team.tactics.playStyle;
+  const signatureMastery = signatureStyle ? teamLegacy?.tacticalMastery?.[signatureStyle] || 0 : 0;
   const manager = team.managerId ? state.managers[team.managerId] : null;
   const isHumanClub = !!manager && (manager.isNPC === false || !manager.id.startsWith('m_'));
   const isObserver = !state.userTeamId && (!!state.userManagerId || !state.isCreator);
@@ -143,6 +146,9 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-amber-200">
                   <Trophy size={12} /> {titles.total} titulos
                 </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-violet-200">
+                  <Star size={12} /> {signatureStyle} {signatureMastery}%
+                </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
                   isHumanClub
                     ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
@@ -177,7 +183,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
             </button>
           )}
 
-          <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
               <p className="text-[7px] font-black uppercase tracking-widest text-white/30">Total</p>
               <p className="mt-1 text-2xl font-black italic text-white">{titles.total}</p>
@@ -203,6 +209,11 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
               <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Nota Media</p>
               <p className="mt-1 text-2xl font-black italic text-white">{averageMatchRating || '--'}</p>
+            </div>
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-3">
+              <p className="text-[7px] font-black uppercase tracking-widest text-violet-200">Legado</p>
+              <p className="mt-1 text-2xl font-black italic text-white">{teamLegacy?.seasonsPlayed || 0}</p>
+              <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-violet-100/45">Pico {teamLegacy?.peakScore || totalRating}</p>
             </div>
           </div>
 
