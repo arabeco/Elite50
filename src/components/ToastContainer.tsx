@@ -7,36 +7,64 @@ export const ToastContainer: React.FC = () => {
     const { toasts } = useGameState();
     const { removeToast } = useGameDispatch();
 
+    const getToastStyle = (type: typeof toasts[number]['type']) => {
+        switch (type) {
+            case 'success':
+                return {
+                    shell: 'border-emerald-400/30 bg-emerald-500/15 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.16)]',
+                    icon: 'text-emerald-300',
+                };
+            case 'error':
+                return {
+                    shell: 'border-rose-400/35 bg-rose-500/15 text-rose-50 shadow-[0_0_24px_rgba(244,63,94,0.16)]',
+                    icon: 'text-rose-300',
+                };
+            case 'warning':
+                return {
+                    shell: 'border-amber-400/35 bg-amber-500/15 text-amber-50 shadow-[0_0_24px_rgba(245,158,11,0.16)]',
+                    icon: 'text-amber-300',
+                };
+            default:
+                return {
+                    shell: 'border-cyan-400/30 bg-cyan-500/15 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.16)]',
+                    icon: 'text-cyan-300',
+                };
+        }
+    };
+
     return (
-        <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-xs">
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[9999] flex flex-col-reverse items-center gap-2 px-4 pb-[max(env(safe-area-inset-bottom),0px)] sm:bottom-6">
             <AnimatePresence>
-                {toasts.map(toast => (
-                    <motion.div
-                        key={toast.id}
-                        initial={{ opacity: 0, x: 50, scale: 0.9 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 20, scale: 0.95 }}
-                        className={`pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border ${toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-100' :
-                            toast.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-100' :
-                                toast.type === 'warning' ? 'bg-amber-500/20 border-amber-500/30 text-amber-100' :
-                                'bg-cyan-500/20 border-cyan-500/30 text-cyan-100'
-                            }`}
-                    >
-                        <div className="flex items-center gap-3">
-                            {toast.type === 'success' && <CheckCircle2 size={18} className="text-emerald-400" />}
-                            {toast.type === 'error' && <AlertCircle size={18} className="text-red-400" />}
-                            {toast.type === 'warning' && <TriangleAlert size={18} className="text-amber-400" />}
-                            {toast.type === 'info' && <Info size={18} className="text-cyan-400" />}
-                            <span className="text-sm font-bold tracking-tight">{toast.message}</span>
-                        </div>
-                        <button
-                            onClick={() => removeToast(toast.id)}
-                            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                {toasts.slice(-3).map(toast => {
+                    const style = getToastStyle(toast.type);
+
+                    return (
+                        <motion.div
+                            key={toast.id}
+                            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                            className={`pointer-events-auto flex min-h-11 w-full max-w-[min(92vw,30rem)] items-center justify-between gap-3 rounded-full border px-3.5 py-2.5 backdrop-blur-xl ${style.shell}`}
                         >
-                            <X size={14} className="opacity-50" />
-                        </button>
-                    </motion.div>
-                ))}
+                            <div className="flex min-w-0 items-center gap-2.5">
+                                {toast.type === 'success' && <CheckCircle2 size={16} className={style.icon} />}
+                                {toast.type === 'error' && <AlertCircle size={16} className={style.icon} />}
+                                {toast.type === 'warning' && <TriangleAlert size={16} className={style.icon} />}
+                                {toast.type === 'info' && <Info size={16} className={style.icon} />}
+                                <span className="truncate text-[11px] font-black uppercase tracking-[0.14em] sm:text-xs">{toast.message}</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => removeToast(toast.id)}
+                                className="shrink-0 rounded-full border border-white/10 bg-black/20 p-1.5 text-white/45 transition hover:bg-white/10 hover:text-white"
+                                aria-label="Fechar aviso"
+                            >
+                                <X size={12} />
+                            </button>
+                        </motion.div>
+                    );
+                })}
             </AnimatePresence>
         </div>
     );
