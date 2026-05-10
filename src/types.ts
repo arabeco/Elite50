@@ -45,6 +45,31 @@ export interface Achievement {
   type: 'Clube' | 'Distrito' | 'Individual';
 }
 
+export interface PlayerSeasonSnapshot {
+  season: number;
+  teamId: string | null;
+  teamName: string;
+  ratingStart: number;
+  ratingEnd: number;
+  ratingDelta: number;
+  gamesPlayed: number;
+  goals: number;
+  assists: number;
+  averageRating: number;
+  satisfaction: number;
+}
+
+export interface PlayerClubEvent {
+  season: number;
+  date: string;
+  type: 'SIGNED' | 'TRANSFERRED' | 'RELEASED' | 'DRAFTED';
+  fromTeamId?: string | null;
+  fromTeamName?: string;
+  toTeamId?: string | null;
+  toTeamName?: string;
+  note?: string;
+}
+
 export interface PlayerHistory {
   goals: number;
   assists: number;
@@ -60,6 +85,9 @@ export interface PlayerHistory {
   peakRating?: number;
   legacyTag?: string;
   formerClubCount?: number;
+  ratingSeasonStart?: number;
+  seasonSnapshots?: PlayerSeasonSnapshot[];
+  clubEvents?: PlayerClubEvent[];
 }
 
 export interface Player {

@@ -270,6 +270,23 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
   const careerAssists = Math.max(0, Math.round((baseRating - 430) / careerAssistsBase) + randomInt(0, role === 'MEI' ? 30 : role === 'ATA' ? 16 : 7));
   const careerAverageRating = Number((5.8 + Math.min(2.4, Math.max(0, (baseRating - 450) / 250))).toFixed(2));
   const legacyTags = ['Joia lapidada', 'Veterano de arena', 'Especialista tatico', 'Criado em base forte', 'Nome de vestiario'];
+  const ratingSeedA = Math.max(200, baseRating - randomInt(15, 90));
+  const ratingSeedB = Math.max(200, baseRating - randomInt(8, 55));
+  const ratingSeedC = Math.max(200, baseRating - randomInt(0, 30));
+  const seedRatings = [ratingSeedA, ratingSeedB, ratingSeedC, baseRating];
+  const seasonSnapshots = [2047, 2048, 2049].map((season, index) => ({
+    season,
+    teamId: null,
+    teamName: index === 0 ? 'Circuito Base' : 'Clube anterior',
+    ratingStart: seedRatings[index],
+    ratingEnd: seedRatings[index + 1],
+    ratingDelta: seedRatings[index + 1] - seedRatings[index],
+    gamesPlayed: Math.max(3, Math.round(careerGamesPlayed / 3) + randomInt(-4, 5)),
+    goals: Math.max(0, Math.round(careerGoals / 3) + randomInt(-2, 3)),
+    assists: Math.max(0, Math.round(careerAssists / 3) + randomInt(-2, 3)),
+    averageRating: Number((careerAverageRating + (randomFloat() - 0.5) * 0.4).toFixed(2)),
+    satisfaction: randomInt(48, 94),
+  }));
 
   const player: Player = {
     id,
@@ -303,7 +320,10 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
       careerAverageRating,
       peakRating: Math.max(baseRating, baseRating + randomInt(0, 35)),
       legacyTag: legacyTags[randomInt(0, legacyTags.length - 1)],
-      formerClubCount: randomInt(0, 3)
+      formerClubCount: randomInt(0, 3),
+      ratingSeasonStart: baseRating,
+      seasonSnapshots,
+      clubEvents: []
     },
     satisfaction: randomInt(50, 100),
     trainingProgress: 0,

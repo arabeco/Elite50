@@ -1,6 +1,6 @@
 import React from 'react';
 import { Player, District, Match } from '../types';
-import { X, TrendingUp, Zap, Lock, Activity, Shield, Trophy, Clock, BarChart3, Coins, Target, CheckCircle2, ArrowRightLeft } from 'lucide-react';
+import { X, TrendingUp, Zap, Lock, Activity, Shield, Trophy, Clock, BarChart3, Coins, Target, CheckCircle2, ArrowRightLeft, CalendarDays, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -140,6 +140,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const careerAssists = player.history.careerAssists || player.history.assists || 0;
   const careerAverage = player.history.careerAverageRating || player.history.averageRating || 0;
   const peakRating = player.history.peakRating || player.totalRating;
+  const seasonSnapshots = player.history.seasonSnapshots || [];
+  const clubEvents = player.history.clubEvents || [];
   const seasonStartValue = Math.max(0, player.totalRating - seasonDelta);
   const valueProgress = Math.min(100, Math.max(0, (player.totalRating / Math.max(player.potential, 1)) * 100));
   const teamPower = playerTeam ? calculateTeamPower(playerTeam, state.players) : 0;
@@ -150,6 +152,35 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     { label: 'Atual', value: player.totalRating },
     { label: 'Pot', value: player.potential },
   ];
+  const scoreEvolution = [
+    ...seasonSnapshots.slice(0, 3).reverse().map(snapshot => ({
+      label: String(snapshot.season),
+      value: snapshot.ratingEnd,
+      delta: snapshot.ratingDelta,
+    })),
+    { label: 'Agora', value: player.totalRating, delta: seasonDelta },
+  ];
+  const minScoreEvolution = Math.min(...scoreEvolution.map(item => item.value), player.totalRating);
+  const maxScoreEvolution = Math.max(...scoreEvolution.map(item => item.value), player.potential, player.totalRating);
+  const achievementIcon = (title: string, type: string) => {
+    const normalized = title.toLowerCase();
+    if (type === 'Individual') return Star;
+    if (type === 'Distrito' || normalized.includes('na')) return Shield;
+    if (normalized.includes('copa') || normalized.includes('cup')) return Target;
+    return Trophy;
+  };
+  const achievementIconNode = (achievement: { title: string; type: string }) => {
+    const Icon = achievementIcon(achievement.title, achievement.type);
+    const normalized = achievement.title.toLowerCase();
+    const iconColor = achievement.type === 'Individual'
+      ? 'text-cyan-400'
+      : achievement.type === 'Distrito'
+        ? 'text-violet-300'
+        : normalized.includes('copa') || normalized.includes('cup')
+          ? 'text-rose-300'
+          : 'text-amber-400';
+    return <Icon size={13} className={iconColor} />;
+  };
 
   const { handleSendTradeOffer, handleMakeProposal, handleCancelDraftProposal } = useTransfers(userTeam?.id || null, userTeam ? calculateTeamPower(userTeam, state.players) : 0, userTeam?.powerCap || 0);
   const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay < 3;
@@ -200,7 +231,23 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
 
     newState.players[player.id] = {
       ...newState.players[player.id],
-      contract: { ...newState.players[player.id].contract, teamId: userTeam.id }
+      contract: { ...newState.players[player.id].contract, teamId: userTeam.id },
+      history: {
+        ...newState.players[player.id].history,
+        clubEvents: [
+          {
+            season: newState.world.currentSeason || 2050,
+            date: newState.world.currentDate,
+            type: 'TRANSFERRED' as const,
+            fromTeamId: player.contract.teamId || null,
+            fromTeamName: player.contract.teamId ? state.teams[player.contract.teamId]?.name : undefined,
+            toTeamId: userTeam.id,
+            toTeamName: userTeam.name,
+            note: 'Contratado pelo manager humano',
+          },
+          ...(newState.players[player.id].history.clubEvents || []),
+        ].slice(0, 12),
+      }
     };
 
     const newNotif = {
@@ -252,8 +299,22 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 500));
     const newState = releasePlayerBootToInventory({ ...state }, player.id);
+    const previousTeamId = player.contract.teamId;
     newState.teams[userTeam.id].squad = newState.teams[userTeam.id].squad.filter(id => id !== player.id);
     newState.players[player.id].contract.teamId = null;
+    newState.players[player.id].history.clubEvents = [
+      {
+        season: newState.world.currentSeason || 2050,
+        date: newState.world.currentDate,
+        type: 'RELEASED' as const,
+        fromTeamId: previousTeamId || null,
+        fromTeamName: previousTeamId ? state.teams[previousTeamId]?.name : undefined,
+        toTeamId: null,
+        toTeamName: 'Livre',
+        note: 'Dispensado pelo manager humano',
+      },
+      ...(newState.players[player.id].history.clubEvents || []),
+    ].slice(0, 12);
     newState.notifications.unshift({
       id: `sell_${Date.now()}`,
       type: 'transfer',
@@ -396,15 +457,15 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               <div className="grid grid-cols-4 gap-2">
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Jogos</p>
-                  <p className="mt-1 text-xl font-black italic text-white">{player.history.gamesPlayed || 0}</p>
+                  <p className="mt-1 text-xl font-black italic text-white">{careerGames} <span className="text-[10px] text-white/35">({player.history.gamesPlayed || 0})</span></p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Gols</p>
-                  <p className="mt-1 text-xl font-black italic text-white">{player.history.goals || 0}</p>
+                  <p className="mt-1 text-xl font-black italic text-white">{careerGoals} <span className="text-[10px] text-white/35">({player.history.goals || 0})</span></p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Assists</p>
-                  <p className="mt-1 text-xl font-black italic text-white">{player.history.assists || 0}</p>
+                  <p className="mt-1 text-xl font-black italic text-white">{careerAssists} <span className="text-[10px] text-white/35">({player.history.assists || 0})</span></p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Forma</p>
@@ -442,6 +503,32 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                   <span>{playerTitleCount} titulos</span>
                 </div>
               </div>
+
+              {seasonSnapshots.length > 0 && (
+                <div className="rounded-xl border border-white/10 bg-black/50 p-3">
+                  <div className="mb-3 flex items-center gap-2">
+                    <CalendarDays size={14} className={theme.main} />
+                    <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Resumo por season</p>
+                  </div>
+                  <div className="space-y-2">
+                    {seasonSnapshots.slice(0, 3).map(snapshot => (
+                      <div key={snapshot.season} className="rounded-lg border border-white/5 bg-white/[0.035] p-2">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className="truncate text-[9px] font-black uppercase tracking-widest text-white">
+                            S{snapshot.season} - {snapshot.teamName}
+                          </p>
+                          <span className={`text-[9px] font-black ${snapshot.ratingDelta >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                            {snapshot.ratingDelta >= 0 ? '+' : ''}{snapshot.ratingDelta}
+                          </span>
+                        </div>
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                          {snapshot.ratingStart} para {snapshot.ratingEnd} score - {snapshot.gamesPlayed}J - {snapshot.goals}G/{snapshot.assists}A - sat {snapshot.satisfaction}%
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-xl border border-white/10 bg-black/50 p-3">
                 <div className="mb-3 flex items-center justify-between">
@@ -574,6 +661,67 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/30">
                   Mostra o caminho entre inicio da season, rating atual e teto potencial do atleta.
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/50 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={14} className={theme.main} />
+                    <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Ultimas 3 seasons</p>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/25">score</span>
+                </div>
+                <div className="grid grid-cols-4 items-end gap-2">
+                  {scoreEvolution.map(item => {
+                    const height = maxScoreEvolution === minScoreEvolution
+                      ? 48
+                      : 28 + ((item.value - minScoreEvolution) / (maxScoreEvolution - minScoreEvolution)) * 64;
+                    return (
+                      <div key={item.label} className="flex min-w-0 flex-col items-center gap-1">
+                        <div className="flex h-24 w-full items-end justify-center rounded-lg border border-white/5 bg-white/[0.03] px-1 pb-1">
+                          <div
+                            className={`w-full rounded-md ${item.delta >= 0 ? 'bg-gradient-to-t from-emerald-500 to-cyan-300' : 'bg-gradient-to-t from-rose-600 to-amber-300'}`}
+                            style={{ height: `${height}px` }}
+                          />
+                        </div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-white/35">{item.label}</p>
+                        <p className="text-[10px] font-black italic text-white">{item.value}</p>
+                        <p className={`text-[8px] font-black ${item.delta >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                          {item.delta >= 0 ? '+' : ''}{item.delta}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/50 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} className={theme.main} />
+                    <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Historico de clube</p>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/25">{clubEvents.length}/12</span>
+                </div>
+                {clubEvents.length > 0 ? (
+                  <div className="space-y-2">
+                    {clubEvents.slice(0, 4).map((event, index) => (
+                      <div key={`${event.date}-${index}`} className="rounded-lg border border-white/5 bg-white/[0.035] p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[9px] font-black uppercase tracking-widest text-white">
+                            {event.fromTeamName || 'Livre'} para {event.toTeamName || 'Livre'}
+                          </p>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-cyan-300">S{event.season}</span>
+                        </div>
+                        <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+                          {event.type} {event.note ? `- ${event.note}` : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-3 text-center text-[9px] font-bold uppercase tracking-widest text-white/25">Sem mudancas de clube registradas ainda.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -819,7 +967,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               <div className="grid grid-cols-1 gap-2">
                 {playerAchievements.map((ach, i) => (
                   <div key={i} className="flex items-center gap-3 p-2 bg-white/5 border border-white/5 rounded-lg">
-                    <Trophy size={12} className={ach.type === 'Individual' ? 'text-cyan-400' : 'text-amber-400'} />
+                    {achievementIconNode(ach)}
                     <div className="flex flex-col">
                       <span className="text-[10px] font-bold text-slate-200">{ach.title}</span>
                       <span className="text-[8px] text-slate-500 uppercase tracking-widest">S{ach.season} • {ach.type}</span>

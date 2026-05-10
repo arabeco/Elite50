@@ -382,6 +382,31 @@ const ensureTeamLegacy = (team: Team, players: Record<string, Player>) => {
   return team.legacy;
 };
 
+const recordPlayerClubEvent = (
+  state: GameState,
+  player: Player,
+  type: 'SIGNED' | 'TRANSFERRED' | 'RELEASED' | 'DRAFTED',
+  fromTeamId: string | null | undefined,
+  toTeamId: string | null | undefined,
+  note?: string
+) => {
+  const fromTeam = fromTeamId ? state.teams[fromTeamId] : null;
+  const toTeam = toTeamId ? state.teams[toTeamId] : null;
+  player.history.clubEvents = [
+    {
+      season: state.world.currentSeason || 2050,
+      date: state.world.currentDate,
+      type,
+      fromTeamId: fromTeamId || null,
+      fromTeamName: fromTeam?.name,
+      toTeamId: toTeamId || null,
+      toTeamName: toTeam?.name,
+      note,
+    },
+    ...(player.history.clubEvents || []),
+  ].slice(0, 12);
+};
+
 export const checkPowerCap = (team: Team, players: Record<string, Player>): boolean => {
   const total = calculateTeamPower(team, players);
 
@@ -876,8 +901,10 @@ const simulateAITeamDay = (state: GameState, teamId: string) => {
     if (team.squad.length > SAFETY_NET_MIN_PLAYERS && player.satisfaction < 40) {
       if (Math.random() < 0.05) {
         // Release player
+        const previousTeamId = player.contract.teamId;
         player.contract.teamId = '';
         team.squad = team.squad.filter(id => id !== player.id);
+        recordPlayerClubEvent(state, player, 'RELEASED', previousTeamId, null, 'Dispensado por baixa satisfacao');
 
         // Remove from lineup if present
         Object.keys(team.lineup).forEach(pos => {
@@ -912,6 +939,7 @@ const simulateAITeamDay = (state: GameState, teamId: string) => {
       if (newTotalPower <= (team.powerCap || MAX_TEAM_POWER_TIER_1)) {
         bestAvailable.contract.teamId = team.id;
         team.squad.push(bestAvailable.id);
+        recordPlayerClubEvent(state, bestAvailable, 'SIGNED', null, team.id, 'Contratado como agente livre');
 
         state.notifications.unshift({
           id: `ai_sign_${Date.now()}_${bestAvailable.id}`,
@@ -1683,6 +1711,7 @@ const assignDraftPlayer = (state: GameState, proposal: DraftProposal) => {
 
   player.contract.teamId = team.id;
   team.squad = [...new Set([...(team.squad || []), player.id])];
+  recordPlayerClubEvent(state, player, 'DRAFTED', previousTeamId, team.id, 'Escolhido no Draft Genesis');
 };
 
 const chooseDraftWinner = (state: GameState, proposals: DraftProposal[]) => {
@@ -1958,6 +1987,21 @@ export const startNewSeason = (state: GameState): GameState => {
   const players = { ...state.players };
   Object.keys(players).forEach(id => {
     const player = { ...players[id] };
+    const currentTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+    const ratingStart = player.history.ratingSeasonStart ?? Math.max(0, player.totalRating - (player.history.seasonRatingDelta || 0));
+    const seasonSnapshot = {
+      season: currentSeason,
+      teamId: currentTeam?.id || null,
+      teamName: currentTeam?.name || 'Livre',
+      ratingStart,
+      ratingEnd: player.totalRating,
+      ratingDelta: player.totalRating - ratingStart,
+      gamesPlayed: player.history.gamesPlayed || 0,
+      goals: player.history.goals || 0,
+      assists: player.history.assists || 0,
+      averageRating: player.history.averageRating || 0,
+      satisfaction: player.satisfaction || 0,
+    };
 
     // Recalculate Badges based on potentially new Rating
     player.badges = generateBadges(player.totalRating);
@@ -1970,6 +2014,8 @@ export const startNewSeason = (state: GameState): GameState => {
       gamesPlayed: 0,
       averageRating: 0,
       seasonRatingDelta: 0,
+      ratingSeasonStart: player.totalRating,
+      seasonSnapshots: [seasonSnapshot, ...(player.history.seasonSnapshots || [])].slice(0, 3),
       // lastMatchRatings should probably stay for form? 
       // Let's clear it for a "clean" season start
       lastMatchRatings: []

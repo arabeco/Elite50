@@ -182,6 +182,19 @@ export const processNightMarket = (
             toTeam.squad.push(player.id);
             player.contract.teamId = toTeam.id;
             player.satisfaction = 100;
+            player.history.clubEvents = [
+                {
+                    season: state.world.currentSeason || 2050,
+                    date: state.world.currentDate,
+                    type: 'TRANSFERRED' as const,
+                    fromTeamId: fromTeam?.id || null,
+                    fromTeamName: fromTeam?.name,
+                    toTeamId: toTeam.id,
+                    toTeamName: toTeam.name,
+                    note: `Transferencia por ${prop.value || 0} gold`,
+                },
+                ...(player.history.clubEvents || []),
+            ].slice(0, 12);
 
             notifications.push({
                 id: `accept_${Date.now()}_${player.id}`,
