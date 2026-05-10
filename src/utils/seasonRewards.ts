@@ -1,4 +1,5 @@
 import { GameState } from '../types';
+import { getManagerSeasonGoldBonusPct } from './managerStats';
 
 export interface SeasonRewardResult {
   season: number;
@@ -75,6 +76,13 @@ export const calculateSeasonRewardsForUser = (state: GameState): SeasonRewardRes
     reasons.push('Elenco com atleta de elite');
   }
 
+  const managerGoldBonusPct = getManagerSeasonGoldBonusPct(manager);
+  const managerGoldBonus = managerGoldBonusPct > 0 ? Math.floor(gold * managerGoldBonusPct / 100) : 0;
+  if (managerGoldBonus > 0) {
+    gold += managerGoldBonus;
+    reasons.push(`Evolucao do manager +${managerGoldBonusPct}%`);
+  }
+
   return {
     season,
     gold,
@@ -87,6 +95,8 @@ export const calculateSeasonRewardsForUser = (state: GameState): SeasonRewardRes
       eliteCupWinner: latestReport.eliteCupWinnerId === team.id,
       managerHighlight: latestReport.managerHighlight?.teamId === team.id,
       highlightedPlayer: hasHighlightedPlayer || false,
+      managerGoldBonusPct,
+      managerGoldBonus,
       reasons,
     },
   };

@@ -4,6 +4,7 @@ import { X, Trophy, Star, Shield, TrendingUp, Zap, Target } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useGame } from '../store/GameContext';
 import { calculateTeamPower } from '../engine/gameLogic';
+import { getManagerCommandReadout } from '../utils/managerStats';
 
 interface ManagerModalProps {
     manager: Manager;
@@ -18,6 +19,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
     const teamPower = userTeam ? calculateTeamPower(userTeam, state.players) : 0;
     const powerCap = userTeam?.powerCap || 0;
     const squadFillPercent = powerCap > 0 ? (teamPower / powerCap) * 100 : 0;
+    const commandReadout = getManagerCommandReadout(manager);
 
     return (
         <div
@@ -174,6 +176,16 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                             <AttributeRow label="Evolução" value={manager.attributes.evolution} color="bg-cyan-500" />
                             <AttributeRow label="Negociação" value={manager.attributes.negotiation} color="bg-emerald-500" />
                             <AttributeRow label="Scouting" value={manager.attributes.scout} color="bg-purple-500" />
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                            <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/10 p-3">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-cyan-100">Fechamento</p>
+                                <p className="mt-1 text-sm font-black italic text-white">+{commandReadout.seasonGoldBonusPct}% ouro</p>
+                            </div>
+                            <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/10 p-3">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-emerald-100">Draft</p>
+                                <p className="mt-1 text-sm font-black italic text-white">{commandReadout.draftInfluence >= 0 ? '+' : ''}{commandReadout.draftInfluence}</p>
+                            </div>
                         </div>
                     </div>
 

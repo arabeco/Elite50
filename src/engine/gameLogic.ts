@@ -25,6 +25,7 @@ import {
   SAFETY_NET_FREE_AGENT_RATING,
   SQUAD_SIZE_MAX
 } from '../constants/gameConstants';
+import { getManagerDraftInfluence } from '../utils/managerStats';
 
 // --- Helpers ---
 
@@ -1657,8 +1658,8 @@ const chooseDraftWinner = (state: GameState, proposals: DraftProposal[]) => {
     const needA = SQUAD_SIZE_MAX - (teamA?.squad?.length || 0);
     const needB = SQUAD_SIZE_MAX - (teamB?.squad?.length || 0);
 
-    const scoreA = (humanA * 10000) + (needA * 100) - Math.round(powerA / 25) + draftTieBreaker(a);
-    const scoreB = (humanB * 10000) + (needB * 100) - Math.round(powerB / 25) + draftTieBreaker(b);
+    const scoreA = (humanA * 10000) + (needA * 100) - Math.round(powerA / 25) + getManagerDraftInfluence(managerA) + draftTieBreaker(a);
+    const scoreB = (humanB * 10000) + (needB * 100) - Math.round(powerB / 25) + getManagerDraftInfluence(managerB) + draftTieBreaker(b);
     return scoreB - scoreA;
   })[0];
 };
