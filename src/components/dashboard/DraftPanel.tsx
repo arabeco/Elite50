@@ -20,15 +20,17 @@ const ROLE_LABELS: Record<PlayerRole, string> = {
 
 const groupPlayersByRole = (players: Player[]) =>
   ROLE_ORDER.reduce<Record<PlayerRole, Player[]>>((acc, role) => {
-    acc[role] = players.filter(player => player.role === role);
+    acc[role] = players
+      .filter(player => player.role === role)
+      .sort((a, b) => b.totalRating - a.totalRating);
     return acc;
   }, { GOL: [], ZAG: [], MEI: [], ATA: [] });
 
 export const DraftPanel: React.FC = () => {
   const { state, setState, saveGame, addToast, requestConfirm, worldId } = useGame();
-  const [activeTab, setActiveTab] = useState<'market' | 'squad'>('market');
+  const [activeTab, setActiveTab] = useState<'market' | 'squad'>('squad');
   const [marketViewMode, setMarketViewMode] = useState<'cards' | 'list'>('list');
-  const [squadViewMode, setSquadViewMode] = useState<'cards' | 'list'>('cards');
+  const [squadViewMode, setSquadViewMode] = useState<'cards' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<PlayerRole | 'ALL'>('ALL');
   const [districtFilter, setDistrictFilter] = useState<'ALL' | 'NORTE' | 'SUL' | 'LESTE' | 'OESTE'>('ALL');
@@ -101,16 +103,31 @@ export const DraftPanel: React.FC = () => {
 
   const groupedMarketPlayers = useMemo(() => groupPlayersByRole(filteredMarketPlayers), [filteredMarketPlayers]);
   const groupedSquadPlayers = useMemo(() => groupPlayersByRole(combinedSquad), [combinedSquad]);
+  const roleSummary = useMemo(() => {
+    return ROLE_ORDER.map(role => {
+      const players = groupedSquadPlayers[role] || [];
+      const power = players.reduce((sum, player) => sum + player.totalRating, 0);
+      return { role, players, power };
+    });
+  }, [groupedSquadPlayers]);
 
   if (!userTeam) return null;
 
   const totalSelected = combinedSquad.length;
+  const confirmedSelected = currentSquadPlayers.length;
+  const pendingSelected = pendingPlayers.length;
   const draftPhaseLabel = `Dia ${Math.max(0, state.world.currentDay || 0)} de ${GENESIS_DRAFT_LAST_DAY}`;
   const draftPhaseDetail = state.world.currentDay <= 0
     ? 'Monte sua lista. As reservas ocupam score e entram na primeira virada.'
     : state.world.currentDay < GENESIS_DRAFT_LAST_DAY
       ? 'Continue ajustando sua lista. O Dia 2 ainda fica aberto para propostas.'
       : 'Ultima janela de ajuste. Na proxima virada, o Dia 3 computa disputas e completa elencos.';
+
+  const openMarketForRole = (role: PlayerRole | 'ALL' = 'ALL') => {
+    setActiveTab('market');
+    setMarketViewMode('list');
+    setRoleFilter(role);
+  };
 
   const handleFinalizeDraft = async () => {
     if (totalSelected < 11) {
@@ -397,11 +414,102 @@ export const DraftPanel: React.FC = () => {
         </div>
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[8px] font-black uppercase tracking-[0.28em] text-cyan-300">Meu elenco agora</p>
+              <h2 className="mt-1 truncate text-xl font-black uppercase italic text-white">{userTeam.name}</h2>
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-white/35">
+                {userTeam.league} / {userTeam.district}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openMarketForRole('ALL')}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              <Search size={13} />
+              Buscar atletas
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/35">Confirmados</p>
+              <p className="mt-1 text-2xl font-black italic text-white">{confirmedSelected}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/35">Wishlist</p>
+              <p className="mt-1 text-2xl font-black italic text-amber-200">{pendingSelected}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${remaining >= 0 ? 'border-emerald-400/20 bg-emerald-400/10' : 'border-rose-400/20 bg-rose-400/10'}`}>
+              <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/35">Saldo cap</p>
+              <p className={`mt-1 text-2xl font-black italic ${remaining >= 0 ? 'text-emerald-200' : 'text-rose-200'}`}>
+                {remaining >= 0 ? '+' : ''}{remaining.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-[0.2em] text-white/35">
+              <span>Score usado</span>
+              <span>{currentPower.toLocaleString()} / {draftBudget.toLocaleString()}</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full border border-white/10 bg-black/50">
+              <div
+                className={`h-full rounded-full transition-all ${remaining >= 0 ? 'bg-cyan-400' : 'bg-rose-500'}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[8px] font-black uppercase tracking-[0.28em] text-white/35">Por posicao</p>
+              <h2 className="mt-1 text-sm font-black uppercase italic text-white">Mapa do elenco</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('squad')}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] text-white/60 transition hover:text-white"
+            >
+              <Shield size={12} />
+              Ver elenco
+            </button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {roleSummary.map(({ role, players, power }) => (
+              <div key={role} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white">{ROLE_LABELS[role]}</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/30">
+                      {players.length} atletas / {power.toLocaleString()} score
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openMarketForRole(role)}
+                    className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.18em] text-cyan-100 transition hover:bg-cyan-400/20"
+                  >
+                    Buscar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
           {[
-            { id: 'market', label: `Mercado de Draft (${filteredMarketPlayers.length})`, icon: Users },
             { id: 'squad', label: `Meu Elenco (${totalSelected})`, icon: Shield },
+            { id: 'market', label: `Mercado de Draft (${filteredMarketPlayers.length})`, icon: Users },
           ].map(tab => (
             <button
               key={tab.id}
@@ -537,13 +645,13 @@ export const DraftPanel: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => isPending ? handleCancelDraftProposal(player.id) : handleSellPlayer(player.id)}
-                    className={`rounded-xl border px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] transition ${
+                    className={`rounded-xl border px-4 py-3 text-[8px] font-black uppercase tracking-[0.2em] transition ${
                       isPending
                         ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
                         : 'border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'
                     }`}
                   >
-                    {isPending ? 'Remover' : 'Dispensar'}
+                    {isPending ? 'Tirar wishlist' : 'Mandar embora'}
                   </button>
                 );
               },
