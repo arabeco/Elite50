@@ -5,7 +5,7 @@ import { Player, PlayerRole } from '../../types';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
 import { LayoutGrid, Rows3, Rocket, Search, Shield, Users, X, UserMinus } from 'lucide-react';
-import { advanceGameDay, getTeamPowerCap } from '../../engine/gameLogic';
+import { advanceGameDay, getDraftInterestReport, getTeamPowerCap } from '../../engine/gameLogic';
 import { claimWorldTick, completeWorldDayTick } from '../../lib/worldTick';
 import { GENESIS_DRAFT_AUTOFILL_DAY, GENESIS_DRAFT_LAST_DAY } from '../../constants/gameConstants';
 
@@ -34,6 +34,7 @@ export const DraftPanel: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<PlayerRole | 'ALL'>('ALL');
   const [districtFilter, setDistrictFilter] = useState<'ALL' | 'NORTE' | 'SUL' | 'LESTE' | 'OESTE'>('ALL');
+  const [marketSort, setMarketSort] = useState<'interest' | 'power'>('interest');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
@@ -89,9 +90,16 @@ export const DraftPanel: React.FC = () => {
 
         return isDraftEligible && notAlreadyMine && matchesSearch && matchesRole && matchesDistrict;
       })
-      .sort((a, b) => b.totalRating - a.totalRating)
+      .sort((a, b) => {
+        if (marketSort === 'interest') {
+          const chanceA = getDraftInterestReport(state, userTeam.id, a.id).chance;
+          const chanceB = getDraftInterestReport(state, userTeam.id, b.id).chance;
+          if (chanceA !== chanceB) return chanceB - chanceA;
+        }
+        return b.totalRating - a.totalRating;
+      })
       .slice(0, 60);
-  }, [districtFilter, myProposalPlayerIds, roleFilter, searchTerm, state.managers, state.players, state.teams, userTeam]);
+  }, [districtFilter, marketSort, myProposalPlayerIds, roleFilter, searchTerm, state, userTeam]);
 
   const currentPower = useMemo(() => {
     return combinedSquad.reduce((sum, player) => sum + player.totalRating, 0);
@@ -127,6 +135,15 @@ export const DraftPanel: React.FC = () => {
     setActiveTab('market');
     setMarketViewMode('list');
     setRoleFilter(role);
+    setMarketSort('interest');
+  };
+
+  const getInterestClass = (tone: ReturnType<typeof getDraftInterestReport>['tone']) => {
+    if (tone === 'safe') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200';
+    if (tone === 'warn') return 'border-amber-400/25 bg-amber-400/10 text-amber-200';
+    if (tone === 'risk') return 'border-orange-400/25 bg-orange-400/10 text-orange-200';
+    if (tone === 'danger') return 'border-rose-400/25 bg-rose-400/10 text-rose-200';
+    return 'border-white/10 bg-white/[0.04] text-white/35';
   };
 
   const handleFinalizeDraft = async () => {
@@ -549,7 +566,7 @@ export const DraftPanel: React.FC = () => {
 
       {activeTab === 'market' ? (
         <div className="space-y-4">
-          <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 sm:grid-cols-[1.2fr_repeat(2,minmax(0,0.55fr))]">
+          <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 sm:grid-cols-[1.2fr_repeat(3,minmax(0,0.55fr))]">
             <div className="relative">
               <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25" />
               <input
@@ -582,34 +599,68 @@ export const DraftPanel: React.FC = () => {
               <option value="LESTE">Leste</option>
               <option value="OESTE">Oeste</option>
             </select>
+            <select
+              value={marketSort}
+              onChange={event => setMarketSort(event.target.value as 'interest' | 'power')}
+              className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white outline-none"
+            >
+              <option value="interest">Maior interesse</option>
+              <option value="power">Maior poder</option>
+            </select>
           </div>
 
           {marketViewMode === 'cards'
             ? renderGroupedCards(groupedMarketPlayers, {
               emptyMessage: 'Nenhum atleta disponivel nesses filtros.',
-              actionForPlayer: (player) => (
-                <button
-                  type="button"
-                  onClick={() => handleMakeProposal(player)}
-                  className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-500/20"
-                >
-                  Recrutar
-                </button>
-              ),
+              actionForPlayer: (player) => {
+                const interest = getDraftInterestReport(state, userTeam.id, player.id);
+                return (
+                  <div className="space-y-2">
+                    <div className={`rounded-xl border px-2 py-2 text-center text-[8px] font-black uppercase tracking-[0.16em] ${getInterestClass(interest.tone)}`}>
+                      {interest.label} / {interest.chance}%
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleMakeProposal(player)}
+                      disabled={interest.chance <= 0}
+                      className={`w-full rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition ${
+                        interest.chance <= 0
+                          ? 'cursor-not-allowed border-white/10 bg-white/[0.03] text-white/25'
+                          : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+                      }`}
+                    >
+                      Recrutar
+                    </button>
+                  </div>
+                );
+              },
             })
             : renderGroupedList(groupedMarketPlayers, {
               emptyMessage: 'Nenhum atleta disponivel nesses filtros.',
               showDemand: true,
               onRowClick: setSelectedPlayer,
-              actionForPlayer: (player) => (
-                <button
-                  type="button"
-                  onClick={() => handleMakeProposal(player)}
-                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-500/20"
-                >
-                  Recrutar
-                </button>
-              ),
+              actionForPlayer: (player) => {
+                const interest = getDraftInterestReport(state, userTeam.id, player.id);
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className={`min-w-[92px] rounded-xl border px-2 py-2 text-center text-[8px] font-black uppercase tracking-[0.16em] ${getInterestClass(interest.tone)}`}>
+                      {interest.chance}%
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleMakeProposal(player)}
+                      disabled={interest.chance <= 0}
+                      className={`rounded-xl border px-3 py-2 text-[8px] font-black uppercase tracking-[0.2em] transition ${
+                        interest.chance <= 0
+                          ? 'cursor-not-allowed border-white/10 bg-white/[0.03] text-white/25'
+                          : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+                      }`}
+                    >
+                      Recrutar
+                    </button>
+                  </div>
+                );
+              },
             })}
         </div>
       ) : (

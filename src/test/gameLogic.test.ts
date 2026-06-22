@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict, canTeamGainMatchProgression } from '../engine/gameLogic';
+import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict, canTeamGainMatchProgression, getDraftInterestReport } from '../engine/gameLogic';
 import { generateInitialState } from '../engine/generator';
 import { Team, Player, GameState } from '../types';
 
@@ -123,6 +123,9 @@ describe('gameLogic', () => {
         attachHumanDraftManager(state, 'h_2', 't_32');
 
         const targetPlayerId = state.teams.t_1.squad[0];
+        state.players[targetPlayerId].totalRating = 520;
+        state.players[targetPlayerId].originDistrict = state.teams.t_31.district;
+        state.players[targetPlayerId].district = state.teams.t_31.district;
         state.world.draftProposals = [
             { managerId: 'h_1', teamId: 't_31', playerId: targetPlayerId, priority: 1 },
             { managerId: 'h_2', teamId: 't_32', playerId: targetPlayerId, priority: 2 }
@@ -144,6 +147,9 @@ describe('gameLogic', () => {
 
         const npcPlayerId = state.teams.t_1.squad[0];
         const humanOwnedPlayerId = state.teams.t_2.squad[0];
+        state.players[npcPlayerId].totalRating = 520;
+        state.players[npcPlayerId].originDistrict = state.teams.t_31.district;
+        state.players[npcPlayerId].district = state.teams.t_31.district;
         state.players[humanOwnedPlayerId].contract.teamId = 't_32';
         state.teams.t_32.squad = [humanOwnedPlayerId];
 
@@ -159,6 +165,23 @@ describe('gameLogic', () => {
         expect(state.players[humanOwnedPlayerId].contract.teamId).toBe('t_32');
         expect(state.teams.t_31.squad).not.toContain(humanOwnedPlayerId);
         expect(state.teams.t_32.squad).toContain(humanOwnedPlayerId);
+    });
+
+    it('makes elite 900+ players low interest unless the project clearly fits', () => {
+        const state = generateInitialState();
+        attachHumanDraftManager(state, 'h_1', 't_31');
+        state.teams.t_31.squad = state.teams.t_31.squad.slice(0, 10);
+        state.teams.t_31.powerCap = 8800;
+
+        const targetPlayerId = state.teams.t_1.squad[0];
+        state.players[targetPlayerId].totalRating = 920;
+        state.players[targetPlayerId].originDistrict = 'NORTE';
+        state.players[targetPlayerId].district = 'NORTE';
+
+        const interest = getDraftInterestReport(state, 't_31', targetPlayerId);
+
+        expect(interest.chance).toBeLessThan(35);
+        expect(['danger', 'risk']).toContain(interest.tone);
     });
 
     it('keeps Genesis Draft open on day 2 and only auto-fills on day 3', () => {

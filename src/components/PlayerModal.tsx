@@ -7,7 +7,7 @@ import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
 import { TeamModal } from './TeamModal';
 import { useGame } from '../store/GameContext';
-import { calculateTeamPower } from '../engine/gameLogic';
+import { calculateTeamPower, getDraftInterestReport } from '../engine/gameLogic';
 import { useTransfers } from '../hooks/useTransfers';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { TRAIT_DESCRIPTIONS } from '../constants/traitDescriptions';
@@ -312,6 +312,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const { handleSendTradeOffer, handleMakeProposal, handleCancelDraftProposal } = useTransfers(userTeam?.id || null, userTeam ? calculateTeamPower(userTeam, state.players) : 0, userTeam?.powerCap || 0);
   const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY;
   const isDraftPending = state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
+  const draftInterest = isDraftDay && userTeam ? getDraftInterestReport(state, userTeam.id, player.id) : null;
 
   const [tradeMode, setTradeMode] = React.useState(false);
   const [selectedOfferId, setSelectedOfferId] = React.useState<string | null>(null);
@@ -1268,6 +1269,21 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
             </div>
           </div>
             </>
+          )}
+
+          {isDraftDay && !isMyPlayer && draftInterest && (
+            <div className={`rounded-xl border px-3 py-3 ${
+              draftInterest.tone === 'safe' ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100' :
+                draftInterest.tone === 'warn' ? 'border-amber-400/25 bg-amber-400/10 text-amber-100' :
+                  draftInterest.tone === 'risk' ? 'border-orange-400/25 bg-orange-400/10 text-orange-100' :
+                    'border-rose-400/25 bg-rose-400/10 text-rose-100'
+            }`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[8px] font-black uppercase tracking-[0.24em]">Interesse no Draft</span>
+                <span className="text-sm font-black italic">{draftInterest.chance}%</span>
+              </div>
+              <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.16em] opacity-70">{draftInterest.label}: {draftInterest.reasons[0]}</p>
+            </div>
           )}
 
           {isDraftDay && !isMyPlayer && (

@@ -1,7 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { GameState, Manager, TrainingState } from '../types';
-import { MIDSEASON_JOIN_MAX_ROUND } from '../constants/gameConstants';
+import { GENESIS_DRAFT_LAST_DAY, MIDSEASON_JOIN_MAX_ROUND } from '../constants/gameConstants';
 import { applyTeamLogoAssets } from '../utils/teamIdentity';
 import { syncNormalizedWorldFromState } from './worldRepository';
 
@@ -52,6 +52,16 @@ const createDefaultTrainingState = (): TrainingState => ({
     stabilizationSlot: null
   }
 });
+
+const isWorldJoinOpen = (world: any) => {
+  const status = world?.status || 'LOBBY';
+  const currentDay = world?.currentDay ?? -1;
+  const access = world?.access || {};
+
+  return status === 'LOBBY' &&
+    currentDay <= GENESIS_DRAFT_LAST_DAY &&
+    access.allowObservers !== false;
+};
 
 const applyParticipantFoundedClubs = (baseWorld: any, mergedTeams: Record<string, any>, participantRecords: any[]) => {
   const mergedWorld = {
@@ -188,6 +198,10 @@ export const joinSharedWorld = async (worldId: string): Promise<GameState | null
     return null;
   }
 
+  if (!isWorldJoinOpen(masterGame.world_state)) {
+    throw new Error('JOIN_WINDOW_CLOSED');
+  }
+
   // 2. Build a GameState based on master world but for the joining user
   const gameState: GameState = {
     world: masterGame.world_state as any,
@@ -248,7 +262,12 @@ export const joinWorldByCode = async (joinCode: string): Promise<GameState | nul
     throw new Error(error?.message || 'INVALID_JOIN_CODE');
   }
 
-  return loadGameState(String(data));
+  const state = await loadGameState(String(data));
+  if (state && !isWorldJoinOpen(state.world)) {
+    throw new Error('JOIN_WINDOW_CLOSED');
+  }
+
+  return state;
 };
 
 export const loadGameState = async (worldId: string = 'default'): Promise<GameState | null> => {
@@ -554,7 +573,9 @@ export const listUserWorlds = async () => {
     return [];
   }
 
-  return data.map(d => ({
+  return data
+    .filter(d => isWorldJoinOpen(d.world_state))
+    .map(d => ({
     id: d.world_id,
     updatedAt: d.updated_at,
     userId: d.user_id,
@@ -564,8 +585,8 @@ export const listUserWorlds = async () => {
     phase: (d.world_state as any).phase || null,
     currentDay: (d.world_state as any).currentDay ?? null,
     currentSeason: (d.world_state as any).currentSeason ?? null,
-    startScheduledAt: (d.world_state as any).startScheduledAt || null
-  }));
+      startScheduledAt: (d.world_state as any).startScheduledAt || null
+    }));
 };
 
 export const deleteWorld = async (worldId: string) => {

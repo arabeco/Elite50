@@ -176,6 +176,9 @@ describe('Supabase multiplayer smoke', () => {
   });
 
   it('joins a private world by code as observer', async () => {
+    mockDb.records[0].world_state.status = 'LOBBY';
+    mockDb.records[0].world_state.currentDay = 1;
+    mockDb.records[0].world_state.access = { allowObservers: true, joinCode: 'ELITE-123456' };
     const { joinWorldByCode } = await import('../lib/supabase');
 
     const state = await joinWorldByCode('elite-123456');
@@ -184,6 +187,15 @@ describe('Supabase multiplayer smoke', () => {
     expect(state?.isCreator).toBe(false);
     expect(state?.userTeamId).toBeNull();
     expect(state?.participants?.some(participant => participant.userId === 'user_joiner' && participant.isObserver)).toBe(true);
+  });
+
+  it('blocks code joins after the lobby draft window closes', async () => {
+    mockDb.records[0].world_state.status = 'ACTIVE';
+    mockDb.records[0].world_state.currentDay = 3;
+    mockDb.records[0].world_state.access = { allowObservers: true, joinCode: 'ELITE-123456' };
+    const { joinWorldByCode } = await import('../lib/supabase');
+
+    await expect(joinWorldByCode('elite-123456')).rejects.toThrow('JOIN_WINDOW_CLOSED');
   });
 
   it('merges participant-founded clubs into the shared world without creator privileges', async () => {

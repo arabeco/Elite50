@@ -1,7 +1,7 @@
 ﻿import { useGame, useGameDispatch } from '../store/GameContext';
 import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
-import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/gameLogic';
+import { advanceGameDay, submitProposals, cancelDraftProposal, getDraftInterestReport } from '../engine/gameLogic';
 import { GENESIS_DRAFT_LAST_DAY, SQUAD_SIZE_MAX } from '../constants/gameConstants';
 import { calculateTradeAcceptanceChance } from '../engine/economyLogic';
 import { addNews } from '../engine/newsService';
@@ -84,11 +84,16 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                 addToast('User Manager ID nÃ£o encontrado!', 'error');
                 return;
             }
+            const interest = getDraftInterestReport(state, userTeam.id, player.id);
+            if (interest.chance <= 0) {
+                addToast(`${player.nickname}: ${interest.label}. ${interest.reasons[0]}`, 'warning');
+                return;
+            }
             // Draft proposals reserve score until the daily resolution accepts or rejects them.
             const remainingAfterReserve = powerCap - nextTotalPoints;
             const confirmed = await requestConfirm({
                 title: 'Reservar no Draft',
-                message: `${player.nickname} ocupa ${player.totalRating} de score ate a resolucao. Score restante apos reserva: ${remainingAfterReserve}.`,
+                message: `${player.nickname} ocupa ${player.totalRating} de score ate a resolucao. Chance estimada: ${interest.chance}% (${interest.label}). ${interest.reasons[0]} Score restante apos reserva: ${remainingAfterReserve}.`,
                 confirmLabel: 'Reservar',
             });
             if (!confirmed) return;

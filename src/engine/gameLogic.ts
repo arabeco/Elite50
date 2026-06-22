@@ -1977,6 +1977,117 @@ const draftTieBreaker = (proposal: DraftProposal) => {
   return seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 17;
 };
 
+const deterministicDraftRoll = (proposal: DraftProposal) => {
+  const seed = `${proposal.managerId}:${proposal.teamId}:${proposal.playerId}:interest`;
+  const hash = seed.split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
+  return hash % 100;
+};
+
+export const getDraftInterestReport = (state: GameState, teamId: string | null | undefined, playerId: string | null | undefined) => {
+  const player = playerId ? state.players[playerId] : null;
+  const team = teamId ? state.teams[teamId] : null;
+  const reasons: string[] = [];
+
+  if (!player || !team) {
+    return { chance: 0, label: 'Indisponivel', tone: 'blocked' as const, reasons: ['Atleta ou time indisponivel.'] };
+  }
+
+  if ((team.squad || []).includes(player.id)) {
+    return { chance: 100, label: 'No elenco', tone: 'safe' as const, reasons: ['Ele ja faz parte do seu elenco.'] };
+  }
+
+  if ((team.squad || []).length >= SQUAD_SIZE_MAX) {
+    return { chance: 0, label: 'Elenco cheio', tone: 'blocked' as const, reasons: ['Dispense alguem antes de tentar contratar.'] };
+  }
+
+  const currentPower = calculateTeamPower(team, state.players);
+  const cap = getTeamPowerCap(team, state.players);
+  const nextPower = currentPower + player.totalRating;
+  const remainingAfter = cap - nextPower;
+
+  if (nextPower > cap) {
+    return { chance: 0, label: 'Estoura cap', tone: 'blocked' as const, reasons: [`Passaria do Score Maximo em ${Math.abs(remainingAfter)} pts.`] };
+  }
+
+  const currentTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
+  const currentManager = currentTeam?.managerId ? state.managers[currentTeam.managerId] : null;
+
+  if (currentManager?.isNPC === false) {
+    return { chance: 0, label: 'Clube humano', tone: 'blocked' as const, reasons: ['Atleta de outro jogador nao entra no Draft Genesis.'] };
+  }
+
+  let chance = 72;
+  const starCount = (team.squad || []).filter(id => (state.players[id]?.totalRating || 0) >= 850).length;
+  const superStarCount = (team.squad || []).filter(id => (state.players[id]?.totalRating || 0) >= 900).length;
+  const capUsageAfter = cap > 0 ? nextPower / cap : 1;
+  const currentClubPower = currentTeam ? calculateTeamPower(currentTeam, state.players) : 0;
+
+  if (player.totalRating >= 900) {
+    chance -= 55;
+    reasons.push('Estrela 900+ quase nunca aceita projeto pequeno no Draft.');
+  } else if (player.totalRating >= 850) {
+    chance -= 36;
+    reasons.push('Estrela elite exige projeto forte.');
+  } else if (player.totalRating >= 800) {
+    chance -= 22;
+    reasons.push('Atleta top tem concorrencia alta.');
+  } else if (player.totalRating >= 750) {
+    chance -= 12;
+  }
+
+  if (starCount > 0 && player.totalRating >= 850) {
+    chance -= starCount * 16;
+    reasons.push('Ja existe estrela no elenco, o protagonismo pesa contra.');
+  }
+
+  if (superStarCount > 0 && player.totalRating >= 850) {
+    chance -= superStarCount * 14;
+  }
+
+  if (capUsageAfter >= 0.96) {
+    chance -= 22;
+    reasons.push('Ele ficaria espremido no limite do cap.');
+  } else if (capUsageAfter >= 0.90) {
+    chance -= 12;
+  } else if (capUsageAfter <= 0.78) {
+    chance += 6;
+  }
+
+  if (currentTeam) {
+    chance -= 10;
+    if (currentClubPower > currentPower + 900) {
+      chance -= 14;
+      reasons.push('O clube atual parece mais competitivo.');
+    }
+  } else {
+    chance += 10;
+    reasons.push('Free agent e mais facil de convencer.');
+  }
+
+  const bornInTeamZone = player.originDistrict && player.originDistrict === team.district;
+  const sameCurrentDistrict = team.district === player.district;
+  if (bornInTeamZone) {
+    chance += 14;
+    reasons.push('Nascido na mesma zona, a identificacao pesa a favor.');
+  } else if (sameCurrentDistrict) {
+    chance += 8;
+    reasons.push('Mesmo distrito atual ajuda na decisao.');
+  }
+
+  chance += Math.round(getManagerDraftInfluence(state.managers[team.managerId || '']) / 2);
+  chance = Math.max(5, Math.min(92, chance));
+
+  const label = chance >= 70 ? 'Boa chance' : chance >= 45 ? 'Disputado' : chance >= 25 ? 'Baixa chance' : 'Quase impossivel';
+  const tone = chance >= 70 ? 'safe' as const : chance >= 45 ? 'warn' as const : chance >= 25 ? 'risk' as const : 'danger' as const;
+
+  return {
+    chance,
+    label,
+    tone,
+    reasons: reasons.length ? reasons.slice(0, 3) : ['Chance baseada em cap, estrelas do elenco, clube atual e distrito.'],
+  };
+};
+
 const canDraftPlayer = (state: GameState, proposal: DraftProposal) => {
   const player = state.players[proposal.playerId];
   const team = state.teams[proposal.teamId];
@@ -1992,7 +2103,10 @@ const canDraftPlayer = (state: GameState, proposal: DraftProposal) => {
   const currentManager = currentTeam?.managerId ? state.managers[currentTeam.managerId] : null;
 
   // Jogador de time humano nao entra no Draft Genesis; jogador de IA/free agent pode ser disputado.
-  return !currentManager || currentManager.isNPC !== false;
+  if (currentManager?.isNPC === false) return false;
+
+  const interest = getDraftInterestReport(state, proposal.teamId, proposal.playerId);
+  return interest.chance > deterministicDraftRoll(proposal);
 };
 
 const assignDraftPlayer = (state: GameState, proposal: DraftProposal) => {
