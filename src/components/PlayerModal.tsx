@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Player, District, Match } from '../types';
 import { X, TrendingUp, Zap, Lock, Activity, Shield, Trophy, Clock, BarChart3, Coins, Target, CheckCircle2, ArrowRightLeft, CalendarDays, Star } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -12,11 +13,78 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Responsi
 import { TRAIT_DESCRIPTIONS } from '../constants/traitDescriptions';
 import { equipBootOnPlayer, getBootImagePath, getStoreItem, getStoreState, releasePlayerBootToInventory } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
+import { groupAchievementsByTrophy } from '../utils/trophyAssets';
 
 interface PlayerModalProps {
   player: Player;
   onClose: () => void;
 }
+
+const TraitSigil = ({ trait, rarity, hidden }: { trait?: string | null; rarity: string; hidden?: boolean }) => {
+  const id = React.useId().replace(/:/g, '');
+  const label = hidden ? '?' : (trait || 'Vazio');
+  const letters = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z]/g, '')
+    .slice(0, 2)
+    .toUpperCase() || '--';
+  const hash = [...label].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const palette = hidden
+    ? { a: '#64748b', b: '#111827', c: '#94a3b8' }
+    : rarity === 'Fardo'
+      ? { a: '#ef4444', b: '#7f1d1d', c: '#f97316' }
+      : rarity.includes('Lend')
+        ? { a: '#22d3ee', b: '#0f172a', c: '#facc15' }
+        : rarity.includes('pico') || rarity.includes('Épico')
+          ? { a: '#d946ef', b: '#2e1065', c: '#a78bfa' }
+          : rarity === 'Ouro'
+            ? { a: '#facc15', b: '#451a03', c: '#f97316' }
+            : rarity === 'Prata'
+              ? { a: '#cbd5e1', b: '#1e293b', c: '#38bdf8' }
+              : { a: '#fb923c', b: '#431407', c: '#facc15' };
+  const rotation = hash % 45;
+  const spokeCount = 3 + (hash % 4);
+
+  return (
+    <svg viewBox="0 0 64 64" className="h-10 w-10 shrink-0 drop-shadow-[0_0_14px_rgba(255,255,255,0.08)]" aria-hidden="true">
+      <defs>
+        <radialGradient id={`trait-core-${id}`} cx="50%" cy="42%" r="70%">
+          <stop offset="0%" stopColor={palette.c} stopOpacity="0.95" />
+          <stop offset="48%" stopColor={palette.a} stopOpacity="0.58" />
+          <stop offset="100%" stopColor={palette.b} stopOpacity="0.92" />
+        </radialGradient>
+        <linearGradient id={`trait-stroke-${id}`} x1="15%" y1="0%" x2="85%" y2="100%">
+          <stop offset="0%" stopColor={palette.c} />
+          <stop offset="100%" stopColor={palette.a} />
+        </linearGradient>
+      </defs>
+      <path
+        d="M32 4 L52 14 L60 34 L48 56 L24 60 L6 44 L8 19 Z"
+        fill={`url(#trait-core-${id})`}
+        opacity="0.24"
+        transform={`rotate(${rotation} 32 32)`}
+      />
+      <path
+        d="M32 7 L49 17 L55 36 L44 52 L24 55 L10 42 L12 21 Z"
+        fill="rgba(0,0,0,0.62)"
+        stroke={`url(#trait-stroke-${id})`}
+        strokeWidth="2"
+      />
+      <circle cx="32" cy="32" r="18" fill="none" stroke={palette.a} strokeOpacity="0.26" strokeWidth="1.4" />
+      {Array.from({ length: spokeCount }).map((_, index) => {
+        const angle = ((360 / spokeCount) * index + rotation) * Math.PI / 180;
+        const x1 = 32 + Math.cos(angle) * 8;
+        const y1 = 32 + Math.sin(angle) * 8;
+        const x2 = 32 + Math.cos(angle) * 22;
+        const y2 = 32 + Math.sin(angle) * 22;
+        return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={palette.c} strokeOpacity="0.48" strokeWidth="1.2" />;
+      })}
+      <path d="M24 31 C27 23 37 23 40 31 C37 39 27 39 24 31 Z" fill="rgba(255,255,255,0.08)" stroke={palette.a} strokeWidth="1.4" />
+      <text x="32" y="36" textAnchor="middle" fontSize="12" fontWeight="900" fill="rgba(255,255,255,0.92)">{letters}</text>
+    </svg>
+  );
+};
 
 export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => {
   const { state, addToast } = useGame();
@@ -65,6 +133,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const globalRank = getPlayerGlobalRank(state, player.id);
   const eliteBadgeLabel = getEliteBadgeLabel(globalRank);
   const eliteTier = getEliteTier(globalRank);
+  const displayRole = player.role === 'ZAG' ? 'DEFENSOR' : player.role;
+  const genderSymbol = player.appearance.gender === 'F' ? '♀' : '♂';
+
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   const lastRatings = player.history.lastMatchRatings || [];
   const currentForm = lastRatings.length > 0
@@ -81,11 +159,79 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
 
   const radarData = [
     { stat: 'FOR', value: player.pentagon.FOR },
-    { stat: 'AGI', value: player.pentagon.AGI },
     { stat: 'INT', value: player.pentagon.INT },
+    { stat: 'AGI', value: player.pentagon.AGI },
     { stat: 'TAT', value: player.pentagon.TAT },
     { stat: 'TEC', value: player.pentagon.TEC },
   ];
+  const fusionRows = player.position === 'Goleiro'
+    ? [
+        { key: 'REF', label: 'Reflexos', formula: 'AGI + INT', value: player.fusion.REF ?? 0, tone: 'text-cyan-200', bar: 'from-cyan-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-reflex.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
+        { key: 'DEF', label: 'Defesa', formula: 'FOR + TEC', value: player.fusion.DEF ?? 0, tone: 'text-emerald-200', bar: 'from-emerald-400 to-lime-300', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-wall.svg', color: '#34d399', glow: 'rgba(52,211,153,0.28)' },
+        { key: 'POS', label: 'Posicao', formula: 'AGI + TAT', value: player.fusion.POS ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-fuchsia-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-position.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
+        { key: 'PAS', label: 'Passe', formula: 'TAT + TEC', value: player.fusion.PAS, tone: 'text-amber-200', bar: 'from-amber-300 to-yellow-200', iconPath: '/assetas/avatars/fusion-icons/fusion-link.svg', color: '#facc15', glow: 'rgba(250,204,21,0.28)' },
+        { key: 'DET', label: 'Determinacao', formula: 'FOR + INT', value: player.fusion.DET, tone: 'text-rose-200', bar: 'from-rose-400 to-orange-300', iconPath: '/assetas/avatars/fusion-icons/fusion-drive.svg', color: '#fb7185', glow: 'rgba(251,113,133,0.28)' },
+      ]
+    : [
+        { key: 'DRI', label: 'Drible', formula: 'AGI + INT', value: player.fusion.DRI ?? 0, tone: 'text-cyan-200', bar: 'from-cyan-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-react.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
+        { key: 'FIN', label: 'Finalizacao', formula: 'FOR + TEC', value: player.fusion.FIN ?? 0, tone: 'text-emerald-200', bar: 'from-emerald-400 to-lime-300', iconPath: '/assetas/avatars/fusion-icons/fusion-execute.svg', color: '#34d399', glow: 'rgba(52,211,153,0.28)' },
+        { key: 'MOV', label: 'Movimento', formula: 'AGI + TAT', value: player.fusion.MOV ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-fuchsia-400', iconPath: '/assetas/avatars/fusion-icons/fusion-space.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
+        { key: 'PAS', label: 'Passe', formula: 'TAT + TEC', value: player.fusion.PAS, tone: 'text-amber-200', bar: 'from-amber-300 to-yellow-200', iconPath: '/assetas/avatars/fusion-icons/fusion-link.svg', color: '#facc15', glow: 'rgba(250,204,21,0.28)' },
+        { key: 'DET', label: 'Determinacao', formula: 'FOR + INT', value: player.fusion.DET, tone: 'text-rose-200', bar: 'from-rose-400 to-orange-300', iconPath: '/assetas/avatars/fusion-icons/fusion-drive.svg', color: '#fb7185', glow: 'rgba(251,113,133,0.28)' },
+      ];
+  const fusionTotal = fusionRows.reduce((sum, row) => sum + row.value, 0);
+  const strongestFusion = fusionRows.reduce((best, row) => row.value > best.value ? row : best, fusionRows[0]);
+  const pentagonCenter = { x: 120, y: 116 };
+  const basePentagonAnchors = [
+    { key: 'FOR', label: 'FOR', value: player.pentagon.FOR, x: 120, y: 184 },
+    { key: 'INT', label: 'INT', value: player.pentagon.INT, x: 56, y: 138 },
+    { key: 'AGI', label: 'AGI', value: player.pentagon.AGI, x: 80, y: 64 },
+    { key: 'TAT', label: 'TAT', value: player.pentagon.TAT, x: 160, y: 64 },
+    { key: 'TEC', label: 'TEC', value: player.pentagon.TEC, x: 184, y: 138 },
+  ];
+  const basePentagonPoints = basePentagonAnchors.map(point => {
+    const normalized = Math.min(1, Math.max(0, point.value / 100));
+    const scale = 0.28 + normalized * 0.72;
+    return {
+      ...point,
+      x: pentagonCenter.x + (point.x - pentagonCenter.x) * scale,
+      y: pentagonCenter.y + (point.y - pentagonCenter.y) * scale,
+    };
+  });
+  const basePointByKey = Object.fromEntries(basePentagonPoints.map(point => [point.key, point]));
+  const basePentagonPath = basePentagonPoints.map(point => `${point.x},${point.y}`).join(' ');
+  const basePentagonFramePath = basePentagonAnchors.map(point => `${point.x},${point.y}`).join(' ');
+  const fusionRowByKey = Object.fromEntries(fusionRows.map(row => [row.key, row]));
+  const fusionEdgeOrder = player.position === 'Goleiro'
+    ? ['DET', 'REF', 'POS', 'PAS', 'DEF']
+    : ['DET', 'DRI', 'MOV', 'PAS', 'FIN'];
+  const fusionDisplayOrder = player.position === 'Goleiro'
+    ? ['POS', 'PAS', 'DET', 'REF', 'DEF']
+    : ['MOV', 'PAS', 'DET', 'DRI', 'FIN'];
+  const outwardPointFromEdge = (a: { x: number; y: number }, b: { x: number; y: number }, value: number) => {
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const vector = { x: mid.x - pentagonCenter.x, y: mid.y - pentagonCenter.y };
+    const length = Math.max(1, Math.hypot(vector.x, vector.y));
+    const normalized = Math.min(1, Math.max(0, (value - 80) / 120));
+    const visualWeight = Math.pow(normalized, 1.35);
+    const targetRadius = 42 + visualWeight * 106;
+    const radius = Math.max(length + 18, targetRadius);
+    return {
+      x: pentagonCenter.x + (vector.x / length) * radius,
+      y: pentagonCenter.y + (vector.y / length) * radius,
+    };
+  };
+  const fusionGeometry = fusionEdgeOrder.map(key => {
+    const row = fusionRowByKey[key];
+    const [aKey, bKey] = row.formula.split(' + ');
+    const a = basePointByKey[aKey];
+    const b = basePointByKey[bKey];
+    const point = outwardPointFromEdge(a, b, row.value);
+    return { ...row, a, b, point };
+  });
+  const orderedFusionRows = fusionDisplayOrder
+    .map(key => fusionRowByKey[key])
+    .filter(Boolean);
 
   // Buy Logic
   const { setState, saveGame } = useGame();
@@ -134,11 +280,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const playerAchievements = player.achievements || [];
   const playerTitleCount = playerAchievements.filter(achievement => achievement.type === 'Clube' || achievement.type === 'Distrito').length;
   const playerIndividualCount = playerAchievements.filter(achievement => achievement.type === 'Individual').length;
+  const trophyStacks = React.useMemo(() => groupAchievementsByTrophy(playerAchievements), [playerAchievements]);
   const seasonDelta = player.history.seasonRatingDelta || 0;
   const careerGames = player.history.careerGamesPlayed || player.history.gamesPlayed || 0;
   const careerGoals = player.history.careerGoals || player.history.goals || 0;
   const careerAssists = player.history.careerAssists || player.history.assists || 0;
-  const careerAverage = player.history.careerAverageRating || player.history.averageRating || 0;
   const peakRating = player.history.peakRating || player.totalRating;
   const seasonSnapshots = player.history.seasonSnapshots || [];
   const clubEvents = player.history.clubEvents || [];
@@ -162,28 +308,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   ];
   const minScoreEvolution = Math.min(...scoreEvolution.map(item => item.value), player.totalRating);
   const maxScoreEvolution = Math.max(...scoreEvolution.map(item => item.value), player.potential, player.totalRating);
-  const achievementIcon = (title: string, type: string) => {
-    const normalized = title.toLowerCase();
-    if (type === 'Individual') return Star;
-    if (type === 'Distrito' || normalized.includes('na')) return Shield;
-    if (normalized.includes('copa') || normalized.includes('cup')) return Target;
-    return Trophy;
-  };
-  const achievementIconNode = (achievement: { title: string; type: string }) => {
-    const Icon = achievementIcon(achievement.title, achievement.type);
-    const normalized = achievement.title.toLowerCase();
-    const iconColor = achievement.type === 'Individual'
-      ? 'text-cyan-400'
-      : achievement.type === 'Distrito'
-        ? 'text-violet-300'
-        : normalized.includes('copa') || normalized.includes('cup')
-          ? 'text-rose-300'
-          : 'text-amber-400';
-    return <Icon size={13} className={iconColor} />;
-  };
-
   const { handleSendTradeOffer, handleMakeProposal, handleCancelDraftProposal } = useTransfers(userTeam?.id || null, userTeam ? calculateTeamPower(userTeam, state.players) : 0, userTeam?.powerCap || 0);
-  const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay < 3;
+  const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
   const isDraftPending = state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const [tradeMode, setTradeMode] = React.useState(false);
@@ -202,6 +328,22 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     acc[assignedItemId] = state.players[assignedPlayerId];
     return acc;
   }, {});
+  const traitSlots = [
+    { label: 'Base', trait: player.badges.slot1, rarity: player.badges.slot1?.includes('Prata') ? 'Prata' : 'Bronze' },
+    { label: 'Elite', trait: player.badges.slot2, rarity: player.badges.slot2?.includes('Ouro') ? 'Ouro' : 'Prata' },
+    { label: 'Potencial', trait: player.badges.slot3, rarity: (player.badges.slot3 === 'Máquina' || player.badges.slot3 === 'Catalisador') ? 'Épico' : (player.badges.slot3?.includes('Lendária') || player.badges.slot3 === 'Gênio') ? 'Lendário' : 'Ouro', isPotential: true },
+    { label: 'Legado', trait: player.badges.slot4, rarity: 'Fardo' },
+  ];
+  const getTraitRarityStyle = (rarity: string, isHidden?: boolean) => {
+    if (isHidden) return 'border-slate-800 text-slate-500 bg-slate-950/40';
+    if (rarity === 'Bronze') return 'border-orange-900/50 text-orange-300 bg-orange-950/20';
+    if (rarity === 'Prata') return 'border-slate-400/50 text-slate-200 bg-slate-800/40';
+    if (rarity === 'Ouro') return 'border-amber-500/50 text-amber-300 bg-amber-950/30';
+    if (rarity === 'Épico') return 'border-purple-500/50 text-purple-300 bg-purple-950/40';
+    if (rarity === 'Lendário') return 'border-cyan-400/50 text-cyan-300 bg-cyan-950/50 shadow-[0_0_10px_rgba(34,211,238,0.2)]';
+    if (rarity === 'Fardo') return 'border-red-900/50 text-red-300 bg-red-950/30';
+    return 'border-white/5 text-slate-500 bg-white/5';
+  };
 
   const handleProposal = async () => {
     if (!userTeam || isMyPlayer || player.satisfaction >= 80) return;
@@ -243,6 +385,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
             fromTeamName: player.contract.teamId ? state.teams[player.contract.teamId]?.name : undefined,
             toTeamId: userTeam.id,
             toTeamName: userTeam.name,
+            value: player.totalRating,
             note: 'Contratado pelo manager humano',
           },
           ...(newState.players[player.id].history.clubEvents || []),
@@ -273,7 +416,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const startHold = () => {
     if (isProcessing || !userTeam || !isMyPlayer) return;
     if (userTeam.squad.length <= 15) {
-      alert('Você precisa de no mínimo 15 jogadores no elenco!');
+      addToast('Voce precisa de no minimo 15 jogadores no elenco.', 'warning');
       return;
     }
     setHoldProgress(0);
@@ -343,15 +486,17 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     setShowBootPicker(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/90 backdrop-blur-md" onClick={onClose}>
+  if (typeof document === 'undefined') return null;
+
+  return createPortal((
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black p-1 pt-1 backdrop-blur-md md:items-center md:p-3" onClick={onClose}>
       <motion.div
         layoutId={`player-card-${player.id}`}
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-md max-h-[90vh] bg-slate-950/70 backdrop-blur-2xl rounded-xl border ${theme.border} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_35px_rgba(245,158,11,0.22)]' : eliteTier === 'top50' ? 'shadow-[0_0_35px_rgba(34,211,238,0.18)]' : 'shadow-[0_0_30px_rgba(0,0,0,0.6)]'} flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
+        className={`relative w-full max-w-md max-h-[calc(100svh-0.5rem)] sm:max-h-[90vh] bg-slate-950/95 backdrop-blur-2xl rounded-xl border ${theme.border} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_35px_rgba(245,158,11,0.22)]' : eliteTier === 'top50' ? 'shadow-[0_0_35px_rgba(34,211,238,0.18)]' : 'shadow-[0_0_30px_rgba(0,0,0,0.6)]'} flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
       >
         <button onClick={onClose} className="absolute top-3 right-3 z-20 p-1.5 bg-black/60 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors">
           <X size={16} />
@@ -369,6 +514,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
             <div className={`w-28 h-36 sm:w-36 sm:h-44 rounded-2xl sm:rounded-[1.75rem] border ${theme.border} bg-black/60 shadow-2xl overflow-hidden flex-shrink-0 group relative`}>
               <PlayerAvatar player={player} size="xl" mode="full" cropBottomPercent={0} className="w-full h-full scale-[1.42] translate-y-9 sm:translate-y-12 group-hover:scale-[1.5] transition-transform duration-500" />
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-t from-black via-black/55 to-transparent" />
+              <div className="absolute bottom-2 left-2 rounded-lg border border-black/40 bg-black/70 px-2 py-1">
+                <p className={`text-lg font-black italic leading-none ${theme.main}`}>{player.totalRating}</p>
+              </div>
             </div>
             <div className="flex-1 mb-1">
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
@@ -381,9 +529,12 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               </div>
               <h2 className="text-xl sm:text-2xl font-black italic text-white leading-none uppercase tracking-tighter drop-shadow-lg flex items-center gap-2 sm:gap-3">
                 {player.nickname}
-                <span className="text-[8px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-widest bg-cyan-900/50 px-1.5 sm:px-2 py-0.5 rounded-lg border border-cyan-500/50">{player.role}</span>
+                <span className={`text-base sm:text-lg leading-none ${player.appearance.gender === 'F' ? 'text-pink-300' : 'text-sky-300'}`} aria-label={player.appearance.gender === 'F' ? 'Feminino' : 'Masculino'}>
+                  {genderSymbol}
+                </span>
+                <span className="text-[8px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-widest bg-cyan-900/50 px-1.5 sm:px-2 py-0.5 rounded-lg border border-cyan-500/50">{displayRole}</span>
               </h2>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <p className="text-[10px] sm:text-xs text-slate-400 font-medium tracking-wide">{player.name}</p>
                 {playerTeam && (
                   <button
@@ -409,6 +560,41 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 {globalRank && (
                   <span className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Rank global #{globalRank}</span>
                 )}
+              </div>
+              <div className={`mt-3 ${playerTeam?.logo ? 'grid grid-cols-[auto_1fr] gap-2' : 'block'}`}>
+                {playerTeam && playerTeam.logo && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTeamId(playerTeam.id)}
+                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-black/45 transition hover:bg-white/10"
+                  >
+                    <TeamLogo
+                      primaryColor={playerTeam.logo.primary}
+                      secondaryColor={playerTeam.logo.secondary}
+                      accentColor={playerTeam.logo.accent}
+                      shapeId={playerTeam.logo.shapeId}
+                      patternId={playerTeam.logo.patternId as any}
+                      symbolId={playerTeam.logo.symbolId}
+                      secondarySymbolId={playerTeam.logo.secondarySymbolId}
+                      size={42}
+                    />
+                  </button>
+                )}
+                <div className="min-w-0 rounded-xl border border-white/10 bg-black/45 px-3 py-2">
+                  <p className="truncate text-[8px] font-black uppercase tracking-[0.22em] text-white/35">
+                    {playerTeam?.name || 'Sem clube'} - {equippedBootItem?.name || 'Chuteira padrao'}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className={`text-[9px] font-black uppercase tracking-widest ${theme.main}`}>
+                      {displayRole}
+                    </span>
+                    <img
+                      src={getBootImagePath(player.id, state)}
+                      alt=""
+                      className="h-7 w-10 object-contain"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -453,7 +639,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
           </div>
 
           {activePlayerTab === 'stats' && (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <div className="grid grid-cols-4 gap-2">
                 <div className="rounded-xl border border-white/10 bg-black/50 p-2.5">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Jogos</p>
@@ -498,7 +684,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[8px] font-black uppercase tracking-widest text-amber-100/55">
-                  <span>Media {careerAverage ? careerAverage.toFixed(2) : '--'}</span>
+                  <span>Atual {player.totalRating}</span>
                   <span>{player.history.formerClubCount || 0} clubes anteriores</span>
                   <span>{playerTitleCount} titulos</span>
                 </div>
@@ -606,6 +792,135 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                     <Radar dataKey="value" stroke="rgb(34,211,238)" fill="rgba(34,211,238,0.22)" strokeWidth={2} />
                   </RadarChart>
                 </ResponsiveContainer>
+              </div>
+
+              <div className="order-first rounded-xl border border-cyan-400/20 bg-black/55 p-3 shadow-[0_0_24px_rgba(34,211,238,0.08)]">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[8px] font-black uppercase tracking-[0.28em] text-cyan-200">Matriz de fusao</p>
+                    <h3 className="mt-1 text-sm font-black uppercase italic text-white">Matriz de atributos</h3>
+                  </div>
+                  <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-right">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/60">pico</p>
+                    <p className="text-lg font-black italic text-amber-100">{strongestFusion.key}</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                    <svg viewBox="0 0 240 232" className="h-[220px] w-full">
+                      <polygon points={basePentagonFramePath} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1" strokeDasharray="4 5" />
+                      <polygon points={basePentagonPath} fill="rgba(34,211,238,0.07)" stroke="rgba(34,211,238,0.48)" strokeWidth="2" />
+                      {fusionGeometry.map(item => (
+                        <line
+                          key={`${item.key}-spike`}
+                          x1={(item.a.x + item.b.x) / 2}
+                          y1={(item.a.y + item.b.y) / 2}
+                          x2={item.point.x}
+                          y2={item.point.y}
+                          stroke={item.color}
+                          strokeWidth="1.5"
+                          opacity="0.34"
+                        />
+                      ))}
+                      <polygon
+                        points={fusionGeometry.map(item => `${item.point.x},${item.point.y}`).join(' ')}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.16)"
+                        strokeWidth="4"
+                        strokeLinejoin="round"
+                      />
+                      <polygon
+                        points={fusionGeometry.map(item => `${item.point.x},${item.point.y}`).join(' ')}
+                        fill="none"
+                        stroke="rgba(251,191,36,0.72)"
+                        strokeWidth="2.2"
+                        strokeLinejoin="round"
+                      />
+                      {basePentagonPoints.map(point => (
+                        <g key={point.key}>
+                          <circle cx={point.x} cy={point.y} r="15" fill="rgba(0,0,0,0.62)" stroke="rgba(255,255,255,0.16)" />
+                          <text x={point.x} y={point.y - 1} textAnchor="middle" fontSize="9" fontWeight="900" fill="rgba(255,255,255,0.9)">{point.label}</text>
+                          <text x={point.x} y={point.y + 10} textAnchor="middle" fontSize="7" fontWeight="900" fill="rgba(255,255,255,0.55)">{point.value}</text>
+                        </g>
+                      ))}
+                      {fusionGeometry.map(item => (
+                        <g key={item.key}>
+                          <circle cx={item.point.x} cy={item.point.y} r="15" fill="rgba(0,0,0,0.64)" stroke={item.color} strokeWidth="2.1" />
+                          <text x={item.point.x} y={item.point.y - 2} textAnchor="middle" fontSize="8" fontWeight="900" fill="rgb(254,243,199)">{item.key}</text>
+                          <text x={item.point.x} y={item.point.y + 9} textAnchor="middle" fontSize="7" fontWeight="900" fill={item.color}>{item.value}</text>
+                        </g>
+                      ))}
+                      <circle cx={pentagonCenter.x} cy={pentagonCenter.y} r="17" fill="rgba(0,0,0,0.72)" stroke="rgba(255,255,255,0.16)" strokeWidth="1.5" />
+                      <text x={pentagonCenter.x} y={pentagonCenter.y - 1} textAnchor="middle" fontSize="12" fontWeight="900" fill="rgba(255,255,255,0.92)">{fusionTotal}</text>
+                      <text x={pentagonCenter.x} y={pentagonCenter.y + 9} textAnchor="middle" fontSize="5.5" fontWeight="900" fill="rgba(255,255,255,0.36)">SCORE</text>
+                    </svg>
+                    <p className="px-2 pb-1 text-center text-[7px] font-black uppercase tracking-[0.22em] text-white/30">
+                      cada fusao nasce da ponte entre duas pontas
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {orderedFusionRows.map(row => (
+                      <div key={row.key} className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <img
+                              src={row.iconPath}
+                              alt=""
+                              className="h-8 w-8 shrink-0 rounded-lg border border-white/10 bg-black/45 p-1 shadow-inner"
+                            />
+                            <div className="min-w-0">
+                              <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${row.tone}`}>{row.key} - {row.label}</p>
+                              <p className="text-[7px] font-black uppercase tracking-widest text-white/30">{row.formula}</p>
+                            </div>
+                          </div>
+                          <span className="text-lg font-black italic text-white">{row.value}</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-black/60">
+                          <div
+                            className={`h-full rounded-full bg-gradient-to-r ${row.bar}`}
+                            style={{ width: `${Math.min(100, Math.round((row.value / 200) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="order-first rounded-xl border border-violet-400/20 bg-violet-500/10 p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap size={14} className="text-violet-200" />
+                    <p className="text-[9px] font-black uppercase tracking-[0.25em] text-violet-100/80">DNA Elite 2050</p>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-violet-100/35">traits</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  {traitSlots.map((slot, idx) => {
+                    const isHidden = slot.isPotential && player.totalRating < 800;
+                    return (
+                      <div key={slot.label} className="flex flex-col gap-1">
+                        <span className="text-[7px] text-violet-100/45 uppercase font-bold tracking-widest">{slot.label}</span>
+                        <div className={`rounded-lg border p-2 transition-all ${getTraitRarityStyle(slot.rarity, isHidden)}`}>
+                          <div className="flex items-start gap-2">
+                            <TraitSigil trait={slot.trait} rarity={slot.rarity} hidden={isHidden} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate text-[9px] font-black uppercase tracking-tight">{isHidden ? '???' : (slot.trait || (idx === 3 ? 'Vazio' : 'Nenhum'))}</span>
+                                {isHidden && <Lock size={9} />}
+                              </div>
+                              <p className="mt-1 text-[7px] leading-tight opacity-60 font-medium">
+                                {isHidden ? 'Desbloqueia no Rating 800+' : (slot.trait ? TRAIT_DESCRIPTIONS[slot.trait] : 'Espaco disponivel.')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -904,49 +1219,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
           </div>
 
           <div className="bg-black/50 border border-white/10 rounded-xl p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Zap size={14} className="text-cyan-400" />
-                <p className="text-[10px] text-slate-400 uppercase tracking-[0.25em] font-semibold">DNA Elite 2050</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              {[
-                { label: 'Slot 1: Base', trait: player.badges.slot1, rarity: player.badges.slot1?.includes('Prata') ? 'Prata' : 'Bronze' },
-                { label: 'Slot 2: Elite', trait: player.badges.slot2, rarity: player.badges.slot2?.includes('Ouro') ? 'Ouro' : 'Prata' },
-                { label: 'Slot 3: Potencial', trait: player.badges.slot3, rarity: (player.badges.slot3 === 'Máquina' || player.badges.slot3 === 'Catalisador') ? 'Épico' : (player.badges.slot3?.includes('Lendária') || player.badges.slot3 === 'Gênio') ? 'Lendário' : 'Ouro', isPotential: true },
-                { label: 'Slot 4: Legado', trait: player.badges.slot4, rarity: 'Fardo' }
-              ].map((slot, idx) => {
-                const isHidden = slot.isPotential && player.totalRating < 800;
-                const getRarityStyle = (rarity: string) => {
-                  if (isHidden) return 'border-slate-800 text-slate-600 bg-slate-950/40';
-                  if (rarity === 'Bronze') return 'border-orange-900/50 text-orange-400 bg-orange-950/20';
-                  if (rarity === 'Prata') return 'border-slate-400/50 text-slate-300 bg-slate-800/40';
-                  if (rarity === 'Ouro') return 'border-amber-500/50 text-amber-400 bg-amber-950/30';
-                  if (rarity === 'Épico') return 'border-purple-500/50 text-purple-400 bg-purple-950/40';
-                  if (rarity === 'Lendário') return 'border-cyan-400/50 text-cyan-400 bg-cyan-950/50 shadow-[0_0_10px_rgba(34,211,238,0.2)]';
-                  if (rarity === 'Fardo') return 'border-red-900/50 text-red-500 bg-red-950/30';
-                  return 'border-white/5 text-slate-500 bg-white/5';
-                };
-                return (
-                  <div key={idx} className="flex flex-col gap-1">
-                    <span className="text-[7px] text-slate-500 uppercase font-bold tracking-widest">{slot.label}</span>
-                    <div className={`p-2 rounded-lg border flex flex-col gap-1 transition-all ${getRarityStyle(slot.rarity)}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black uppercase tracking-tight">{isHidden ? '???' : (slot.trait || (idx === 3 ? 'Vazio' : 'Nenhum'))}</span>
-                        {isHidden && <Lock size={8} />}
-                      </div>
-                      <p className="text-[7px] leading-tight opacity-60 font-medium">
-                        {isHidden ? 'Desbloqueia no Rating 800+' : (slot.trait ? TRAIT_DESCRIPTIONS[slot.trait] : 'Espaço disponível.')}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-black/50 border border-white/10 rounded-xl p-3 sm:p-4">
             <div className="flex items-center gap-2 mb-3">
               <Trophy size={14} className="text-amber-400" />
               <p className="text-[10px] text-slate-400 uppercase tracking-[0.25em] font-semibold">Palmarés</p>
@@ -961,16 +1233,23 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <p className="mt-0.5 text-xl font-black italic text-white">{playerIndividualCount}</p>
               </div>
             </div>
-            {playerAchievements.length === 0 ? (
+            {trophyStacks.length === 0 ? (
               <p className="text-[10px] text-slate-600 italic text-center py-2">Nenhum título conquistado.</p>
             ) : (
               <div className="grid grid-cols-1 gap-2">
-                {playerAchievements.map((ach, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 bg-white/5 border border-white/5 rounded-lg">
-                    {achievementIconNode(ach)}
+                {trophyStacks.map(trophy => (
+                  <div key={trophy.key} className="flex items-center gap-3 p-2 bg-white/5 border border-white/5 rounded-lg">
+                    <div className="relative shrink-0">
+                      <img src={trophy.asset} alt="" className="h-8 w-8 object-contain" />
+                      {trophy.count > 1 && (
+                        <span className="absolute -right-1 -top-1 rounded-full border border-black/50 bg-amber-300 px-1 py-0.5 text-[7px] font-black text-black">
+                          x{trophy.count}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-200">{ach.title}</span>
-                      <span className="text-[8px] text-slate-500 uppercase tracking-widest">S{ach.season} • {ach.type}</span>
+                      <span className="text-[10px] font-bold text-slate-200">{trophy.title}</span>
+                      <span className="text-[8px] text-slate-500 uppercase tracking-widest">Ultima S{trophy.latestSeason} - {trophy.type}</span>
                     </div>
                   </div>
                 ))}
@@ -1046,5 +1325,5 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
         />
       )}
     </div>
-  );
+  ), document.body);
 };

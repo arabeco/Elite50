@@ -52,7 +52,7 @@ export const ToastContainer: React.FC = () => {
                                 {toast.type === 'error' && <AlertCircle size={16} className={style.icon} />}
                                 {toast.type === 'warning' && <TriangleAlert size={16} className={style.icon} />}
                                 {toast.type === 'info' && <Info size={16} className={style.icon} />}
-                                <span className="truncate text-[11px] font-black uppercase tracking-[0.14em] sm:text-xs">{toast.message}</span>
+                                <span className="min-w-0 text-[11px] font-black uppercase leading-snug tracking-[0.14em] sm:text-xs">{toast.message}</span>
                             </div>
                             <button
                                 type="button"

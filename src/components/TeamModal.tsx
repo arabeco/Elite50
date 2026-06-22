@@ -1,9 +1,12 @@
 import React from 'react';
 import { X, Users, Zap, Trophy, BarChart3, Shield, Star, CalendarDays, LayoutGrid, Rows3 } from 'lucide-react';
-import { LeagueState, Match, Team, Player } from '../types';
+import { LeagueState, Manager, Match, Team, Player } from '../types';
 import { TeamLogo } from './TeamLogo';
 import { PlayerCard } from './PlayerCard';
+import { PlayerAvatar } from './PlayerAvatar';
 import { useGameDispatch, useGameState } from '../store/GameContext';
+import { getTeamLogoAssetPath, getTeamUniformFile } from '../utils/teamIdentity';
+import { groupAchievementsByTrophy } from '../utils/trophyAssets';
 
 interface TeamModalProps {
   team: Team;
@@ -11,13 +14,17 @@ interface TeamModalProps {
   onClose: () => void;
   onPlayerClick: (player: Player) => void;
   onTeamClick?: (teamId: string) => void;
+  onManagerClick?: (manager: Manager) => void;
 }
 
-export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, onPlayerClick, onTeamClick }) => {
+export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, onPlayerClick, onTeamClick, onManagerClick }) => {
   const { state, isSyncing } = useGameState();
   const { claimTeam } = useGameDispatch();
   const [rosterViewMode, setRosterViewMode] = React.useState<'cards' | 'list'>('cards');
   const squadPlayers = (team.squad || []).map(id => players[id]).filter(Boolean);
+  const titles = team.titles || { league: 0, cup: 0, total: 0 };
+  const achievements = team.achievements || [];
+  const trophyStacks = React.useMemo(() => groupAchievementsByTrophy(achievements), [achievements]);
   const squadPlayersByRole = {
     GOL: squadPlayers.filter(player => player.role === 'GOL'),
     ZAG: squadPlayers.filter(player => player.role === 'ZAG'),
@@ -25,11 +32,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
     ATA: squadPlayers.filter(player => player.role === 'ATA'),
   };
   const totalRating = squadPlayers.reduce((sum, player) => sum + player.totalRating, 0);
-  const averageRating = squadPlayers.length > 0 ? Math.round(totalRating / squadPlayers.length) : 0;
   const seasonScoreDelta = squadPlayers.reduce((sum, player) => sum + (player.history?.seasonRatingDelta || 0), 0);
-  const averageMatchRating = squadPlayers.length > 0
-    ? Number((squadPlayers.reduce((sum, player) => sum + (player.history?.averageRating || 0), 0) / squadPlayers.length).toFixed(2))
-    : 0;
   const league = (Object.values(state.world.leagues || {}) as LeagueState[]).find(l => l.standings.some(row => row.teamId === team.id));
   const sortedStandings = league
     ? [...league.standings].sort((a, b) => {
@@ -40,15 +43,24 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
     })
     : [];
   const leaguePosition = sortedStandings.findIndex(row => row.teamId === team.id) + 1;
-  const titles = team.titles || { league: 0, cup: 0, total: 0 };
-  const achievements = team.achievements || [];
   const teamLegacy = team.legacy;
   const signatureStyle = teamLegacy?.signatureStyle || team.tactics.playStyle;
   const signatureMastery = signatureStyle ? teamLegacy?.tacticalMastery?.[signatureStyle] || 0 : 0;
+  const previousScore = Math.max(0, totalRating - seasonScoreDelta);
+  const scoreEvolution = [
+    { label: 'Inicio', value: previousScore },
+    { label: 'Atual', value: totalRating },
+    { label: 'Pico', value: Math.max(teamLegacy?.peakScore || totalRating, totalRating) },
+  ];
+  const minEvolutionScore = Math.min(...scoreEvolution.map(item => item.value));
+  const maxEvolutionScore = Math.max(...scoreEvolution.map(item => item.value), 1);
   const manager = team.managerId ? state.managers[team.managerId] : null;
   const isHumanClub = !!manager && (manager.isNPC === false || !manager.id.startsWith('m_'));
   const isObserver = !state.userTeamId && (!!state.userManagerId || !state.isCreator);
   const starPlayer = [...squadPlayers].sort((a, b) => b.totalRating - a.totalRating)[0] || null;
+  const visualPlayer = starPlayer || squadPlayers[0] || null;
+  const teamUniformFile = getTeamUniformFile(team.id);
+  const teamLogoAssetPath = getTeamLogoAssetPath(team.id);
   const allMatches: Match[] = [
     ...(Object.values(state.world.leagues || {}) as LeagueState[]).flatMap(leagueState => leagueState.matches || []),
     ...(state.world.eliteCup?.bracket?.round1 || []),
@@ -81,8 +93,8 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
   };
 
   const handleClaimTeam = async () => {
-    const name = window.prompt('Nome do manager neste mundo:') || undefined;
-    await claimTeam(team.id, name);
+    const managerName = state.userManagerId ? state.managers[state.userManagerId]?.name : undefined;
+    await claimTeam(team.id, managerName);
     onClose();
   };
 
@@ -129,7 +141,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                   <Zap size={12} /> {totalRating} score
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-300">
-                  <BarChart3 size={12} /> {averageRating} media
+                  <BarChart3 size={12} /> cap {team.powerCap || '--'}
                 </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
                   seasonScoreDelta >= 0
@@ -156,6 +168,19 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 }`}>
                   <Shield size={12} /> {isHumanClub ? 'Humano' : 'IA'}
                 </span>
+                {manager && (
+                  <button
+                    type="button"
+                    onClick={() => onManagerClick?.(manager)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest transition active:scale-[0.98] ${
+                      isHumanClub
+                        ? 'border-cyan-400/35 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15'
+                        : 'border-violet-400/25 bg-violet-400/10 text-violet-100 hover:bg-violet-400/15'
+                    }`}
+                  >
+                    <Users size={12} /> abrir manager
+                  </button>
+                )}
               </div>
             </div>
             {isObserver && !isHumanClub && team.id.startsWith('t_') && (
@@ -207,13 +232,109 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
               </p>
             </div>
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
-              <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Nota Media</p>
-              <p className="mt-1 text-2xl font-black italic text-white">{averageMatchRating || '--'}</p>
+              <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Score Atual</p>
+              <p className="mt-1 text-2xl font-black italic text-white">{totalRating}</p>
             </div>
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-3">
               <p className="text-[7px] font-black uppercase tracking-widest text-violet-200">Legado</p>
               <p className="mt-1 text-2xl font-black italic text-white">{teamLegacy?.seasonsPlayed || 0}</p>
               <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-violet-100/45">Pico {teamLegacy?.peakScore || totalRating}</p>
+            </div>
+          </div>
+
+          <div className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-3 sm:p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                <Shield size={13} /> Identidade visual
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-widest text-white/25">logo + uniforme</span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[0.75fr_1.25fr]">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                  <p className="mb-2 text-[7px] font-black uppercase tracking-widest text-white/35">Escudo</p>
+                  <div className="flex h-28 items-center justify-center rounded-xl border border-white/5 bg-black/35">
+                    <TeamLogo
+                      primaryColor={team.logo?.primary || team.colors.primary || '#fff'}
+                      secondaryColor={team.logo?.secondary || team.colors.secondary || '#111'}
+                      accentColor={team.logo?.accent}
+                      shapeId={team.logo?.shapeId}
+                      patternId={(team.logo?.patternId || 'none') as any}
+                      symbolId={team.logo?.symbolId || 'Shield'}
+                      size={76}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                  <p className="mb-2 text-[7px] font-black uppercase tracking-widest text-white/35">Uniforme</p>
+                  <div className="flex h-28 items-center justify-center rounded-xl border border-white/5 bg-black/35">
+                    {visualPlayer ? (
+                      <PlayerAvatar
+                        player={visualPlayer}
+                        size="lg"
+                        mode="full"
+                        cropBottomPercent={8}
+                        className="scale-75"
+                      />
+                    ) : (
+                      <div className="text-[8px] font-black uppercase tracking-widest text-white/25">Sem atleta</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Arquivo do logo</p>
+                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-cyan-100/85">
+                    {teamLogoAssetPath || team.logo?.symbolId || 'sem arquivo fixo'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Arquivo do uniforme</p>
+                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-cyan-100/85">
+                    {teamUniformFile ? `/assetas/avatars/uniforms/${teamUniformFile}` : 'uniforme distrital'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Clube para revisao</p>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/70">
+                    {team.id} - {team.name} - {team.district}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                <BarChart3 size={13} /> Evolucao do score
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-widest text-white/25">forca atual do elenco</span>
+            </div>
+            <div className="grid grid-cols-3 items-end gap-2">
+              {scoreEvolution.map(item => {
+                const range = Math.max(1, maxEvolutionScore - minEvolutionScore);
+                const height = Math.max(18, Math.round(((item.value - minEvolutionScore) / range) * 54) + 18);
+                const isCurrent = item.label === 'Atual';
+                return (
+                  <div key={item.label} className="rounded-xl border border-white/5 bg-white/[0.035] p-2">
+                    <div className="flex h-20 items-end">
+                      <div
+                        className={`w-full rounded-t-lg ${isCurrent ? 'bg-cyan-300' : 'bg-white/20'}`}
+                        style={{ height }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[7px] font-black uppercase tracking-widest text-white/35">{item.label}</span>
+                      <span className={`text-[10px] font-black italic ${isCurrent ? 'text-cyan-200' : 'text-white/70'}`}>{item.value}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -237,7 +358,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                   <div className="min-w-0">
                     <p className="truncate text-2xl font-black uppercase italic tracking-tight text-white">{starPlayer.nickname}</p>
                     <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/35">
-                      {starPlayer.role} - {starPlayer.history.goals || 0} gols - nota {starPlayer.history.averageRating?.toFixed?.(1) || '--'}
+                      {starPlayer.role} - {starPlayer.history.goals || 0} gols - score atual {starPlayer.totalRating}
                     </p>
                   </div>
                   <div className="text-right">
@@ -295,10 +416,20 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 <Trophy size={12} /> Sala de trofeus
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {achievements.slice(0, 6).map((achievement, index) => (
-                  <div key={`${achievement.season}-${achievement.title}-${index}`} className="rounded-xl border border-white/5 bg-white/[0.04] px-3 py-2">
-                    <p className="truncate text-[9px] font-black uppercase tracking-wider text-white">{achievement.title}</p>
-                    <p className="mt-0.5 text-[7px] font-bold uppercase tracking-widest text-white/30">S{achievement.season} - {achievement.type}</p>
+                {trophyStacks.slice(0, 6).map(trophy => (
+                  <div key={trophy.key} className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.04] px-3 py-2">
+                    <div className="relative shrink-0">
+                      <img src={trophy.asset} alt="" className="h-11 w-11 object-contain" />
+                      {trophy.count > 1 && (
+                        <span className="absolute -right-1 -top-1 rounded-full border border-black/50 bg-amber-300 px-1.5 py-0.5 text-[8px] font-black text-black">
+                          x{trophy.count}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[9px] font-black uppercase tracking-wider text-white">{trophy.title}</p>
+                      <p className="mt-0.5 text-[7px] font-bold uppercase tracking-widest text-white/30">S{trophy.latestSeason} - {trophy.type}</p>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -6,6 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+android/local.properties
+android/key.properties
+android/*.jks
+android/*.keystore
+android/app/*.jks
+android/app/*.keystore
 
 # Generated diagnostics and simulation dumps
 *_output*.txt

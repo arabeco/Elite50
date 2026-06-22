@@ -14,7 +14,8 @@ import { LiveReport, PostGameReport } from '../MatchReports';
 import { getCountdown, getLiveMatchSecond, getMatchDateTime, getNextMatch } from '../../utils/matchUtils';
 import { calculateTeamPower, isJoinWindowOpen } from '../../engine/gameLogic';
 import { MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
-import { buildHomeChecklistItems, buildHomeFlowSteps, resolveHomePhase } from '../../utils/homeFlow';
+import { resolveHomePhase } from '../../utils/homeFlow';
+import { getNextGameMidnight, getNextRealMidnight } from '../../utils/worldSchedule';
 import { Team, Player, Match, ClubOffer, LeagueState } from '../../types';
 import * as LucideIcons from 'lucide-react';
 const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle, Mail, Check, XCircle, Copy } = LucideIcons;
@@ -29,7 +30,7 @@ interface HomeTabProps {
 
 export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague }: HomeTabProps) => {
   const { state, setState, saveGame, isSyncing } = useGame();
-  const { respondToClubOffer } = useGameDispatch();
+  const { respondToClubOffer, addToast } = useGameDispatch();
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches, pastMatches, totalPoints, powerCap, pointsLeft } = dashData;
   const daysPassed = React.useMemo(() => {
@@ -60,14 +61,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   const reservedScoreLeft = powerCap - occupiedScore;
   const occupiedScorePercent = powerCap > 0 ? Math.min(100, Math.max(0, (occupiedScore / powerCap) * 100)) : 0;
   const isUnemployed = !userTeam;
-  const [showHomeGuide, setShowHomeGuide] = React.useState(() => localStorage.getItem('elite.homeGuideHidden') !== 'true');
   const [actingOfferId, setActingOfferId] = React.useState<string | null>(null);
-
-  const toggleHomeGuide = () => {
-    const next = !showHomeGuide;
-    setShowHomeGuide(next);
-    localStorage.setItem('elite.homeGuideHidden', next ? 'false' : 'true');
-  };
+  const [dismissedNoticeKey, setDismissedNoticeKey] = React.useState<string | null>(null);
 
   const handleRevealMatch = async (matchId: string) => {
     const nextState = (() => {
@@ -101,6 +96,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
     if (nextState) {
       await saveGame(nextState);
+      addToast('Relatorio revelado.', 'success');
     }
   };
 
@@ -360,10 +356,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       })
       .map(team => {
         const squad = (team.squad || []).map(id => state.players[id]).filter(Boolean);
-        const average = squad.length ? Math.round(squad.reduce((sum, player) => sum + player.totalRating, 0) / squad.length) : 0;
+        const squadScore = squad.reduce((sum, player) => sum + player.totalRating, 0);
         return {
           team,
-          average,
+          squadScore,
           league: leagueByTeam.get(team.id),
           existingOffer: userClubOffers.find(offer => offer.teamId === team.id)
         };
@@ -381,6 +377,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   const squadSize = userTeam?.squad?.length || 0;
   const canAdvancePreseason = state.isCreator && state.world.currentDay === -1;
   const worldJoinCode = state.world.access?.joinCode || (state.worldId ? `ELITE-${state.worldId.slice(-6)}` : 'ELITE-LOCAL');
+  const worldParticipants = state.participants || [];
+  const humanParticipants = worldParticipants.filter(participant => participant.teamId);
+  const observerParticipants = worldParticipants.filter(participant => !participant.teamId);
+  const isKickoffScheduled = state.world.currentDay === -1 && !!state.world.startScheduledAt;
   const lineupCount = userTeam ? Object.values(userTeam.lineup || {}).filter(Boolean).length : 0;
   const isSquadComplete = squadSize >= 15;
   const isDraftResolved = !isPreseason || isSquadComplete || state.world.currentDay >= 2;
@@ -392,20 +392,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     isOffseason,
     isMatchDay,
     isPostGame,
-  });
-  const checklistItems = buildHomeChecklistItems({
-    phase: todayPhase,
-    squadSize,
-    draftCount,
-    lineupCount,
-    isSquadComplete,
-    isDraftResolved,
-    isLineupReady,
-    isTacticReady,
-    hasPendingPostGame: playedUserMatches.some(match => match.revealed === false),
-    joinWindowOpen,
-    tacticLabel: userTeam?.tactics?.playStyle || null,
-    nextGameDetail: nextMatchData?.dateLabel || null,
   });
   const firstUserMatch = [...userRelevantMatches].sort((a, b) => {
     const dateDiff = getMatchDateTime(a).getTime() - getMatchDateTime(b).getTime();
@@ -419,44 +405,55 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       : nextMatchData?.phase === 'live'
         ? 'live'
         : 'report';
-  const flowSteps = buildHomeFlowSteps({
-    phase: todayPhase,
-    isDraftResolved,
-    isSquadComplete,
-    isLineupReady,
-    isTacticReady,
-    hasPlayedMatch: playedUserMatches.length > 0,
-    hasRevealedMatch: playedUserMatches.some(match => match.revealed !== false),
-    isOffseasonActive: state.world.phase === 'OFFSEASON',
-    firstMatchStage,
-  });
 
-  const handleStartSeason = () => {
+  const handleStartSeason = async () => {
     if (!state.isCreator) {
-      alert('Apenas o criador pode iniciar a temporada!');
+      addToast('Apenas o criador pode iniciar a temporada.', 'warning');
+      return;
+    }
+    if (isKickoffScheduled) {
+      addToast(`Inicio ja esta agendado. Humanos confirmados: ${humanParticipants.length}.`, 'info');
       return;
     }
 
-    const nextDay = new Date(state.world.currentDate || Date.now());
-    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDay = getNextRealMidnight();
+    const nextGameDay = getNextGameMidnight(state.world.currentDate);
 
-    setState(prev => ({
-      ...prev,
+    const startsTomorrow = state.world.currentDay === -1;
+    const nextState = {
+      ...state,
       world: {
-        ...prev.world,
-        status: prev.world.currentDay === -1 ? 'LOBBY' : 'ACTIVE',
-        startScheduledAt: prev.world.currentDay === -1 ? nextDay.toISOString() : null,
-        seasonStartReal: nextDay.toISOString(),
-        currentDate: new Date().toISOString()
-      }
-    }));
+        ...state.world,
+        status: startsTomorrow ? 'LOBBY' as const : 'ACTIVE' as const,
+        startScheduledAt: startsTomorrow ? nextDay.toISOString() : null,
+        seasonStartReal: nextGameDay.toISOString()
+      },
+      notifications: [
+        {
+          id: `${startsTomorrow ? 'season_scheduled' : 'season_started'}_${state.world.currentSeason || 2050}_${Date.now()}`,
+          date: state.world.currentDate,
+          title: startsTomorrow ? 'Temporada agendada' : 'Temporada comecou',
+          message: startsTomorrow
+            ? `O GM agendou o inicio para o proximo 00:00. Humanos confirmados: ${humanParticipants.length}.`
+            : 'O GM abriu a temporada. Calendario, treino, mercado e jogos agora seguem o relogio do mundo.',
+          type: startsTomorrow ? 'info' as const : 'success' as const,
+          read: false
+        },
+        ...(state.notifications || []),
+      ].slice(0, 80)
+    };
+
+    setState(nextState);
+    await saveGame(nextState);
+    addToast('Inicio agendado para o proximo 00:00.', 'success');
   };
 
   const handleCopyJoinCode = async () => {
     try {
       await navigator.clipboard.writeText(worldJoinCode);
+      addToast('Codigo do mundo copiado.', 'success');
     } catch {
-      alert(`Codigo do mundo: ${worldJoinCode}`);
+      addToast(`Codigo do mundo: ${worldJoinCode}`, 'info');
     }
   };
 
@@ -582,10 +579,12 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       if (state.world.currentDay === -1) {
         return {
           eyebrow: 'PRE-TEMPORADA',
-          title: 'Mundo aberto, temporada parada',
-          message: 'Gente pode entrar agora, escolher clube e aparecer para o GM. A contagem so comeca quando a temporada for iniciada.',
-          status: 'Aguardando GM',
-          consequence: 'Depois disso: comeca a Genesis e o Draft entra nos 2 primeiros dias.',
+          title: isKickoffScheduled ? 'Inicio marcado para 00:00' : 'Mundo aberto, temporada parada',
+          message: isKickoffScheduled
+            ? 'O mundo ja esta agendado. Jogadores ainda podem entrar; o Draft so libera no 00:00 do proximo dia.'
+            : 'Gente pode entrar agora, escolher clube e aparecer para o GM. A contagem so comeca quando o inicio for agendado.',
+          status: isKickoffScheduled ? `${humanParticipants.length} humanos confirmados` : 'Aguardando agendar inicio',
+          consequence: 'Regra: Dia 0 e Dia 1 recebem listas do Draft. Na virada para o Dia 2, a liga computa disputas e completa elencos.',
         };
       }
 
@@ -595,7 +594,9 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
           title: draftCount > 0 ? 'Continue o Draft' : 'Monte seu elenco inicial',
           message: `Seu time tem ${squadSize}/15 jogadores. Escolha atletas ate completar uma base jogavel dentro do Score Maximo.`,
           status: `${draftCount} na wishlist`,
-          consequence: 'Depois disso: a liga resolve disputas e completa os elencos.',
+          consequence: state.world.currentDay <= 0
+            ? 'Dia 0: monte a lista. Na proxima virada as disputas comecam a ser computadas.'
+            : 'Dia 1: ultimo dia de ajustes. Na virada para o Dia 2, a liga resolve e completa elencos.',
         };
       }
 
@@ -704,7 +705,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     if (todayPhase === 'preseason') {
       if (state.world.currentDay === -1) {
         return [
-          { label: state.isCreator ? 'Comecar Temporada' : 'Aguardar GM', icon: Play, onClick: state.isCreator ? handleStartSeason : undefined, primary: true, disabled: !state.isCreator },
+          { label: state.isCreator ? (isKickoffScheduled ? 'Inicio 00:00' : 'Agendar inicio') : (isKickoffScheduled ? 'Inicio 00:00' : 'Aguardar GM'), icon: Play, onClick: state.isCreator ? handleStartSeason : undefined, primary: true, disabled: !state.isCreator || isKickoffScheduled },
           { label: 'Ver Elenco', icon: Users, onClick: onOpenTeam, disabled: !onOpenTeam },
           { label: 'Ver Liga', icon: Calendar, onClick: onOpenLeague, disabled: !onOpenLeague },
         ];
@@ -735,7 +736,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       }
 
       return [
-        { label: state.isCreator ? 'Abrir Temporada' : 'Aguardar GM', icon: Play, onClick: state.isCreator ? handleStartSeason : undefined, primary: true, disabled: !state.isCreator },
+        { label: state.isCreator ? (isKickoffScheduled ? 'Inicio 00:00' : 'Abrir Temporada') : (isKickoffScheduled ? 'Inicio 00:00' : 'Aguardar GM'), icon: Play, onClick: state.isCreator ? handleStartSeason : undefined, primary: true, disabled: !state.isCreator || isKickoffScheduled },
         { label: 'Escalacao', icon: Shield, onClick: onOpenLineup, disabled: !onOpenLineup },
         { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
       ];
@@ -743,6 +744,113 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
     return todayActions;
   })();
+
+  const homeNotice = React.useMemo(() => {
+    const worldEvent = (state.notifications || []).find(notification =>
+      !notification.read && (
+        notification.id.startsWith('participant_') ||
+        notification.id.startsWith('season_scheduled_') ||
+        notification.id.startsWith('season_started_')
+      )
+    );
+
+    if (worldEvent) {
+      return {
+        key: worldEvent.id,
+        tone: worldEvent.type === 'success' ? 'emerald' : 'cyan',
+        title: worldEvent.title,
+        message: worldEvent.message,
+      };
+    }
+
+    if (isUnemployed) {
+      if (spotlightOffer?.status === 'ACCEPTED') {
+        return {
+          key: `offer-${spotlightOffer.id}`,
+          tone: 'emerald',
+          title: 'Contrato aceito',
+          message: `${state.teams[spotlightOffer.teamId]?.name || 'Um clube'} deixou uma proposta viva para voce.`,
+        };
+      }
+      return null;
+    }
+
+    if (todayPhase === 'postgame') {
+      return {
+        key: 'postgame-report',
+        tone: 'amber',
+        title: 'Relatorio disponivel',
+        message: 'Tem jogo recente para abrir e ver impacto no clube.',
+      };
+    }
+
+    if (todayPhase === 'matchday') {
+      return {
+        key: `matchday-${nextMatchData?.match?.id || state.world.currentDay}`,
+        tone: 'cyan',
+        title: 'Dia de jogo',
+        message: nextMatchData?.opponent ? `${userTeam?.name} x ${nextMatchData.opponent.name}` : 'Partida do dia disponivel.',
+      };
+    }
+
+    if (isPreseason && !isSquadComplete) {
+      return {
+        key: 'draft-open',
+        tone: 'cyan',
+        title: 'Draft aberto',
+        message: `${squadSize}/15 no elenco. A aba Elenco esta marcada.`,
+      };
+    }
+
+    if (isPreseason && isSquadComplete && !isLineupReady) {
+      return {
+        key: 'lineup-open',
+        tone: 'amber',
+        title: 'Escalacao incompleta',
+        message: `${lineupCount}/11 titulares definidos.`,
+      };
+    }
+
+    return null;
+  }, [
+    isUnemployed,
+    spotlightOffer,
+    state.notifications,
+    state.teams,
+    state.world.currentDay,
+    todayPhase,
+    nextMatchData,
+    userTeam,
+    isPreseason,
+    isSquadComplete,
+    squadSize,
+    isLineupReady,
+    lineupCount,
+  ]);
+
+  React.useEffect(() => {
+    setDismissedNoticeKey(null);
+  }, [homeNotice?.key]);
+
+  const handleDismissHomeNotice = async () => {
+    if (!homeNotice) return;
+    setDismissedNoticeKey(homeNotice.key);
+
+    if (
+      homeNotice.key.startsWith('participant_') ||
+      homeNotice.key.startsWith('season_scheduled_') ||
+      homeNotice.key.startsWith('season_started_')
+    ) {
+      const nextState = {
+        ...state,
+        notifications: (state.notifications || []).map(notification =>
+          notification.id === homeNotice.key ? { ...notification, read: true } : notification
+        )
+      };
+      setState(nextState);
+      await saveGame(nextState);
+    }
+  };
 
   const nextStepCards = React.useMemo(() => {
     if (isUnemployed) {
@@ -851,6 +959,167 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     pointsLeft,
     state.isCreator,
     todayPhase
+  ]);
+
+  const seasonActionCards = React.useMemo(() => {
+    if (!userTeam) return [];
+
+    const squadPlayers = userTeam.squad
+      .map(playerId => state.players[playerId])
+      .filter(Boolean) as Player[];
+
+    const recentAverage = (player: Player) => {
+      const ratings = player.history.lastMatchRatings || [];
+      if (ratings.length === 0) return player.history.averageRating || player.currentPhase || 0;
+      return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+    };
+
+    const roleLabel = (role: Player['role']) => role === 'ZAG' ? 'DEFENSOR' : role;
+
+    const risingPlayers = [...squadPlayers]
+      .filter(player =>
+        (player.history.seasonRatingDelta || 0) >= 6 ||
+        (recentAverage(player) >= 7.3 && player.potential - player.totalRating >= 35)
+      )
+      .sort((a, b) => {
+        const aScore = (a.history.seasonRatingDelta || 0) + Math.max(0, a.potential - a.totalRating) / 25;
+        const bScore = (b.history.seasonRatingDelta || 0) + Math.max(0, b.potential - b.totalRating) / 25;
+        return bScore - aScore;
+      });
+
+    const fallingPlayers = [...squadPlayers]
+      .filter(player =>
+        (player.history.seasonRatingDelta || 0) <= -4 ||
+        recentAverage(player) < 5.25
+      )
+      .sort((a, b) => {
+        const aScore = (a.history.seasonRatingDelta || 0) + recentAverage(a);
+        const bScore = (b.history.seasonRatingDelta || 0) + recentAverage(b);
+        return aScore - bScore;
+      });
+
+    const unhappyPlayers = [...squadPlayers]
+      .filter(player => player.satisfaction <= 55 || (player.history.benchGamesCount || 0) >= 3)
+      .sort((a, b) => {
+        if (a.satisfaction !== b.satisfaction) return a.satisfaction - b.satisfaction;
+        return (b.history.benchGamesCount || 0) - (a.history.benchGamesCount || 0);
+      });
+
+    const tiredPlayers = [...squadPlayers]
+      .filter(player => player.fatigue >= 60)
+      .sort((a, b) => b.fatigue - a.fatigue);
+
+    const marketBudget = Math.max(0, reservedScoreLeft);
+    const marketOpportunities = Object.values(state.players)
+      .filter(player =>
+        !player.contract.teamId &&
+        player.district !== 'EXILADO' &&
+        player.totalRating <= marketBudget &&
+        player.potential - player.totalRating >= 60
+      )
+      .sort((a, b) => {
+        const aUpside = a.potential - a.totalRating;
+        const bUpside = b.potential - b.totalRating;
+        if (aUpside !== bUpside) return bUpside - aUpside;
+        return b.totalRating - a.totalRating;
+      });
+
+    const roleCounts = squadPlayers.reduce<Record<Player['role'], number>>((acc, player) => {
+      acc[player.role] += 1;
+      return acc;
+    }, { GOL: 0, ZAG: 0, MEI: 0, ATA: 0 });
+    const recommendedRoles: Record<Player['role'], number> = { GOL: 1, ZAG: 4, MEI: 4, ATA: 3 };
+    const weakRole = (Object.keys(recommendedRoles) as Player['role'][])
+      .find(role => roleCounts[role] < recommendedRoles[role]);
+
+    const stableLabel = nextMatchData?.opponent
+      ? `Proximo gatilho: ${nextMatchData.opponent.name}`
+      : 'Sem alerta forte antes do proximo ciclo.';
+
+    return [
+      {
+        key: 'rising',
+        symbol: '+',
+        title: 'Valorizar',
+        count: risingPlayers.length,
+        detail: risingPlayers[0]
+          ? `${risingPlayers[0].nickname} pode render mais se tiver minutos.`
+          : 'Ninguem explodindo agora.',
+        meta: risingPlayers[0] ? `${roleLabel(risingPlayers[0].role)} / +${Math.max(0, risingPlayers[0].potential - risingPlayers[0].totalRating)} teto` : stableLabel,
+        icon: TrendingUp,
+        accent: 'emerald',
+        actionLabel: 'Ver elenco',
+        onClick: onOpenTeam,
+      },
+      {
+        key: 'falling',
+        symbol: '-',
+        title: 'Queda',
+        count: fallingPlayers.length,
+        detail: fallingPlayers[0]
+          ? `${fallingPlayers[0].nickname} vem perdendo impacto.`
+          : 'Sem queda critica no elenco.',
+        meta: fallingPlayers[0] ? `Media recente ${recentAverage(fallingPlayers[0]).toFixed(1)}` : 'Linha estavel',
+        icon: TrendingDown,
+        accent: 'rose',
+        actionLabel: 'Ajustar',
+        onClick: onOpenLineup,
+      },
+      {
+        key: 'unhappy',
+        symbol: '!',
+        title: 'Vestiario',
+        count: unhappyPlayers.length,
+        detail: unhappyPlayers[0]
+          ? `${unhappyPlayers[0].nickname} quer sinal de plano.`
+          : 'Satisfacao sob controle.',
+        meta: unhappyPlayers[0] ? `${unhappyPlayers[0].satisfaction}% satisfacao` : 'Sem pedido urgente',
+        icon: AlertTriangle,
+        accent: 'amber',
+        actionLabel: 'Escalar',
+        onClick: onOpenLineup,
+      },
+      {
+        key: 'fatigue',
+        symbol: '~',
+        title: 'Carga',
+        count: tiredPlayers.length,
+        detail: tiredPlayers[0]
+          ? `${tiredPlayers[0].nickname} precisa de respiro.`
+          : 'Fisico limpo para o ciclo.',
+        meta: tiredPlayers[0] ? `${tiredPlayers[0].fatigue}% fadiga` : 'Sem sobrecarga',
+        icon: Activity,
+        accent: 'cyan',
+        actionLabel: 'Rodar time',
+        onClick: onOpenLineup,
+      },
+      {
+        key: 'market',
+        symbol: '*',
+        title: 'Radar',
+        count: marketOpportunities.length,
+        detail: marketOpportunities[0]
+          ? `${marketOpportunities[0].nickname} cabe no teto e tem upside.`
+          : weakRole
+            ? `Falta profundidade em ${roleLabel(weakRole)}.`
+            : 'Sem alvo obvio dentro do teto.',
+        meta: marketOpportunities[0]
+          ? `${marketOpportunities[0].totalRating} -> ${marketOpportunities[0].potential}`
+          : `${marketBudget} score livre`,
+        icon: Search,
+        accent: 'fuchsia',
+        actionLabel: 'Abrir mundo',
+        onClick: onOpenLeague,
+      },
+    ];
+  }, [
+    nextMatchData?.opponent,
+    onOpenLeague,
+    onOpenLineup,
+    onOpenTeam,
+    reservedScoreLeft,
+    state.players,
+    userTeam
   ]);
 
   const seasonPanelItems = React.useMemo(() => {
@@ -978,6 +1247,36 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         </div>
       )}
 
+      {homeNotice && dismissedNoticeKey !== homeNotice.key && (
+        <div className={`flex items-start gap-3 rounded-2xl border p-3 shadow-[0_14px_35px_rgba(0,0,0,0.28)] ${
+          homeNotice.tone === 'emerald'
+            ? 'border-emerald-400/25 bg-emerald-500/10'
+            : homeNotice.tone === 'amber'
+              ? 'border-amber-400/25 bg-amber-500/10'
+              : 'border-cyan-400/25 bg-cyan-500/10'
+        }`}>
+          <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+            homeNotice.tone === 'emerald'
+              ? 'bg-emerald-300'
+              : homeNotice.tone === 'amber'
+                ? 'bg-amber-300'
+                : 'bg-cyan-300'
+          }`} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white">{homeNotice.title}</p>
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-slate-300">{homeNotice.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDismissHomeNotice}
+            className="rounded-full border border-white/10 bg-black/20 p-1.5 text-white/45 transition hover:bg-white/10 hover:text-white"
+            aria-label="Fechar aviso"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {/* CENTRAL DO DIA: game-state driven actions */}
       <div
         data-onboarding="home-gps"
@@ -995,13 +1294,11 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[8px] font-black uppercase tracking-[0.25em] text-slate-400">
                 {guidedTodayCopy.status}
               </span>
-              <button
-                type="button"
-                onClick={toggleHomeGuide}
-                className="ml-auto rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/45 transition hover:border-cyan-400/30 hover:text-cyan-100"
-              >
-                {showHomeGuide ? 'Ocultar guia' : 'Mostrar guia'}
-              </button>
+              {worldParticipants.length > 0 && (
+                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-emerald-200">
+                  {worldParticipants.length} players / {humanParticipants.length} clubes / {observerParticipants.length} obs
+                </span>
+              )}
             </div>
             <div>
               <h2 className="text-2xl sm:text-4xl font-black uppercase italic tracking-tighter text-white">
@@ -1009,9 +1306,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               </h2>
               <p className="mt-2 max-w-2xl text-[11px] sm:text-sm font-bold leading-relaxed text-slate-400">
                 {guidedTodayCopy.message}
-              </p>
-              <p className="mt-2 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300/80">
-                {guidedTodayCopy.consequence}
               </p>
             </div>
             {isLobby && state.isCreator && (
@@ -1032,69 +1326,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   >
                     <Copy size={15} />
                   </button>
-                </div>
-              </div>
-            )}
-            {showHomeGuide && (
-              <div className="space-y-3 rounded-2xl border border-white/10 bg-black/25 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Guia inicial</p>
-                  <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200/60">pode ocultar</p>
-                </div>
-                <div className="grid grid-cols-4 gap-1 rounded-2xl border border-white/10 bg-black/25 p-1 sm:grid-cols-7">
-                  {flowSteps.map((step, index) => (
-                    <div
-                      key={step.key}
-                      className={`relative flex min-h-[46px] items-center justify-center rounded-xl px-1.5 text-center text-[7px] font-black uppercase tracking-[0.12em] transition-all sm:text-[8px] ${
-                        step.active
-                          ? 'bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.28)]'
-                          : step.done
-                            ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                            : 'border border-white/5 bg-white/[0.025] text-white/30'
-                      }`}
-                    >
-                      {index > 0 && <div className="absolute -left-1 top-1/2 hidden h-px w-2 -translate-y-1/2 bg-white/15 sm:block" />}
-                      <span className="truncate">{step.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {checklistItems.map((item) => (
-                    <div
-                      key={item.label}
-                      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
-                        item.status === 'done'
-                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
-                          : item.status === 'warning'
-                            ? 'border-amber-400/25 bg-amber-500/10 text-amber-100'
-                            : item.status === 'danger'
-                              ? 'border-rose-400/25 bg-rose-500/10 text-rose-100'
-                              : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100'
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {item.status === 'done' ? (
-                          <CheckCircle2 size={13} className="shrink-0 text-emerald-300" />
-                        ) : item.status === 'warning' ? (
-                          <Circle size={13} className="shrink-0 text-amber-300 fill-amber-300/30" />
-                        ) : item.status === 'danger' ? (
-                          <Circle size={13} className="shrink-0 text-rose-300 fill-rose-300/30" />
-                        ) : (
-                          <Circle size={13} className="shrink-0 text-cyan-300 fill-cyan-300/20" />
-                        )}
-                        <span className="truncate text-[9px] font-black uppercase tracking-[0.18em]">{item.label}</span>
-                      </div>
-                      <span className={`shrink-0 text-[8px] font-black uppercase tracking-[0.16em] ${
-                        item.status === 'done'
-                          ? 'text-emerald-200/80'
-                          : item.status === 'warning'
-                            ? 'text-amber-100/80'
-                            : item.status === 'danger'
-                              ? 'text-rose-100/80'
-                              : 'text-cyan-100/80'
-                      }`}>{item.detail}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -1188,10 +1419,12 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   ) : (
                     <>
                       <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
-                        Nenhum evento carregado
+                        {firstUserMatch ? 'Calendario pronto' : 'Nenhum evento carregado'}
                       </div>
                       <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        O calendário real será exibido aqui assim que houver partida
+                        {firstUserMatch
+                          ? 'A tabela ja existe. A contagem comeca quando o GM abrir a temporada.'
+                          : 'O calendario real sera exibido aqui assim que houver partida'}
                       </div>
                     </>
                   )}
@@ -1213,23 +1446,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {guidedTodayActions.slice(0, 3).map((action) => (
-                <button
-                  key={action.label}
-                  data-onboarding={action.primary ? 'today-primary-action' : undefined}
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                  className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 ${action.primary
-                    ? 'bg-cyan-500 text-black shadow-[0_0_28px_rgba(6,182,212,0.35)] hover:bg-cyan-400'
-                    : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-500/40 hover:text-white'
-                    }`}
-                >
-                  <action.icon size={15} />
-                  {action.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -1328,7 +1544,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               </button>
             </div>
             <div className="mt-4 space-y-3">
-              {clubOpportunityCards.map(({ team, average, league, existingOffer }) => (
+              {clubOpportunityCards.map(({ team, squadScore, league, existingOffer }) => (
                 <button
                   key={team.id}
                   type="button"
@@ -1354,7 +1570,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                       </p>
                       <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
                       <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
-                        media {average} {existingOffer ? `- ${existingOffer.status.toLowerCase()}` : ''}
+                        score atual {squadScore} {existingOffer ? `- ${existingOffer.status.toLowerCase()}` : ''}
                       </p>
                     </div>
                   </div>
@@ -1444,53 +1660,6 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {nextStepCards.map((item) => (
-          <div
-            key={item.title}
-            className="relative overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/[0.035] p-4"
-          >
-            <div className={`absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full blur-[50px] ${
-              item.accent === 'cyan'
-                ? 'bg-cyan-500/10'
-                : item.accent === 'fuchsia'
-                  ? 'bg-fuchsia-500/10'
-                  : item.accent === 'emerald'
-                    ? 'bg-emerald-500/10'
-                    : item.accent === 'rose'
-                      ? 'bg-rose-500/10'
-                      : item.accent === 'amber'
-                        ? 'bg-amber-500/10'
-                        : 'bg-slate-500/10'
-            }`} />
-            <div className="relative z-10 flex items-start gap-3">
-              <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
-                <item.icon
-                  size={16}
-                  className={
-                    item.accent === 'cyan'
-                      ? 'text-cyan-300'
-                      : item.accent === 'fuchsia'
-                        ? 'text-fuchsia-300'
-                        : item.accent === 'emerald'
-                          ? 'text-emerald-300'
-                          : item.accent === 'rose'
-                            ? 'text-rose-300'
-                            : item.accent === 'amber'
-                              ? 'text-amber-300'
-                              : 'text-slate-300'
-                  }
-                />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">{item.title}</p>
-                <p className="mt-1 text-[11px] font-bold leading-relaxed text-slate-400">{item.detail}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* SECONDARY CONTEXT: one glance, no command noise */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
         <button
@@ -1522,10 +1691,12 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               ) : (
                 <>
                   <div className="text-lg font-black uppercase italic tracking-tight text-white">
-                    Calendario em preparacao
+                    {firstUserMatch ? 'Calendario pronto' : 'Calendario em preparacao'}
                   </div>
                   <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Termine a fase atual para gerar o proximo compromisso
+                    {firstUserMatch
+                      ? 'Partidas planejadas. A temporada aguarda o inicio do GM.'
+                      : 'Termine a fase atual para gerar o proximo compromisso'}
                   </div>
                 </>
               )}

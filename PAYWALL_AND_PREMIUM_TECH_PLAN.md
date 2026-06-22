@@ -28,6 +28,53 @@ Why:
 - less billing complexity in v1
 - works well with a 90-day app-wide campaign
 
+## Google Play Native Path
+
+### Current Android product ids
+- `elite2050_gold_100` - one-time consumable
+- `elite2050_gold_300` - one-time consumable
+- `elite2050_gold_700` - one-time consumable
+- `passe_circuito_neon_01` - one-time entitlement for the first 90-day pass
+
+### Native validation flow
+1. Capacitor calls `Elite2050Billing.purchaseProduct`.
+2. Android launches Google Play Billing for the mapped product id.
+3. The app sends `purchaseToken`, `productCode`, `productId` and `packageName` to `verify-google-play-purchase`.
+4. The Edge Function validates the token with Google Play Developer API.
+5. Only after Google returns a purchased state, the function calls `grant_mobile_purchase`.
+6. Gold products are consumed; entitlement products are acknowledged.
+
+### Supabase secrets required
+Set these in Supabase before deploying the function:
+
+```bash
+supabase secrets set GOOGLE_PLAY_PACKAGE_NAME=com.becoslab.elite2050
+supabase secrets set GOOGLE_PLAY_CLIENT_EMAIL=...
+supabase secrets set GOOGLE_PLAY_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+Alternative:
+
+```bash
+supabase secrets set GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{"client_email":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}'
+```
+
+### Deploy
+
+```bash
+supabase functions deploy verify-google-play-purchase
+```
+
+### Android commands
+
+```bash
+npm run cap:sync
+npm run android:debug
+npm run android:bundle
+```
+
+Use Android Studio JBR or any JDK 17+ for Gradle. On this machine, Java 8 is the default, so terminal builds need `JAVA_HOME` pointed to Android Studio's `jbr`.
+
 ## Premium Scope
 
 ### Premium-only

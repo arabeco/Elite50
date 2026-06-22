@@ -366,7 +366,7 @@ Entram neste primeiro commit:
 - `public/logo.png`
 - `public/assetas/avatars/hair/fem/*`
 - `public/assetas/avatars/hair/masc/*`
-- `public/assetas/avatars/logs/*`
+- `public/assetas/avatars/logos/*`
 - remover `public/assetas/avatars/hair/hair_1.png`
 - `supabase/migrations/20260419000000_feedback_reports.sql`
 - `src/test/assetMapping.test.ts`

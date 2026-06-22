@@ -67,6 +67,7 @@ export interface PlayerClubEvent {
   fromTeamName?: string;
   toTeamId?: string | null;
   toTeamName?: string;
+  value?: number;
   note?: string;
 }
 
@@ -94,6 +95,7 @@ export interface Player {
   id: string;
   name: string;
   nickname: string;
+  originDistrict?: District;
   district: District;
   appearance: {
     gender: 'M' | 'F';
@@ -183,6 +185,7 @@ export interface StoreState {
   equippedBootByPlayerId: Record<string, string>;
   equippedKitByTeamId: Record<string, string>;
   equippedLogoByTeamId: Record<string, string>;
+  equippedManagerItemIds: string[];
   circuit: CircuitProgress;
 }
 
@@ -235,16 +238,26 @@ export interface TeamLogoMetadata {
   secondarySymbolId?: string;
 }
 
+export interface Stadium {
+  name: string;
+  capacity: number;
+  architecture: string;
+  surface: string;
+  atmosphere: string;
+}
+
 export interface Team {
   id: string;
   name: string;
   city: string;
+  originDistrict?: District;
   district: District;
   league: LeagueColor;
   colors: {
     primary: string;
     secondary: string;
   };
+  stadium?: Stadium;
   logo?: TeamLogoMetadata;
   tactics: TeamTactics;
   inventory?: TacticalCard[]; // Cards available to use in slots
@@ -271,8 +284,13 @@ export interface Team {
 export interface Manager {
   id: string;
   name: string;
+  originDistrict?: District;
   district: District;
   reputation: number; // 0-100
+  preferredPlayStyle?: PlayStyle;
+  originTraitId?: string;
+  ownedTraitIds?: string[];
+  equippedTraitIds?: string[];
   attributes: {
     evolution: number;
     negotiation: number;
@@ -287,6 +305,7 @@ export interface Manager {
     consecutiveTitles: number;
     currentTeamId: string | null;
     historyTeamIds: string[];
+    worldIds?: string[];
   };
   achievements: Achievement[];
   tacticalMemory?: Record<string, number>;
@@ -498,6 +517,12 @@ export interface SeasonReport {
     best: { teamId: string; scoreDelta: number };
     worst: { teamId: string; scoreDelta: number };
   };
+  topTransfers?: {
+    playerId: string;
+    fromTeamName?: string;
+    toTeamName?: string;
+    value: number;
+  }[];
 }
 
 export interface WorldState {

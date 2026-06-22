@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo, useCallback, useRef, useState } from 'react';
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
-import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, unsubscribeFromWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
+import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
 import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, listSavedWorlds, loadGameState as loadLocalGameState, loadStoredWorldEnvelope, saveGameState as saveLocalGameState } from '../engine/persistence';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 import { advanceGameDay, isJoinWindowOpen } from '../engine/gameLogic';
 import { addNews } from '../engine/newsService';
+import { loadManagerProfileMeta, loadMetaStoreSnapshot } from '../lib/metaStore';
+import { buildWorldDayTickKey, claimWorldTick, commitWorldTickState, completeWorldDayTick } from '../lib/worldTick';
+import { getStoreState } from '../utils/store';
+import { STORE_ITEMS_BY_ID } from '../constants/storeCatalog';
+import { applyManagerProfileMeta } from '../utils/managerProfile';
+import { getNextGameMidnight, isKickoffDue } from '../utils/worldSchedule';
 
 interface GameStateValue {
   state: GameState;
@@ -14,11 +20,25 @@ interface GameStateValue {
   isAuthenticated: boolean;
   userId: string | null;
   worldId: string | null;
-  worlds: Array<{ id: string, name: string, updatedAt: string, userId: string, isLocalOnly?: boolean }>;
-  publicWorlds: Array<{ id: string, name: string, updatedAt: string, userId: string }>;
+  worlds: WorldSummary[];
+  publicWorlds: WorldSummary[];
   toasts: Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>;
   isPaused: boolean;
 }
+
+type WorldSummary = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  userId: string;
+  isLocalOnly?: boolean;
+  isCreator?: boolean;
+  status?: string;
+  phase?: string | null;
+  currentDay?: number | null;
+  currentSeason?: number | null;
+  startScheduledAt?: string | null;
+};
 
 interface GameDispatchValue {
   setState: React.Dispatch<React.SetStateAction<GameState>>;
@@ -38,7 +58,16 @@ interface GameDispatchValue {
   refreshWorlds: () => Promise<void>;
   addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   removeToast: (id: string) => void;
+  requestConfirm: (options: ConfirmOptions) => Promise<boolean>;
   togglePause: () => void;
+}
+
+interface ConfirmOptions {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'default' | 'danger';
 }
 
 type GameContextType = GameStateValue & GameDispatchValue;
@@ -61,30 +90,46 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 const GameStateContext = createContext<GameStateValue | undefined>(undefined);
 const GameDispatchContext = createContext<GameDispatchValue | undefined>(undefined);
 
+const isDevAuthEnabled = () => {
+  if (typeof sessionStorage !== 'undefined' && import.meta.env.DEV && sessionStorage.getItem('elite.devAuth') === 'true') {
+    return true;
+  }
+  if (typeof window === 'undefined') return false;
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return isLocalHost && new URLSearchParams(window.location.search).get('devAuth') === '1';
+};
+
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(gameReducer, generateInitialState());
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => isDevAuthEnabled());
+  const [userId, setUserId] = useState<string | null>(() => isDevAuthEnabled() ? 'dev_smoke_user' : null);
   const [worldId, setWorldId] = useState<string | null>(null);
-  const [worlds, setWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string, isLocalOnly?: boolean }>>([]);
-  const [publicWorlds, setPublicWorlds] = useState<Array<{ id: string, name: string, updatedAt: string, userId: string }>>([]);
+  const [worlds, setWorlds] = useState<WorldSummary[]>([]);
+  const [publicWorlds, setPublicWorlds] = useState<WorldSummary[]>([]);
   const [toasts, setToasts] = useState<Array<{ id: string, message: string, type: 'success' | 'error' | 'info' | 'warning' }>>([]);
+  const [pendingConfirm, setPendingConfirm] = useState<(ConfirmOptions & { id: string }) | null>(null);
+  const confirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [timeSpeed, setTimeSpeedState] = useState(DEFAULT_TIME_SPEED);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const hasAttemptedSessionRestoreRef = useRef(false);
   const timeAnchorRef = useRef<{
     realTimeMs: number;
     gameTimeMs: number;
     speed: number;
     lastWorldDateMs: number;
   } | null>(null);
+  const latestStateRef = useRef(state);
+  const clockTickInFlightRef = useRef(false);
 
   const setState = useCallback((payload: GameState | ((prev: GameState) => GameState)) => {
     dispatch({ type: 'SET_STATE', payload });
   }, []);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   const applyLocalHydration = useCallback((targetWorldId?: string) => {
     const cachedState = loadLocalGameState(targetWorldId);
@@ -162,7 +207,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
       console.warn('Supabase not configured. Auth skipped.');
-      setIsAuthenticated(false);
+      if (isDevAuthEnabled()) {
+        setIsAuthenticated(true);
+        setUserId('dev_smoke_user');
+      } else {
+        setIsAuthenticated(false);
+      }
       const cachedWorlds = listSavedWorlds();
       setWorlds(cachedWorlds);
       applyLocalHydration();
@@ -171,8 +221,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const hasSession = !!session;
-      setIsAuthenticated(hasSession);
-      setUserId(session?.user.id || null);
+      const hasDevAuth = isDevAuthEnabled();
+      setIsAuthenticated(hasSession || hasDevAuth);
+      setUserId(session?.user.id || (hasDevAuth ? 'dev_smoke_user' : null));
       if (hasSession) {
         refreshWorlds(true);
       } else {
@@ -184,13 +235,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const hasSession = !!session;
-      setIsAuthenticated(hasSession);
-      setUserId(session?.user.id || null);
+      const hasDevAuth = isDevAuthEnabled();
+      setIsAuthenticated(hasSession || hasDevAuth);
+      setUserId(session?.user.id || (hasDevAuth ? 'dev_smoke_user' : null));
       if (hasSession) {
-        hasAttemptedSessionRestoreRef.current = false;
         refreshWorlds(true);
       } else {
-        hasAttemptedSessionRestoreRef.current = false;
         setWorldId(null);
         setWorlds(listSavedWorlds());
         if (!applyLocalHydration()) {
@@ -214,11 +264,37 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const resolveConfirm = useCallback((confirmed: boolean) => {
+    confirmResolverRef.current?.(confirmed);
+    confirmResolverRef.current = null;
+    setPendingConfirm(null);
+  }, []);
+
+  const requestConfirm = useCallback((options: ConfirmOptions) => {
+    if (confirmResolverRef.current) {
+      confirmResolverRef.current(false);
+    }
+
+    setPendingConfirm({
+      id: Math.random().toString(36).substring(2, 9),
+      ...options,
+    });
+
+    return new Promise<boolean>(resolve => {
+      confirmResolverRef.current = resolve;
+    });
+  }, []);
+
   const buildUserManager = useCallback((managerId: string, displayName: string, district: any, teamId: string | null) => ({
     id: managerId,
     name: displayName,
+    originDistrict: district,
     district,
     reputation: 50,
+    preferredPlayStyle: 'Equilibrado',
+    originTraitId: 'trait_cold_negotiator',
+    ownedTraitIds: ['trait_cold_negotiator'],
+    equippedTraitIds: ['trait_cold_negotiator'],
     isNPC: false,
     attributes: {
       evolution: 50,
@@ -232,10 +308,60 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hallOfFameEntries: 0,
       consecutiveTitles: 0,
       currentTeamId: teamId,
-      historyTeamIds: teamId ? [teamId] : []
+      historyTeamIds: teamId ? [teamId] : [],
+      worldIds: [worldId || state.world.id || 'local_world']
     },
     achievements: []
-  }), []);
+  }), [state.world.id, worldId]);
+
+  const hydrateStoreFromMeta = useCallback(async (baseState: GameState) => {
+    if (!isAuthenticated) return baseState;
+
+    try {
+      const snapshot = await loadMetaStoreSnapshot();
+      const remoteOwnedItemIds = (snapshot.inventory || []).map(item => item.item_id);
+      if (remoteOwnedItemIds.length === 0 && !snapshot.profile && !snapshot.circuit && !snapshot.managerProfile) return baseState;
+
+      const store = getStoreState(baseState);
+      const displayedProfileItems = (snapshot.inventory || [])
+        .filter(item => {
+          const storeItem = STORE_ITEMS_BY_ID[item.item_id];
+          return item.is_equipped && !!storeItem && (storeItem.category === 'ACCESSORY' || storeItem.category === 'BADGE');
+        })
+        .sort((a, b) => Number(a.equipped_context?.slot || 99) - Number(b.equipped_context?.slot || 99))
+        .map(item => item.item_id)
+        .slice(0, 3);
+
+      const hydratedState = {
+        ...baseState,
+        store: {
+          ...store,
+          ownedItemIds: Array.from(new Set([...store.ownedItemIds, ...remoteOwnedItemIds])),
+          equippedManagerItemIds: displayedProfileItems.length ? displayedProfileItems : store.equippedManagerItemIds,
+          circuit: {
+            ...store.circuit,
+            premiumActive: snapshot.profile?.premium_active ?? store.circuit.premiumActive,
+            seasonRunsCompleted: snapshot.circuit?.season_runs_completed ?? store.circuit.seasonRunsCompleted,
+          },
+        },
+      };
+
+      if (snapshot.managerProfile && hydratedState.userManagerId && hydratedState.managers[hydratedState.userManagerId]) {
+        hydratedState.managers = {
+          ...hydratedState.managers,
+          [hydratedState.userManagerId]: applyManagerProfileMeta(
+            hydratedState.managers[hydratedState.userManagerId],
+            snapshot.managerProfile
+          ),
+        };
+      }
+
+      return hydratedState;
+    } catch (error) {
+      console.error('GameContext: failed to hydrate store from global profile', error);
+      return baseState;
+    }
+  }, [isAuthenticated]);
 
   const saveGame = useCallback(async (newState?: GameState, worldIdOverride?: string) => {
     const targetWorldId = worldIdOverride || worldId;
@@ -274,8 +400,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const joinedState = await joinSharedWorld(targetWorldId);
       if (joinedState) {
+        const hydratedState = await hydrateStoreFromMeta(joinedState);
         setIsInitialLoad(true);
-        setState(joinedState);
+        setState(hydratedState);
         setWorldId(targetWorldId);
         addToast('Você entrou em um mundo compartilhado!', 'success');
       }
@@ -286,15 +413,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsSyncing(false);
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
-  }, [setState, addToast]);
+  }, [setState, addToast, hydrateStoreFromMeta]);
 
   const joinGameByCode = useCallback(async (joinCode: string) => {
     setIsSyncing(true);
     try {
       const joinedState = await joinWorldByCodeFromSupabase(joinCode);
       if (joinedState?.worldId) {
+        const hydratedState = await hydrateStoreFromMeta(joinedState);
         setIsInitialLoad(true);
-        setState(joinedState);
+        setState(hydratedState);
         setWorldId(joinedState.worldId);
         await refreshWorlds();
         addToast('Codigo aceito. Voce entrou como observador.', 'success');
@@ -308,7 +436,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsSyncing(false);
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
-  }, [setState, addToast]);
+  }, [setState, addToast, hydrateStoreFromMeta, refreshWorlds]);
 
   const claimTeam = useCallback(async (teamId: string, managerName?: string) => {
     if (!worldId) {
@@ -502,7 +630,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       'Manager Elite';
 
     if (!nextState.managers[managerId]) {
-      nextState.managers[managerId] = buildUserManager(managerId, displayName, team.district, team.id) as any;
+      const managerProfile = await loadManagerProfileMeta().catch(() => null);
+      nextState.managers[managerId] = applyManagerProfileMeta(
+        buildUserManager(managerId, displayName, team.district, team.id) as any,
+        managerProfile
+      ) as any;
     }
 
     if (team.managerId && nextState.managers[team.managerId]) {
@@ -694,8 +826,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             };
           }
 
+          const hydratedState = await hydrateStoreFromMeta(preferredState);
           setIsInitialLoad(true);
-          setState(preferredState);
+          setState(hydratedState);
           setWorldId(idToLoad);
           console.log('Game loaded successfully');
           setIsOnline(true);
@@ -723,20 +856,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Small delay to prevent immediate auto-save on load
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
-  }, [worldId, worlds, setState, addToast, state.world.currentDate, state.world.status, state.teams, state.players, applyLocalHydration]);
-
-  useEffect(() => {
-    if (!isAuthenticated || worldId || hasAttemptedSessionRestoreRef.current) return;
-
-    const preferredWorldId = getLastSavedWorldId();
-    if (!preferredWorldId) {
-      hasAttemptedSessionRestoreRef.current = true;
-      return;
-    }
-
-    hasAttemptedSessionRestoreRef.current = true;
-    loadGame(preferredWorldId);
-  }, [isAuthenticated, worldId, loadGame]);
+  }, [worldId, worlds, setState, addToast, state.world.currentDate, state.world.status, state.teams, state.players, applyLocalHydration, hydrateStoreFromMeta]);
 
   // Auto-save logic
   useEffect(() => {
@@ -761,6 +881,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.notifications,
     state.lastHeadline,
     state.training,
+    state.store,
     worldId,
     isInitialLoad,
     saveGame
@@ -805,95 +926,175 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isPaused || isInitialLoad || !worldId) return;
 
     // --- REALTIME SYNC (CHANNELS) ---
-    // Listen for world updates instead of polling
-    if (!state.isCreator) {
-      subscribeToWorld(worldId, async () => {
-        try {
+    // Everyone listens. Non-creators receive clock/state updates; creators receive participant joins/claims.
+    const participantSignature = (items = state.participants || []) =>
+      items
+        .map(participant => `${participant.userId}:${participant.teamId || ''}:${participant.managerId || ''}`)
+        .sort()
+        .join('|');
+
+    const channel = subscribeToWorld(worldId, async () => {
+      try {
+        const loaded = await loadGameState(worldId);
+        if (!loaded) return;
+
+        const previousParticipants = state.participants || [];
+        const previousSignature = participantSignature(previousParticipants);
+        const nextSignature = participantSignature(loaded.participants || []);
+        const participantsChanged = previousSignature !== nextSignature;
+        const previousByUser = new Map(previousParticipants.map(participant => [participant.userId, participant]));
+        const newestParticipant = (loaded.participants || []).find(participant => !previousByUser.has(participant.userId));
+        const changedParticipant = newestParticipant || (loaded.participants || []).find(participant => {
+          const previous = previousByUser.get(participant.userId);
+          return previous && (previous.teamId !== participant.teamId || previous.managerId !== participant.managerId);
+        });
+
+        if (participantsChanged && state.isCreator) {
+          const team = changedParticipant?.teamId ? loaded.teams[changedParticipant.teamId] : null;
+          const manager = changedParticipant?.managerId ? loaded.managers[changedParticipant.managerId] : null;
+          const humanCount = (loaded.participants || []).filter(participant => participant.teamId).length;
+          const title = team ? 'Jogador entrou no mundo' : 'Observador entrou no mundo';
+          const message = `${manager?.name || 'Novo jogador'} entrou${team ? ` com ${team.name}` : ' como observador'}. Humanos no mundo: ${humanCount}.`;
+          loaded.notifications = [
+            {
+              id: `participant_${changedParticipant?.userId || Date.now()}_${Date.now()}`,
+              date: loaded.world.currentDate,
+              title,
+              message,
+              type: 'info' as const,
+              read: false
+            },
+            ...(loaded.notifications || []),
+          ].slice(0, 80);
+          addToast(
+            message,
+            'info'
+          );
+        }
+
+        if (!state.isCreator || participantsChanged) {
+          console.log('GameContext: Realtime world update received, refreshing local state.');
+          setState(loaded);
+        }
+      } catch (e) {
+        console.error('Realtime sync error:', e);
+      }
+    });
+
+    const buildDateKey = (date: Date) =>
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+
+    const processDueClockTick = async () => {
+      if (clockTickInFlightRef.current) return;
+
+      const prev = latestStateRef.current;
+      const realNow = new Date();
+      const gameNow = getAcceleratedGameDate(prev.world.currentDate);
+      const kickoffScheduled = prev.world.currentDay === -1 && !!prev.world.startScheduledAt;
+      const kickoffReady = kickoffScheduled && isKickoffDue(prev.world.startScheduledAt, realNow);
+
+      // Before the GM schedules the season, keep the world frozen.
+      if (prev.world.status === 'LOBBY' && prev.world.currentDay === -1 && !kickoffScheduled) {
+        return;
+      }
+
+      const oldDate = new Date(prev.world.currentDate);
+      const oldDay = oldDate.getDate();
+      const newDay = gameNow.getDate();
+      const dailyAdvanceReady = oldDay !== newDay && !kickoffReady && prev.world.currentDay >= 0;
+
+      if (!kickoffReady && !dailyAdvanceReady) return;
+
+      let tickKey = kickoffReady
+        ? `season-${prev.world.currentSeason || 2050}:kickoff:${buildDateKey(gameNow)}`
+        : buildWorldDayTickKey(prev);
+
+      clockTickInFlightRef.current = true;
+      try {
+        const tickClaim = await claimWorldTick(worldId, tickKey, gameNow.toISOString());
+        tickKey = tickClaim.tickKey || tickKey;
+
+        if (!tickClaim.ok) {
           const loaded = await loadGameState(worldId);
-          if (loaded && (
-            loaded.world.currentDate !== state.world.currentDate ||
-            loaded.world.status !== state.world.status ||
-            Object.keys(loaded.teams).length !== Object.keys(state.teams).length
-          )) {
-            console.log('GameContext: World state updated by creator via Realtime, refreshing local state.');
-            setState(loaded);
-          }
-        } catch (e) {
-          console.error('Realtime sync error:', e);
-        }
-      });
-    }
-
-    // --- Main Clock (1s interval) ---
-    const interval = setInterval(() => {
-      setState(prev => {
-        // Only the world creator drives the clock
-        if (!prev.isCreator) return prev;
-
-        // --- Map accelerated real time to 2050 game world ---
-        const gameNow = getAcceleratedGameDate(prev.world.currentDate);
-        const kickoffScheduled = prev.world.currentDay === -1 && !!prev.world.startScheduledAt;
-        const kickoffReady = kickoffScheduled && gameNow >= new Date(prev.world.startScheduledAt!);
-
-        // Before the GM schedules the season, keep the world frozen.
-        if (prev.world.status === 'LOBBY' && prev.world.currentDay === -1 && !kickoffScheduled) {
-          return prev;
+          if (loaded) setState(loaded);
+          return;
         }
 
-        const oldDate = new Date(prev.world.currentDate);
-        const oldDay = oldDate.getDate();
-        const newDay = gameNow.getDate();
-
-        // Ensure seasonStartReal exists
         let seasonStartReal = prev.world.seasonStartReal;
         if (!seasonStartReal) {
-          const nextDay = new Date(gameNow);
-          nextDay.setDate(nextDay.getDate() + 1);
-          nextDay.setHours(0, 0, 0, 0);
-          seasonStartReal = nextDay.toISOString();
+          seasonStartReal = getNextGameMidnight(prev.world.currentDate).toISOString();
         }
 
-        // Update currentDate to 2050 game-world time
-        let newState = {
+        let newState: GameState = {
           ...prev,
           world: {
             ...prev.world,
             currentDate: gameNow.toISOString(),
-            seasonStartReal: seasonStartReal,
+            seasonStartReal,
             currentDay: kickoffReady ? 0 : prev.world.currentDay,
-            status: kickoffReady ? 'ACTIVE' as const : prev.world.status,
+            status: kickoffReady ? 'LOBBY' as const : prev.world.status,
             startScheduledAt: kickoffReady ? null : prev.world.startScheduledAt
           }
         };
 
-        // --- Day Change Logic ---
-        // When the real day changes, run advanceGameDay which handles:
-        // - Match simulation for the current round
-        // - Player evolution
-        // - Training progress
-        // - Safety net checks
-        // - Cup progression
-        if (oldDay !== newDay && !kickoffReady && newState.world.currentDay >= 0) {
-          console.log('Clock: Day changed, running daily advance...');
-          return advanceGameDay(newState, true);
+        if (kickoffReady) {
+          newState.notifications = [
+            {
+              id: `season_started_${prev.world.currentSeason || 2050}_${Date.now()}`,
+              date: gameNow.toISOString(),
+              title: 'Draft Genesis aberto',
+              message: 'O mundo chegou em 00:00. O Draft Genesis abriu: Dia 0 e Dia 1 recebem listas; no Dia 2 a liga computa e abre a temporada.',
+              type: 'success' as const,
+              read: false
+            },
+            ...(newState.notifications || []),
+          ].slice(0, 80);
         }
 
-        return newState;
-      });
+        if (dailyAdvanceReady) {
+          console.log('Clock: Day changed, running shared daily advance...');
+          newState = advanceGameDay(newState, true);
+        }
+
+        if (prev.isCreator) {
+          setState(newState);
+          await saveGame(newState);
+        } else {
+          const commit = await commitWorldTickState(worldId, tickKey, newState);
+          if (!commit.ok || commit.degraded) {
+            throw new Error('WORLD_TICK_COMMIT_FAILED');
+          }
+          setState(newState);
+          await saveGame(newState);
+        }
+
+        await completeWorldDayTick(worldId, tickKey, true);
+      } catch (error: any) {
+        await completeWorldDayTick(worldId, tickKey, false, error?.message || String(error));
+        console.error('Shared world clock tick failed:', error);
+      } finally {
+        clockTickInFlightRef.current = false;
+      }
+    };
+
+    // --- Main Clock (1s interval) ---
+    const interval = setInterval(() => {
+      processDueClockTick();
     }, 1000);
 
     return () => {
-      if (!state.isCreator) {
-        unsubscribeFromWorld(worldId);
-      }
+      supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [isPaused, isInitialLoad, worldId, setState, getAcceleratedGameDate, state.isCreator, state.world.currentDate, state.world.status, state.teams]);
+  }, [addToast, isPaused, isInitialLoad, worldId, setState, getAcceleratedGameDate, saveGame, state.isCreator, state.participants]);
 
   const togglePause = useCallback(() => setIsPaused(prev => !prev), []);
 
   const logout = useCallback(async () => {
     try {
+      if (import.meta.env.DEV && typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('elite.devAuth');
+      }
       await supabase.auth.signOut();
       setIsAuthenticated(false);
       setUserId(null);
@@ -911,12 +1112,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const leaveWorld = useCallback(() => {
     setWorldId(null);
-    const fallbackWorldId = getLastSavedWorldId();
-    if (!fallbackWorldId || !applyLocalHydration(fallbackWorldId)) {
-      dispatch({ type: 'RESET_STATE' });
-    }
-    addToast('Saindo do mundo...', 'info');
-  }, [addToast, applyLocalHydration]);
+    setIsInitialLoad(false);
+    dispatch({ type: 'RESET_STATE' });
+    addToast('Voce saiu do mundo.', 'info');
+  }, [addToast]);
 
   const deleteWorld = useCallback(async (id: string) => {
     try {
@@ -948,13 +1147,64 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     submitClubApplication,
     respondToClubOffer,
     resignFromTeam,
-    setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause
-  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, submitClubApplication, respondToClubOffer, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, togglePause]);
+    setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, requestConfirm, togglePause
+  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, submitClubApplication, respondToClubOffer, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, requestConfirm, togglePause]);
 
   return (
     <GameDispatchContext.Provider value={dispatchValue}>
       <GameStateContext.Provider value={stateValue}>
         {children}
+        {pendingConfirm && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm">
+            <div className={`relative w-full max-w-[330px] overflow-hidden rounded-lg border bg-[#070b12] shadow-[0_18px_60px_rgba(0,0,0,0.65)] ${
+              pendingConfirm.tone === 'danger' ? 'border-rose-300/35' : 'border-cyan-300/30'
+            }`}>
+              <div className={`absolute inset-y-0 left-0 w-1 ${
+                pendingConfirm.tone === 'danger' ? 'bg-rose-400' : 'bg-cyan-300'
+              }`} />
+              <div className="p-4 pl-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className={`text-[8px] font-black uppercase tracking-[0.28em] ${
+                      pendingConfirm.tone === 'danger' ? 'text-rose-200' : 'text-cyan-200'
+                    }`}>
+                      Confirmacao
+                    </p>
+                    <h3 className="mt-2 text-base font-black uppercase italic leading-tight tracking-normal text-white">
+                      {pendingConfirm.title}
+                    </h3>
+                  </div>
+                  <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                    pendingConfirm.tone === 'danger' ? 'bg-rose-300' : 'bg-cyan-200'
+                  }`} />
+                </div>
+                <p className="mt-3 text-[11px] font-bold uppercase leading-relaxed tracking-wide text-white/60">
+                  {pendingConfirm.message}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => resolveConfirm(false)}
+                    className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/60 transition hover:bg-white/[0.08]"
+                  >
+                    {pendingConfirm.cancelLabel || 'Cancelar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resolveConfirm(true)}
+                    className={`rounded-md border px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] transition ${
+                      pendingConfirm.tone === 'danger'
+                        ? 'border-rose-300/40 bg-rose-400 text-black hover:bg-rose-300'
+                        : 'border-cyan-300/40 bg-cyan-300 text-black hover:bg-cyan-200'
+                    }`}
+                  >
+                    {pendingConfirm.confirmLabel || 'Confirmar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </GameStateContext.Provider>
     </GameDispatchContext.Provider>
   );

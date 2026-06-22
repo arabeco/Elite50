@@ -55,12 +55,10 @@ export const ObserverClaimPanel: React.FC = () => {
       .map(team => {
         const squad = (team.squad || []).map(id => state.players[id]).filter(Boolean);
         const totalRating = squad.reduce((sum, player) => sum + player.totalRating, 0);
-        const averageRating = squad.length > 0 ? Math.round(totalRating / squad.length) : 0;
         return {
           team,
           squadCount: squad.length,
           totalRating,
-          averageRating,
           league: leagueByTeam.get(team.id),
           isHuman: isHumanManager(team.managerId, state.managers)
         };
@@ -234,7 +232,7 @@ export const ObserverClaimPanel: React.FC = () => {
       )}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {teams.map(({ team, squadCount, totalRating, averageRating, league, isHuman }) => (
+        {teams.map(({ team, squadCount, totalRating, league, isHuman }) => (
           <div
             key={team.id}
             className={`relative overflow-hidden rounded-2xl border p-4 transition ${
@@ -289,8 +287,8 @@ export const ObserverClaimPanel: React.FC = () => {
                   </div>
                   <div className="rounded-xl bg-white/[0.04] px-2 py-2">
                     <Zap size={12} className="mb-1 text-cyan-300" />
-                    <p className="text-sm font-black text-white">{averageRating}</p>
-                    <p className="text-[7px] font-black uppercase tracking-widest text-white/30">media</p>
+                    <p className="text-sm font-black text-white">{totalRating}</p>
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/30">score</p>
                   </div>
                   <div className="rounded-xl bg-white/[0.04] px-2 py-2">
                     <Trophy size={12} className="mb-1 text-amber-300" />

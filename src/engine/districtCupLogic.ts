@@ -20,17 +20,29 @@ const awardDistrictTeamTitle = (team: Team | undefined, season: number) => {
 };
 
 /**
- * Selects 4 human managers for District Cup.
- * Priority: Human role, then Reputation.
+ * Selects the 4 strongest managers for District Cup.
+ * Managers can coach any district selection; humans receive a real boost,
+ * but reputation and career merit still decide the call-up.
  */
 export const selectDistrictCupManagers = (state: GameState): Record<District, string> => {
-    const activeManagers = Object.values(state.managers);
-    const humanManagers = activeManagers.filter(m => m.id === state.userManagerId || true); // In multiplayer, check real user IDs
-
-    // For this prototype, we'll take top 4 by reputation if available
+    const activeManagers = Object.values(state.managers || {});
     const sorted = activeManagers
         .filter(m => m && typeof m.reputation === 'number')
-        .sort((a, b) => (b.reputation || 0) - (a.reputation || 0));
+        .sort((a, b) => {
+            const score = (manager: Manager) => {
+                const career = manager.career || {};
+                const humanBonus = manager.isNPC === false || manager.id === state.userManagerId ? 35 : 0;
+                return (
+                    (manager.reputation || 0) +
+                    humanBonus +
+                    (career.titlesWon || 0) * 8 +
+                    (career.totalLeagueTitles || 0) * 6 +
+                    (career.totalCupTitles || 0) * 5 +
+                    (career.hallOfFameEntries || 0) * 10
+                );
+            };
+            return score(b) - score(a);
+        });
     const selected = sorted.slice(0, 4);
 
     const mapping: Partial<Record<District, string>> = {};
@@ -54,7 +66,7 @@ export const generateDistrictRosters = (state: GameState): Record<District, stri
 
     ['NORTE', 'SUL', 'LESTE', 'OESTE'].forEach(d => {
         const districtPlayers = allPlayers
-            .filter(p => p.district === d)
+            .filter(p => (p.originDistrict || p.district) === d)
             .sort((a, b) => b.totalRating - a.totalRating)
             .slice(0, 15);
 
@@ -182,8 +194,6 @@ export const finalizeDistrictCup = (state: GameState) => {
             player.fatigue = 0; // Fresh
         }
 
-        // Reset season delta for new season AFTER awarding trophies
-        player.history.seasonRatingDelta = 0;
     });
 
     state.world.phase = 'OFFSEASON';

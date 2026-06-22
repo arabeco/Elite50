@@ -1,11 +1,8 @@
 import React from 'react';
 import { useGame } from '../store/GameContext';
-import { calculateTeamPower } from '../engine/gameLogic';
+import { calculateTeamPower, getTeamPowerCap } from '../engine/gameLogic';
 import { LeagueState } from '../types';
 import {
-    MAX_TEAM_POWER_TIER_1,
-    MAX_TEAM_POWER_TIER_2,
-    MAX_TEAM_POWER_TIER_3,
     SEASON_DAYS
 } from '../constants/gameConstants';
 
@@ -27,18 +24,9 @@ export const useDashboardData = () => {
 
     const totalPoints = userTeam ? calculateTeamPower(userTeam, state.players) : 0;
 
-    // Determine power cap: prioritize team's persistent powerCap, then fall back to tier-based base values
     const powerCap = React.useMemo(() => {
-        if (!userTeam) return MAX_TEAM_POWER_TIER_1;
-
-        // If team has a dynamic/persistent cap, use it
-        if (userTeam.powerCap !== undefined) return userTeam.powerCap;
-
-        // Cyan (Elite) = 12k, Orange/Purple (Mid) = 10k, Green (Low) = 8k
-        if (userTeam.league === 'Cyan') return MAX_TEAM_POWER_TIER_1;
-        if (userTeam.league === 'Orange' || userTeam.league === 'Purple') return MAX_TEAM_POWER_TIER_2;
-        return MAX_TEAM_POWER_TIER_3;
-    }, [userTeam]);
+        return getTeamPowerCap(userTeam, state.players);
+    }, [state.players, userTeam]);
 
     const pointsLeft = powerCap - totalPoints;
 

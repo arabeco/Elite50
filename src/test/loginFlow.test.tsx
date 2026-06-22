@@ -7,6 +7,9 @@ const signInWithPasswordMock = vi.hoisted(() => vi.fn());
 const signInWithOAuthMock = vi.hoisted(() => vi.fn());
 const signUpMock = vi.hoisted(() => vi.fn());
 const resetPasswordForEmailMock = vi.hoisted(() => vi.fn());
+const addToastMock = vi.hoisted(() => vi.fn());
+const setIsAuthenticatedMock = vi.hoisted(() => vi.fn());
+const navigateMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
@@ -17,6 +20,17 @@ vi.mock('../lib/supabase', () => ({
       resetPasswordForEmail: resetPasswordForEmailMock,
     },
   },
+}));
+
+vi.mock('../store/GameContext', () => ({
+  useGameDispatch: () => ({
+    addToast: addToastMock,
+    setIsAuthenticated: setIsAuthenticatedMock,
+  }),
+}));
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateMock,
 }));
 
 describe('Login flow', () => {

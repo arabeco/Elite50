@@ -54,7 +54,7 @@ export interface HairOffset {
 }
 
 export const HAIR_OFFSETS: Record<string, HairOffset> = {
-  'F/f1-removebg-preview.png': { x: 0.2, y: -0.3 },
+  'F/f1-removebg-preview.png': { x: -0.3, y: -1.8 },
   'F/f2-removebg-preview.png': { x: 0.75, y: 0 },
   'F/f4-removebg-preview.png': { x: 0.75, y: -0.75 },
   'F/f7-removebg-preview.png': { x: 0.5, y: 0 },

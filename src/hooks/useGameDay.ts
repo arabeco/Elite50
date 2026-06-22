@@ -2,11 +2,12 @@ import { useRef } from 'react';
 import { advanceGameDay, startNewSeason } from '../engine/gameLogic';
 import { useGame, useGameDispatch } from '../store/GameContext';
 import { grantSeasonCompletionRewards } from '../lib/metaStore';
+import { claimWorldDayTick, claimWorldTick, completeWorldDayTick } from '../lib/worldTick';
 import { calculateSeasonRewardsForUser } from '../utils/seasonRewards';
 
 export const useGameDay = () => {
-  const { state, setState, saveGame, isAuthenticated } = useGame();
-  const { addToast } = useGameDispatch();
+  const { state, setState, saveGame, isAuthenticated, worldId } = useGame();
+  const { addToast, requestConfirm } = useGameDispatch();
   const isAdvancingRef = useRef(false);
 
   const maybeGrantSeasonRewards = async (previousSeason: number | undefined, nextState: typeof state) => {
@@ -38,25 +39,44 @@ export const useGameDay = () => {
     if (isAdvancingRef.current) return;
 
     if (!state.isCreator) {
-      alert('Apenas o Criador do Mundo pode avancar a data da temporada.');
+      addToast('Apenas o Criador do Mundo pode avancar a data da temporada.', 'warning');
       return;
     }
 
     if (state.world.status === 'LOBBY') {
-      alert('A temporada ainda nao comecou! Inicie a temporada na aba Home primeiro.');
+      addToast('A temporada ainda nao comecou. Inicie pela Home primeiro.', 'warning');
       return;
     }
 
-    if (!window.confirm('Deseja avancar para o proximo dia? Todos os jogos da rodada serao simulados.')) return;
+    const confirmed = await requestConfirm({
+      title: 'Avancar dia',
+      message: 'Todos os jogos da rodada serao simulados.',
+      confirmLabel: 'Avancar',
+    });
+    if (!confirmed) return;
 
     isAdvancingRef.current = true;
+    let tickKey: string | null = null;
     try {
+      const tickClaim = await claimWorldDayTick(worldId, state);
+      tickKey = tickClaim.tickKey;
+
+      if (!tickClaim.ok) {
+        addToast('Esse dia ja esta sendo processado ou ja foi avancado.', 'warning');
+        return;
+      }
+
       const previousSeason = state.world.currentSeason || 2050;
       const newState = advanceGameDay(state);
       setState(newState);
       await saveGame(newState);
       await maybeGrantSeasonRewards(previousSeason, newState);
+      await completeWorldDayTick(worldId, tickKey, true);
       addToast('Dia avancado com sucesso', 'success');
+    } catch (error: any) {
+      await completeWorldDayTick(worldId, tickKey, false, error?.message || String(error));
+      console.error('Erro ao avancar dia:', error);
+      addToast('Erro ao avancar dia', 'error');
     } finally {
       isAdvancingRef.current = false;
     }
@@ -64,18 +84,43 @@ export const useGameDay = () => {
 
   const handleStartNewSeason = async () => {
     if (!state.isCreator) {
-      alert('Apenas o Criador do Mundo pode acelerar a offseason.');
+      addToast('Apenas o Criador do Mundo pode acelerar a offseason.', 'warning');
       return;
     }
 
-    if (!window.confirm('Deseja encurtar a offseason e abrir a proxima temporada agora?')) return;
+    const confirmed = await requestConfirm({
+      title: 'Encerrar offseason',
+      message: 'A proxima temporada sera aberta agora.',
+      confirmLabel: 'Abrir season',
+    });
+    if (!confirmed) return;
 
-    const previousSeason = state.world.currentSeason || 2050;
-    const newState = startNewSeason(state);
-    setState(newState);
-    await saveGame(newState);
-    await maybeGrantSeasonRewards(previousSeason, newState);
-    addToast('Offseason encerrada. A nova temporada ja comecou.', 'success');
+    let tickKey: string | null = null;
+    try {
+      const previousSeason = state.world.currentSeason || 2050;
+      const tickClaim = await claimWorldTick(
+        worldId,
+        `season-${previousSeason}:start-next-season`,
+        state.world.currentDate
+      );
+      tickKey = tickClaim.tickKey;
+
+      if (!tickClaim.ok) {
+        addToast('A nova temporada ja esta sendo preparada.', 'warning');
+        return;
+      }
+
+      const newState = startNewSeason(state);
+      setState(newState);
+      await saveGame(newState);
+      await maybeGrantSeasonRewards(previousSeason, newState);
+      await completeWorldDayTick(worldId, tickKey, true);
+      addToast('Offseason encerrada. A nova temporada ja comecou.', 'success');
+    } catch (error: any) {
+      await completeWorldDayTick(worldId, tickKey, false, error?.message || String(error));
+      console.error('Erro ao abrir nova temporada:', error);
+      addToast('Erro ao abrir nova temporada', 'error');
+    }
   };
 
   return { handleAdvanceDay, handleStartNewSeason };

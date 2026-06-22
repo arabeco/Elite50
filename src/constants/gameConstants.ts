@@ -18,8 +18,10 @@ export const MIDSEASON_JOIN_MAX_ROUND = 4;
 export const TOTAL_ROUNDS = SEASON_ROUNDS + ELITE_CUP_ROUNDS + DISTRICT_CUP_ROUNDS; // 11
 export const SEASON_DAYS = 22; // 2 dias de Genesis + liga + Copa Elite + offseason curta
 export const MATCH_INTERVAL_DAYS = 2; // Dia Sim, Dia Não (Liga)
-export const DEFAULT_TIME_SPEED = 2.4; // 1 game day every 10 real minutes.
-export const TEST_TIME_SPEED = 4.8; // 1 game day every 5 real minutes.
+export const DEFAULT_TIME_SPEED = 1 / 60; // Real time: 1 game second per real second.
+export const TEST_TIME_SPEED = 2.4; // Dev acceleration: 1 game day every 10 real minutes.
+export const HUMAN_MANAGER_ACTIVE_GRACE_DAYS = 2; // Human teams keep playing, but stop gaining upgrades after this idle window.
+export const MAX_CREATED_WORLDS_PER_USER = 5;
 
 // --- Safety Net (ensures AI teams remain competitive) ---
 export const SAFETY_NET_TOTAL = 6000;

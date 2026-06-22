@@ -26,47 +26,23 @@ import { OnboardingActionHint, OnboardingArea, OnboardingHint } from './Onboardi
 import { addNews } from '../engine/newsService';
 import { FeedbackReportModal } from './FeedbackReportModal';
 import { SeasonReportModal } from './SeasonReportModal';
-
-// --- Haptics & Sound Engine ---
-const playClickSound = () => {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioContext) {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.05);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.05);
-    }
-  } catch (e) { } // Ignore if browser blocks it
-};
-
-const triggerHaptic = () => {
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    navigator.vibrate(15);
-  }
-};
-
+import { runInteractionFeedback } from '../utils/uiFeedback';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useMatchNotifications } from '../hooks/useMatchNotifications';
+import { claimWorldTick, completeWorldDayTick } from '../lib/worldTick';
+import { getNextGameMidnight, getNextRealMidnight } from '../utils/worldSchedule';
 
 type Tab = 'home' | 'team' | 'calendar' | 'world' | 'career';
 type TeamSubTab = 'squad' | 'lineup' | 'tactics' | 'training' | 'draft';
 
 export const Dashboard: React.FC = () => {
-  const { state, isPaused } = useGameState();
-  const { setState, saveGame, togglePause, logout, leaveWorld, addToast, resignFromTeam } = useGameDispatch();
+  const { state, isPaused, worldId } = useGameState();
+  const { setState, saveGame, togglePause, logout, leaveWorld, addToast, resignFromTeam, requestConfirm } = useGameDispatch();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeTeamTab, setActiveTeamTab] = useState<TeamSubTab>(
-    (state.world.status === 'LOBBY' && state.world.currentDay < 2) ? 'draft' : 'squad'
+    (state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2) ? 'draft' : 'squad'
   );
-  const isDraftOpen = state.world.status === 'LOBBY' && state.world.currentDay < 2;
+  const isDraftOpen = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
 
   const [liveMatch, setLiveMatch] = useState<Match | null>(null);
   const [liveMatchSecond, setLiveMatchSecond] = useState(0);
@@ -76,9 +52,20 @@ export const Dashboard: React.FC = () => {
   const [isSeasonEndDismissed, setIsSeasonEndDismissed] = useState(false);
   const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedManager, setSelectedManager] = useState<Manager | null>(null);
   const [selectedSeasonReport, setSelectedSeasonReport] = useState<number | null>(null);
   const [autoOpenedSeasonReport, setAutoOpenedSeasonReport] = useState<number | null>(null);
   const isObserver = !state.userTeamId && (!!state.userManagerId || !state.isCreator);
+  const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
+  const squadNeedsAttention = !!userTeam && !isObserver && isDraftOpen && (userTeam.squad?.length || 0) < 15;
+  const lineupNeedsAttention = !!userTeam && !isObserver && Object.values(userTeam.lineup || {}).filter(Boolean).length < 11;
+  const tacticsNeedsAttention = !!userTeam && !isObserver && (!userTeam.tactics?.playStyle || !userTeam.tactics?.mentality);
+  const trainingNeedsAttention = !!userTeam && !isObserver && (
+    (state.training?.cardLaboratory?.slots || []).some(slot => !slot.cardId)
+    || !state.training?.individualFocus?.evolutionSlot
+    || !state.training?.individualFocus?.stabilizationSlot
+  );
+  const teamNeedsAttention = squadNeedsAttention || lineupNeedsAttention || tacticsNeedsAttention || trainingNeedsAttention;
   const onboardingArea: OnboardingArea = isObserver
     ? 'observer'
     : activeTab === 'team'
@@ -96,6 +83,18 @@ export const Dashboard: React.FC = () => {
       setActiveTab('team');
     }
   }, [activeTab, isObserver, state.worldId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || selectedPlayer) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('openPlayerModal') !== '1') return;
+
+    const firstTeamPlayer = Object.values(state.players)
+      .find(player => player.contract.teamId === state.userTeamId);
+    if (firstTeamPlayer) {
+      setSelectedPlayer(firstTeamPlayer);
+    }
+  }, [selectedPlayer, state.players, state.userTeamId]);
 
   const headerReferenceDate = React.useMemo(() => {
     const rawDate = new Date(
@@ -126,7 +125,10 @@ export const Dashboard: React.FC = () => {
   });
   const headerSeasonDay = state.world.currentDay < 0 ? 0 : (state.world.currentDay || 0) + 1;
 
-  const { daysPassed, userTeamMatches, totalPoints, powerCap } = useDashboardData();
+  const { daysPassed, userTeamMatches, upcomingMatches, totalPoints, powerCap } = useDashboardData();
+  useMatchNotifications(state, userTeam, upcomingMatches);
+  const marketNeedsAttention = !!userTeam && !isObserver && state.world.transferWindowOpen === true && (powerCap - totalPoints) >= 120;
+  const calendarNeedsAttention = !!userTeam && userTeamMatches.some(match => match.played && match.revealed === false);
   const isSeasonEnded = state.world.status !== 'LOBBY' && daysPassed > SEASON_DAYS;
   const actionOnboardingHint = React.useMemo<OnboardingActionHint | null>(() => {
     if (isObserver || activeTab !== 'home') return null;
@@ -139,7 +141,7 @@ export const Dashboard: React.FC = () => {
     const lineupCount = Object.values(userTeam.lineup || {}).filter(Boolean).length;
     const tacticReady = !!userTeam.tactics?.playStyle && !!userTeam.tactics?.mentality;
     const isPreseason = state.world.status === 'LOBBY' || state.world.currentDay < 3;
-    const draftResolved = !isPreseason || squadSize >= 15 || state.world.currentDay >= 2;
+    const draftResolved = state.world.currentDay < 0 || !isPreseason || squadSize >= 15 || state.world.currentDay >= 2;
     const latestPlayed = [...userTeamMatches].filter(match => match.played).sort((a, b) => {
       const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
       return dateDiff || (b.round || 0) - (a.round || 0);
@@ -298,26 +300,52 @@ export const Dashboard: React.FC = () => {
       return;
     }
 
-    if (!window.confirm('Deseja preparar a proxima temporada e agenda-la para amanha 00:00?')) return;
-    const nextStart = new Date(state.world.currentDate);
-    nextStart.setDate(nextStart.getDate() + 1);
-    nextStart.setHours(0, 0, 0, 0);
+    const confirmed = await requestConfirm({
+      title: 'Preparar nova temporada',
+      message: 'A proxima temporada sera agendada para amanha as 00:00.',
+      confirmLabel: 'Preparar',
+    });
+    if (!confirmed) return;
+    const season = state.world.currentSeason || 2050;
+    const tickClaim = await claimWorldTick(
+      worldId,
+      `season-${season}:prepare-next-season`,
+      state.world.currentDate
+    );
+    if (!tickClaim.ok) {
+      addToast('A proxima temporada ja esta sendo preparada.', 'warning');
+      return;
+    }
 
-    const newState = startNewSeason(state);
-    newState.world.status = 'LOBBY';
-    newState.world.currentDay = -1;
-    newState.world.startScheduledAt = nextStart.toISOString();
-    newState.world.seasonStartReal = nextStart.toISOString();
-    setState(newState);
-    await saveGame(newState);
-    setIsSeasonEndDismissed(true);
-    addToast('Nova temporada preparada e agendada para amanha 00:00.', 'success');
+    try {
+      const nextStart = getNextRealMidnight();
+      const nextGameStart = getNextGameMidnight(state.world.currentDate);
+
+      const newState = startNewSeason(state);
+      newState.world.status = 'LOBBY';
+      newState.world.currentDay = -1;
+      newState.world.startScheduledAt = nextStart.toISOString();
+      newState.world.seasonStartReal = nextGameStart.toISOString();
+      setState(newState);
+      await saveGame(newState);
+      await completeWorldDayTick(worldId, tickClaim.tickKey, true);
+      setIsSeasonEndDismissed(true);
+      addToast('Nova temporada preparada e agendada para amanha 00:00.', 'success');
+    } catch (error: any) {
+      await completeWorldDayTick(worldId, tickClaim.tickKey, false, error?.message || String(error));
+      console.error('Erro ao preparar nova temporada:', error);
+      addToast('Erro ao preparar nova temporada', 'error');
+    }
   };
 
   const handleResignFromClub = async () => {
-    if (!window.confirm('Deseja se demitir e acompanhar o mundo sem clube? Voce podera assumir outro clube elegivel depois.')) {
-      return;
-    }
+    const confirmed = await requestConfirm({
+      title: 'Demitir do clube',
+      message: 'Voce acompanhara o mundo sem clube e podera assumir outro clube elegivel depois.',
+      confirmLabel: 'Demitir',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
 
     setIsManagerModalOpen(false);
     await resignFromTeam();
@@ -460,25 +488,29 @@ export const Dashboard: React.FC = () => {
               className="flex bg-black/40 backdrop-blur-md rounded-2xl p-1 border border-white/5 shadow-lg overflow-x-auto scrollbar-hide"
             >
               {[
-                ...(isDraftOpen ? [{ id: 'draft', label: 'Draft', icon: Rocket }] : []),
-                { id: 'squad', label: 'Elenco', icon: Users },
-                { id: 'lineup', label: 'Escalação', icon: Shield },
-                { id: 'tactics', label: 'Tática', icon: Brain },
-                { id: 'training', label: 'Treino', icon: Target },
+                ...(isDraftOpen ? [{ id: 'draft', label: 'Draft', icon: Rocket, attention: squadNeedsAttention }] : []),
+                { id: 'squad', label: 'Elenco', icon: Users, attention: squadNeedsAttention },
+                { id: 'lineup', label: 'Escalação', icon: Shield, attention: lineupNeedsAttention },
+                { id: 'tactics', label: 'Tática', icon: Brain, attention: tacticsNeedsAttention },
+                { id: 'training', label: 'Treino', icon: Target, attention: trainingNeedsAttention },
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => {
-                    playClickSound();
-                    triggerHaptic();
+                    runInteractionFeedback();
                     setActiveTeamTab(tab.id as TeamSubTab);
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold transition-all whitespace-nowrap text-[9px] sm:text-[10px] uppercase tracking-widest active:scale-90
+                  className={`relative flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold transition-all whitespace-nowrap text-[9px] sm:text-[10px] uppercase tracking-widest active:scale-90
                     ${activeTeamTab === tab.id
                       ? 'bg-cyan-500 text-black shadow-[0_0_20px_rgba(6,182,212,0.4)]'
-                      : 'text-white/40 hover:text-white hover:bg-white/5'
+                      : tab.attention
+                        ? 'text-cyan-100 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.12)] hover:text-white hover:bg-cyan-400/15'
+                        : 'text-white/40 hover:text-white hover:bg-white/5'
                     }`}
                 >
+                  {tab.attention && activeTeamTab !== tab.id && (
+                    <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
+                  )}
                   <tab.icon size={14} className={activeTeamTab === tab.id ? 'animate-pulse' : ''} />
                   {tab.label}
                 </button>
@@ -499,7 +531,7 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const requiresEntryCreation = !state.userTeamId && state.world.status === 'LOBBY';
+  const requiresEntryCreation = !state.userTeamId && state.world.status === 'LOBBY' && state.world.currentDay < 2;
 
   if (requiresEntryCreation) {
     return <NewGameFlow />;
@@ -510,14 +542,22 @@ export const Dashboard: React.FC = () => {
   const headerLeagueName = headerTeam?.league
     ? (Object.values(state.world.leagues || {}) as LeagueState[]).find(league => league.id === headerTeam.league)?.name
     : null;
+  const handleGlobalInteractionFeedback = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    const interactive = target?.closest('button, a, [role="button"]');
+    if (!interactive) return;
+    if ((interactive as HTMLButtonElement).disabled) return;
+    runInteractionFeedback();
+  };
 
   return (
     <div className="relative h-screen w-screen overflow-hidden text-white font-sans selection:bg-cyan-500/30 stadium-bg"
-      style={{ backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.6), rgba(10, 10, 15, 0.98)), url(${bgImage})` }}>
+      onPointerDownCapture={handleGlobalInteractionFeedback}
+      style={{ backgroundImage: `linear-gradient(to bottom, rgba(14, 15, 17, 0.38), rgba(14, 15, 17, 0.9)), url(${bgImage})` }}>
 
       {/* Background Glows */}
-      <div className="absolute top-0 left-1/4 w-[50%] h-[30] bg-cyan-500/10 blur-[150px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-[50%] h-[30%] bg-fuchsia-500/10 blur-[150px] pointer-events-none animate-pulse" />
+      <div className="absolute top-0 left-1/4 w-[50%] h-[30] bg-[var(--district-norte)]/10 blur-[150px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-0 right-1/4 w-[50%] h-[30%] bg-[var(--district-oeste)]/10 blur-[150px] pointer-events-none animate-pulse" />
 
       {/* Boxed Floating Glass Header */}
       <header className="fixed top-2 sm:top-4 left-1/2 -translate-x-1/2 max-w-7xl w-[96%] sm:w-[92%] glass-card-neon neon-border-cyan white-gradient-sheen z-50 flex items-center px-3 sm:px-8 h-14 sm:h-20 rounded-xl sm:rounded-3xl shadow-[0_15px_40px_rgba(0,0,0,0.7)] group">
@@ -525,8 +565,7 @@ export const Dashboard: React.FC = () => {
           <div
             className="flex items-center gap-2 sm:gap-4 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => {
-              playClickSound();
-              triggerHaptic();
+              runInteractionFeedback();
               setIsManagerModalOpen(true);
             }}
           >
@@ -574,12 +613,14 @@ export const Dashboard: React.FC = () => {
 
           <div className="flex items-center gap-1.5 sm:gap-3">
             <button
-              onClick={() => {
-                playClickSound();
-                triggerHaptic();
-                if (window.confirm('Deseja sair deste mundo e voltar à seleção?')) {
-                  leaveWorld();
-                }
+              onClick={async () => {
+                runInteractionFeedback();
+                const confirmed = await requestConfirm({
+                  title: 'Sair do mundo',
+                  message: 'Voce voltara para a selecao de mundos.',
+                  confirmLabel: 'Sair',
+                });
+                if (confirmed) leaveWorld();
               }}
               className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-black/40 hover:bg-black/60 flex items-center justify-center transition-all border border-cyan-500/30 shadow-inner group active:scale-90"
               title="Sair do Mundo"
@@ -589,26 +630,6 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </header>
-
-      <button
-        onClick={() => {
-          playClickSound();
-          triggerHaptic();
-          togglePause();
-        }}
-        className={`fixed right-3 top-[4.4rem] z-[55] h-10 rounded-2xl border px-3 shadow-2xl backdrop-blur-xl transition active:scale-95 sm:right-6 sm:top-[6.4rem] ${
-          isPaused
-            ? 'border-amber-400/45 bg-amber-500/20 text-amber-100'
-            : 'border-cyan-400/35 bg-black/45 text-cyan-200 hover:bg-cyan-500/10'
-        }`}
-        title={isPaused ? 'Retomar mundo' : 'Pausar mundo'}
-        aria-label={isPaused ? 'Retomar mundo' : 'Pausar mundo'}
-      >
-        <span className="flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.22em]">
-          <Clock size={14} className={isPaused ? 'animate-pulse text-amber-300' : 'text-cyan-300'} />
-          <span className="hidden sm:inline">{isPaused ? 'Pausado' : 'Pausar'}</span>
-        </span>
-      </button>
 
       {/* Main Content Area */}
       <main className="h-full overflow-y-auto pt-4 sm:pt-6 pb-32 sm:pb-40 slim-scrollbar">
@@ -640,28 +661,48 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3">
                     <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_10px_rgba(245,158,11,1)]" />
                     <h2 className="text-sm sm:text-xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">
-                      MODO <span className="text-amber-400">PRE-SEASON</span>
+                      {state.world.currentDay === -1 && state.world.startScheduledAt ? 'INICIO' : 'MODO'} <span className="text-amber-400">{state.world.currentDay === -1 && state.world.startScheduledAt ? 'AGENDADO' : 'PRE-SEASON'}</span>
                     </h2>
                   </div>
                   <p className="text-[7px] sm:text-[10px] xl:text-xs text-slate-400 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] leading-relaxed max-w-xl">
                     {state.world.currentDay === -1
-                      ? "Aguardando participantes. O Draft da Gênese começará assim que você autorizar o início do mundo."
+                      ? state.world.startScheduledAt
+                        ? "Comeca no proximo 00:00. O Draft Genesis abre no Dia 0 e fica ajustavel tambem no Dia 1."
+                        : "Aguardando participantes. O Draft Genesis so abre depois que o GM agendar o inicio."
                       : state.world.currentDay === 2
-                        ? "O Draft foi encerrado. A Liga completou seu elenco automaticamente. Faça os ajustes finais antes do jogo!"
-                        : "Draft em andamento. Escolha seus atletas preferidos. A Liga preencherá as lacunas ao final do Dia 1."}
+                        ? "O Draft foi encerrado. A Liga computou disputas e completou elencos automaticamente."
+                        : state.world.currentDay === 1
+                          ? "Draft Dia 1: ultima janela de ajustes. Na virada para o Dia 2 a liga computa tudo."
+                          : "Draft Dia 0: escolha seus atletas preferidos. As disputas comecam a ser computadas nas viradas."}
                   </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[
+                      ['00:00', 'Draft libera'],
+                      ['Dia 0', 'Monte lista'],
+                      ['Dia 1', 'Ultimo ajuste'],
+                      ['Dia 2', 'Computa tudo'],
+                    ].map(([label, detail]) => (
+                      <div key={label} className="rounded-xl border border-amber-400/15 bg-amber-400/[0.06] px-3 py-2">
+                        <div className="text-[8px] font-black uppercase tracking-[0.22em] text-amber-200">{label}</div>
+                        <div className="mt-1 text-[7px] font-black uppercase tracking-widest text-white/40">{detail}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {state.world.status === 'LOBBY' ? (
                   state.isCreator ? (
                     <button
                       onClick={async () => {
-                        playClickSound();
-                        triggerHaptic();
+                        runInteractionFeedback();
                         const isPreDay = state.world.currentDay === -1;
-                        const nextDay = new Date(state.world.currentDate || Date.now());
-                        nextDay.setDate(nextDay.getDate() + 1);
-                        nextDay.setHours(0, 0, 0, 0);
+                        if (isPreDay && state.world.startScheduledAt) {
+                          addToast('Inicio ja esta agendado para o proximo 00:00.', 'info');
+                          return;
+                        }
+                        const nextDay = getNextRealMidnight();
+                        const nextGameDay = getNextGameMidnight(state.world.currentDate);
+                        const humanCount = (state.participants || []).filter(participant => participant.teamId).length;
                         const newState = {
                           ...state,
                           world: {
@@ -669,23 +710,38 @@ export const Dashboard: React.FC = () => {
                             currentDay: isPreDay ? -1 : state.world.currentDay,
                             status: isPreDay ? 'LOBBY' as const : 'ACTIVE' as const,
                             startScheduledAt: isPreDay ? nextDay.toISOString() : null,
-                            seasonStartReal: nextDay.toISOString()
-                          }
+                            seasonStartReal: nextGameDay.toISOString()
+                          },
+                          notifications: [
+                            {
+                              id: `${isPreDay ? 'season_scheduled' : 'season_started'}_${state.world.currentSeason || 2050}_${Date.now()}`,
+                              date: state.world.currentDate,
+                              title: isPreDay ? 'Inicio agendado' : 'Temporada comecou',
+                              message: isPreDay
+                                ? `O GM agendou o inicio para o proximo 00:00. Humanos confirmados: ${humanCount}.`
+                                : 'O GM abriu a temporada. Calendario, treino, mercado e jogos agora seguem o relogio do mundo.',
+                              type: isPreDay ? 'info' as const : 'success' as const,
+                              read: false
+                            },
+                            ...(state.notifications || []),
+                          ].slice(0, 80)
                         };
                         setState(newState);
                         await saveGame(newState);
+                        addToast(isPreDay ? 'Inicio agendado para o proximo 00:00.' : 'Temporada aberta.', 'success');
                       }}
-                      className="group relative w-full md:w-auto px-6 xl:px-14 py-3 xl:py-5 rounded-xl bg-amber-500 text-black font-black text-[9px] sm:text-xs xl:text-sm uppercase tracking-[0.3em] transition-all duration-500 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(245,158,11,0.4)]"
+                      disabled={state.world.currentDay === -1 && !!state.world.startScheduledAt}
+                      className="group relative w-full md:w-auto px-6 xl:px-14 py-3 xl:py-5 rounded-xl bg-amber-500 text-black font-black text-[9px] sm:text-xs xl:text-sm uppercase tracking-[0.3em] transition-all duration-500 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:bg-amber-300/40 disabled:text-black/55 disabled:shadow-none shadow-[0_0_30px_rgba(245,158,11,0.4)]"
                     >
                       <span className="relative z-10 flex items-center justify-center gap-2 sm:gap-4">
-                        {state.world.currentDay === -1 ? 'AGENDAR INÍCIO' : 'ATIVAR TEMPORADA'}
+                        {state.world.currentDay === -1 && state.world.startScheduledAt ? 'COMECA 00:00' : state.world.currentDay === -1 ? 'AGENDAR INICIO' : 'ATIVAR TEMPORADA'}
                         <PlayCircle size={14} className="group-hover:translate-x-1 transition-transform sm:size-[20px]" />
                       </span>
                     </button>
                   ) : (
                     <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-slate-400 font-bold text-[7px] sm:text-[10px] uppercase tracking-widest italic">
                       <Clock size={12} className="text-amber-500 animate-pulse sm:size-[16px]" />
-                      Aguardando início...
+                      {state.world.startScheduledAt ? 'Inicio no proximo 00:00' : 'Aguardando GM...'}
                     </div>
                   )
                 ) : null}
@@ -712,17 +768,17 @@ export const Dashboard: React.FC = () => {
       <nav className="fixed bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 max-w-3xl w-[96%] sm:w-[92%] glass-card rounded-[1.5rem] sm:rounded-[3rem] p-1 sm:p-2.5 flex justify-between items-center z-50 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-3xl">
         {[
           { id: 'home', label: 'Home', icon: Home },
-          { id: 'team', label: isObserver ? 'Entrar' : 'Elenco', icon: Users },
-          { id: 'calendar', label: 'Calendário', icon: Calendar },
-          { id: 'world', label: 'Mundo', icon: Trophy },
+          { id: 'team', label: isObserver ? 'Entrar' : 'Elenco', icon: Users, attention: teamNeedsAttention },
+          { id: 'calendar', label: 'Calendario', icon: Calendar, attention: calendarNeedsAttention },
+          { id: 'world', label: 'Mundo', icon: Trophy, attention: marketNeedsAttention },
           ...(isObserver ? [] : [{ id: 'career', label: 'Carreira', icon: Briefcase }]),
         ].map(tab => (
           <button
             key={tab.id}
+            data-testid={`main-tab-${tab.id}`}
             onClick={() => {
               if (activeTab !== tab.id) {
-                playClickSound();
-                triggerHaptic();
+                runInteractionFeedback();
                 setActiveTab(tab.id as Tab);
                 // Force Draft sub-tab if going to team during Genesis
                 if (tab.id === 'team' && isDraftOpen) {
@@ -730,8 +786,11 @@ export const Dashboard: React.FC = () => {
                 }
               }
             }}
-            className={`flex-1 flex flex-col items-center gap-1 sm:gap-2 py-2 sm:py-4 rounded-[1.2rem] sm:rounded-[2.5rem] transition-all relative group active:scale-90 ${activeTab === tab.id ? 'text-cyan-400' : 'text-white/20 hover:text-white/50'}`}
+            className={`flex-1 flex flex-col items-center gap-1 sm:gap-2 py-2 sm:py-4 rounded-[1.2rem] sm:rounded-[2.5rem] transition-all relative group active:scale-90 ${activeTab === tab.id ? 'text-cyan-400' : 'text-white/20 hover:text-white/50'} ${tab.attention && activeTab !== tab.id ? 'text-cyan-200 shadow-[0_0_24px_rgba(34,211,238,0.16)]' : ''}`}
           >
+            {tab.attention && activeTab !== tab.id && (
+              <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.95)]" />
+            )}
             {activeTab === tab.id && (
               <motion.div
                 layoutId="nav-glow"
@@ -987,6 +1046,13 @@ export const Dashboard: React.FC = () => {
           />
         )}
 
+        {selectedManager && (
+          <ManagerModal
+            manager={selectedManager}
+            onClose={() => setSelectedManager(null)}
+          />
+        )}
+
         {isFeedbackOpen && (
           <FeedbackReportModal
             currentTab={activeTab === 'team' ? `team:${activeTeamTab}` : activeTab}
@@ -1027,6 +1093,10 @@ export const Dashboard: React.FC = () => {
               setSelectedTeamView(null);
             }}
             onTeamClick={setSelectedTeamView}
+            onManagerClick={(manager) => {
+              setSelectedTeamView(null);
+              setSelectedManager(manager);
+            }}
           />
         )}
       </AnimatePresence>

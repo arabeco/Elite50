@@ -1,68 +1,9 @@
 import React from 'react';
-import { Player, District } from '../types';
+import { Player } from '../types';
 import { getHairAssetPath, getHairOffset, HAIR_FILES_BY_GENDER } from '../constants/avatarAssets';
 import { useGame } from '../store/GameContext';
 import { getBootAssetPathByVisualId, getResolvedKitAssetPath } from '../utils/store';
-
-export const TEAM_UNIFORM_FILES = [
-  'CÃ³pia_de_Design_sem_nome__6_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__7_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__8_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__9_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__10_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__11_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__12_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__13_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__14_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__15_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__16_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__17_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__18_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__19_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__20_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__21_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__22_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__23_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__26_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__27_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__28_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__29_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__30_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__31_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__32_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__34_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__35_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__36_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__37_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__39_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__40_-removebg-preview.png',
-  'CÃ³pia_de_Design_sem_nome__41_-removebg-preview.png',
-];
-
-export const getTeamUniformFile = (teamId?: string | null) => {
-  const match = teamId?.match(/^t_(\d+)$/);
-  if (!match) return null;
-
-  const teamNumber = Number(match[1]);
-  if (!Number.isInteger(teamNumber) || teamNumber < 1) {
-    return null;
-  }
-
-  const safeUniforms = [
-    'uniform_cyan.png',
-    'uniform_orange.png',
-    'uniform_green.png',
-    'uniform_purple.png',
-    'special1.png',
-    'special2.png',
-    'special3.png',
-    'sspecial4.png',
-    'special5.png',
-    'special6.png',
-  ];
-
-  return safeUniforms[(teamNumber - 1) % safeUniforms.length];
-};
+import { getDistrictUniformAssetPath, getTeamUniformAssetPath } from '../utils/teamIdentity';
 
 interface PlayerAvatarProps {
   player: Player;
@@ -92,21 +33,6 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   const hairOffsetX = `${hairOffset.x}%`;
   const hairOffsetY = `${hairOffset.y}%`;
 
-  const getUniformSuffix = (value: District) => {
-    switch (value) {
-      case 'NORTE':
-        return 'cyan';
-      case 'SUL':
-        return 'orange';
-      case 'LESTE':
-        return 'green';
-      case 'OESTE':
-        return 'purple';
-      default:
-        return 'cyan';
-    }
-  };
-
   const sizes = {
     xs: 'w-8 h-8',
     sm: 'w-12 h-12',
@@ -115,16 +41,12 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
     xl: 'w-64 h-64',
   };
 
-  const uniformSuffix = getUniformSuffix(district);
-  const genderKey = visualGender === 'M' ? 'm' : 'f';
   const assetsBase = '/assetas/avatars';
+  const genderKey = visualGender === 'M' ? 'm' : 'f';
   const bodyPath = `${assetsBase}/bodies/body_${genderKey}_${visualBodyId}.png`;
   const hairPath = getHairAssetPath(visualGender, hairFile);
-  const teamUniformFile = getTeamUniformFile(player.contract.teamId);
   const equippedKitPath = getResolvedKitAssetPath(state, player.contract.teamId);
-  const uniformPath = equippedKitPath || (teamUniformFile
-    ? encodeURI(`${assetsBase}/uniforms/${teamUniformFile}`)
-    : `${assetsBase}/uniforms/uniform_${uniformSuffix}.png`);
+  const uniformPath = equippedKitPath || getTeamUniformAssetPath(player.contract.teamId) || getDistrictUniformAssetPath(district);
   const bootId = Math.max(1, appearance.bootId || 1);
   const bootPath = getBootAssetPathByVisualId(bootId);
 

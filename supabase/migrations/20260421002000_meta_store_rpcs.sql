@@ -205,7 +205,9 @@ end;
 $$;
 
 create or replace function public.grant_mobile_purchase(
+  p_user_id uuid,
   p_product_code text,
+  p_product_id text,
   p_purchase_token text default null,
   p_order_id text default null,
   p_platform text default 'android',
@@ -220,20 +222,47 @@ security definer
 set search_path = public
 as $$
 declare
-  v_user_id uuid;
+  v_existing public.mobile_purchases%rowtype;
   v_active_circuit_id text;
   v_gold integer := 0;
   v_fragments integer := 0;
   v_premium boolean := false;
   v_premium_until timestamptz;
 begin
-  v_user_id := auth.uid();
-
-  if v_user_id is null then
-    raise exception 'AUTH_REQUIRED';
+  if p_user_id is null then
+    raise exception 'USER_REQUIRED';
   end if;
 
-  perform public.ensure_user_meta();
+  if nullif(trim(coalesce(p_purchase_token, '')), '') is null then
+    raise exception 'TOKEN_REQUIRED';
+  end if;
+
+  if nullif(trim(coalesce(p_product_code, '')), '') is null then
+    raise exception 'PRODUCT_CODE_REQUIRED';
+  end if;
+
+  if nullif(trim(coalesce(p_product_id, '')), '') is null then
+    raise exception 'PRODUCT_ID_REQUIRED';
+  end if;
+
+  select *
+    into v_existing
+  from public.mobile_purchases
+  where purchase_token = p_purchase_token
+  for update;
+
+  if found then
+    if v_existing.user_id <> p_user_id then
+      raise exception 'TOKEN_ALREADY_USED';
+    end if;
+
+    return jsonb_build_object(
+      'ok', true,
+      'duplicate', true,
+      'purchaseId', v_existing.id,
+      'productCode', v_existing.product_code
+    );
+  end if;
 
   select id
     into v_active_circuit_id
@@ -242,27 +271,52 @@ begin
   order by starts_at desc
   limit 1;
 
-  if p_product_code in ('passe_circuito_neon_01', 'premium_circuito_neon_01', 'elite2050_premium_monthly', 'premium_monthly') then
+  insert into public.profiles_meta (
+    user_id,
+    current_circuit_id,
+    gold_balance,
+    fragment_balance
+  )
+  values (
+    p_user_id,
+    v_active_circuit_id,
+    80,
+    0
+  )
+  on conflict (user_id) do update
+  set current_circuit_id = coalesce(public.profiles_meta.current_circuit_id, excluded.current_circuit_id),
+      updated_at = now();
+
+  if v_active_circuit_id is not null then
+    insert into public.user_circuit_progress (
+      user_id,
+      circuit_id
+    )
+    values (
+      p_user_id,
+      v_active_circuit_id
+    )
+    on conflict (user_id, circuit_id) do nothing;
+  end if;
+
+  if p_product_code = 'passe_circuito_neon_01' and p_product_id = 'passe_circuito_neon_01' then
     v_premium := true;
     v_premium_until := coalesce(p_expires_at, now() + interval '90 days');
-  elsif p_product_code in ('gold_100', 'elite2050_gold_100') then
+  elsif p_product_code = 'elite2050_gold_100' and p_product_id = 'elite2050_gold_100' then
     v_gold := 100;
-  elsif p_product_code in ('gold_300', 'elite2050_gold_300') then
+  elsif p_product_code = 'elite2050_gold_300' and p_product_id = 'elite2050_gold_300' then
     v_gold := 300;
-  elsif p_product_code in ('gold_700', 'elite2050_gold_700') then
+  elsif p_product_code = 'elite2050_gold_700' and p_product_id = 'elite2050_gold_700' then
     v_gold := 700;
-  elsif p_product_code in ('fragments_25', 'elite2050_fragments_25') then
-    v_fragments := 25;
-  elsif p_product_code in ('fragments_80', 'elite2050_fragments_80') then
-    v_fragments := 80;
   else
-    return jsonb_build_object('ok', false, 'reason', 'UNKNOWN_PRODUCT', 'productCode', p_product_code);
+    return jsonb_build_object('ok', false, 'reason', 'PRODUCT_MISMATCH', 'productCode', p_product_code);
   end if;
 
   insert into public.mobile_purchases (
     user_id,
     provider,
     product_code,
+    product_id,
     purchase_token,
     order_id,
     package_name,
@@ -276,9 +330,10 @@ begin
     raw_payload
   )
   values (
-    v_user_id,
+    p_user_id,
     'google_play',
     p_product_code,
+    p_product_id,
     p_purchase_token,
     p_order_id,
     p_package_name,
@@ -290,16 +345,7 @@ begin
     now(),
     v_premium_until,
     p_raw_payload
-  )
-  on conflict (purchase_token) where purchase_token is not null do update
-  set order_id = coalesce(excluded.order_id, public.mobile_purchases.order_id),
-      status = 'GRANTED',
-      purchase_state = excluded.purchase_state,
-      acknowledged = true,
-      consumed = excluded.consumed,
-      expires_at = coalesce(excluded.expires_at, public.mobile_purchases.expires_at),
-      raw_payload = excluded.raw_payload,
-      updated_at = now();
+  );
 
   update public.profiles_meta
   set gold_balance = gold_balance + v_gold,
@@ -309,7 +355,7 @@ begin
       premium_until = case when v_premium then greatest(coalesce(premium_until, now()), v_premium_until) else premium_until end,
       current_circuit_id = coalesce(current_circuit_id, v_active_circuit_id),
       updated_at = now()
-  where user_id = v_user_id;
+  where user_id = p_user_id;
 
   if v_premium and v_active_circuit_id is not null then
     insert into public.user_circuit_progress (
@@ -318,7 +364,7 @@ begin
       premium_unlocked
     )
     values (
-      v_user_id,
+      p_user_id,
       v_active_circuit_id,
       true
     )
@@ -329,6 +375,7 @@ begin
 
   return jsonb_build_object(
     'ok', true,
+    'duplicate', false,
     'productCode', p_product_code,
     'premium', v_premium,
     'premiumUntil', v_premium_until,
@@ -341,4 +388,5 @@ $$;
 grant execute on function public.ensure_user_meta() to authenticated;
 grant execute on function public.purchase_catalog_item_with_balance(text) to authenticated;
 grant execute on function public.grant_catalog_item(text, text, text) to authenticated;
-grant execute on function public.grant_mobile_purchase(text, text, text, text, text, text, timestamptz, jsonb) to authenticated;
+revoke all on function public.grant_mobile_purchase(uuid, text, text, text, text, text, text, text, timestamptz, jsonb) from public, anon, authenticated;
+grant execute on function public.grant_mobile_purchase(uuid, text, text, text, text, text, text, text, timestamptz, jsonb) to service_role;

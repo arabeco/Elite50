@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { processNightMarket, calculateAttractiveness, calculatePostMatchProgression, calculateTradeAcceptanceChance } from '../engine/economyLogic';
+import { calculateTeamPower } from '../engine/gameLogic';
+import { generateInitialState, generatePlayer } from '../engine/generator';
 import { simulateMatch, TeamStats } from '../engine/MatchEngine';
-import { generatePlayer } from '../engine/generator';
 import { GameState, Player, Team } from '../types';
 
 const makePlayer = (id: string, teamId: string | null, rating: number, role: Player['role']): Player => {
@@ -62,6 +63,35 @@ const makeTeam = (id: string, squad: Player[], powerCap = 10000): Team => ({
 });
 
 describe('balance QA', () => {
+  it('seeds clubs, player history and the free-agent pool in playable balance bands', () => {
+    const state = generateInitialState();
+    const clubs = Object.values(state.teams).filter(team => team.id.startsWith('t_'));
+    const players = Object.values(state.players);
+    const activePlayers = players.filter(player => player.district !== 'EXILADO');
+    const freeAgents = activePlayers.filter(player => !player.contract.teamId);
+    const clubPowers = clubs.map(team => ({
+      team,
+      power: calculateTeamPower(team, state.players)
+    }));
+
+    expect(players).toHaveLength(1000);
+    expect(players.every(player =>
+      !!player.history.careerGamesPlayed &&
+      !!player.history.legacyTag &&
+      (player.history.seasonSnapshots?.length || 0) >= 2
+    )).toBe(true);
+
+    expect(freeAgents.filter(player => player.totalRating >= 800).length).toBeLessThanOrEqual(8);
+    expect(freeAgents.filter(player => player.totalRating >= 700 && player.totalRating < 800).length).toBeGreaterThanOrEqual(24);
+    expect(freeAgents.filter(player => player.totalRating >= 620 && player.totalRating < 700).length).toBeGreaterThanOrEqual(36);
+    expect(freeAgents.filter(player => player.totalRating >= 500 && player.totalRating < 620).length).toBeGreaterThanOrEqual(24);
+
+    expect(Math.min(...clubPowers.map(item => item.power))).toBeGreaterThanOrEqual(7200);
+    expect(Math.max(...clubPowers.map(item => item.power))).toBeGreaterThanOrEqual(11000);
+    expect(clubPowers.every(({ team, power }) => power <= (team.powerCap || 0))).toBe(true);
+    expect(clubs.every(team => (team.legacy?.seasonsPlayed || 0) >= 4 && (team.legacy?.peakScore || 0) >= calculateTeamPower(team, state.players))).toBe(true);
+  });
+
   it('keeps neutral match scorelines and player ratings in sane ranges over repeated sims', () => {
     const totals: number[] = [];
     const ratingAverages: number[] = [];

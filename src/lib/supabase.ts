@@ -16,7 +16,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      flowType: 'pkce',
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
 );
 
 const createDefaultTrainingState = (): TrainingState => ({
@@ -541,7 +549,13 @@ export const listUserWorlds = async () => {
     id: d.world_id,
     updatedAt: d.updated_at,
     userId: d.user_id,
-    name: (d.world_state as any).name || `Mundo ${d.world_id}`
+    name: (d.world_state as any).name || `Mundo ${d.world_id}`,
+    isCreator: d.is_creator !== false,
+    status: (d.world_state as any).status || null,
+    phase: (d.world_state as any).phase || null,
+    currentDay: (d.world_state as any).currentDay ?? null,
+    currentSeason: (d.world_state as any).currentSeason ?? null,
+    startScheduledAt: (d.world_state as any).startScheduledAt || null
   }));
 };
 
@@ -589,7 +603,12 @@ export const listPublicWorlds = async () => {
     id: d.world_id,
     updatedAt: d.updated_at,
     userId: d.user_id,
-    name: (d.world_state as any).name || `Mundo ${d.world_id}`
+    name: (d.world_state as any).name || `Mundo ${d.world_id}`,
+    status: (d.world_state as any).status || null,
+    phase: (d.world_state as any).phase || null,
+    currentDay: (d.world_state as any).currentDay ?? null,
+    currentSeason: (d.world_state as any).currentSeason ?? null,
+    startScheduledAt: (d.world_state as any).startScheduledAt || null
   }));
 };
 

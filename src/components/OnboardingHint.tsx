@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Check, Lightbulb, X } from 'lucide-react';
+import { isInitialHelpEnabled, ONBOARDING_SEEN_KEY, setInitialHelpEnabled } from '../utils/uiFeedback';
 
-const STORAGE_KEY = 'elite2050:onboarding:v1';
+const STORAGE_KEY = ONBOARDING_SEEN_KEY;
 
 export type OnboardingArea =
   | 'home'
@@ -14,7 +15,8 @@ export type OnboardingArea =
   | 'team-training'
   | 'calendar'
   | 'world'
-  | 'career';
+  | 'career'
+  | 'inventory';
 
 interface HintContent {
   title: string;
@@ -88,6 +90,12 @@ const HINTS: Record<OnboardingArea, HintContent> = {
     body: 'Seu perfil de manager, codigo do mundo e ferramentas de GM ficam aqui.',
     next: 'Use o codigo para chamar outro jogador para o multiplayer.',
     target: 'screen-career'
+  },
+  inventory: {
+    title: 'Inventario Global',
+    body: 'Itens do perfil vivem fora do mundo. Chuteiras, trofeus, itens de manager e visuais acompanham voce entre saves.',
+    next: 'Equipe chuteiras em jogadores dentro do mundo e escolha ate 3 itens para exibir no perfil.',
+    target: 'screen-inventory'
   }
 };
 
@@ -114,6 +122,7 @@ interface OnboardingHintProps {
 
 export const OnboardingHint: React.FC<OnboardingHintProps> = ({ area, actionHint }) => {
   const [seenHints, setSeenHints] = useState<Set<string>>(() => readSeenHints());
+  const [helpEnabled, setHelpEnabled] = useState(() => isInitialHelpEnabled());
   const [isVisible, setIsVisible] = useState(false);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const hint = actionHint || HINTS[area];
@@ -121,8 +130,21 @@ export const OnboardingHint: React.FC<OnboardingHintProps> = ({ area, actionHint
   const allHintKeys = useMemo(() => Object.keys(HINTS) as OnboardingArea[], []);
 
   useEffect(() => {
-    setIsVisible(!seenHints.has(hintKey));
-  }, [hintKey, seenHints]);
+    setIsVisible(helpEnabled && !seenHints.has(hintKey));
+  }, [helpEnabled, hintKey, seenHints]);
+
+  useEffect(() => {
+    const refreshPreference = () => {
+      setHelpEnabled(isInitialHelpEnabled());
+      setSeenHints(readSeenHints());
+    };
+    window.addEventListener('storage', refreshPreference);
+    window.addEventListener('elite-ui-preferences-changed', refreshPreference);
+    return () => {
+      window.removeEventListener('storage', refreshPreference);
+      window.removeEventListener('elite-ui-preferences-changed', refreshPreference);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isVisible || !hint?.target) {
@@ -157,7 +179,13 @@ export const OnboardingHint: React.FC<OnboardingHintProps> = ({ area, actionHint
     setIsVisible(false);
   };
 
-  if (!hint) return null;
+  const disableAllHints = () => {
+    setInitialHelpEnabled(false);
+    setHelpEnabled(false);
+    markSeen([...allHintKeys, hintKey]);
+  };
+
+  if (!hint || !helpEnabled) return null;
 
   return (
     <AnimatePresence>
@@ -230,7 +258,7 @@ export const OnboardingHint: React.FC<OnboardingHintProps> = ({ area, actionHint
                 </button>
                 <button
                   type="button"
-                  onClick={() => markSeen([...allHintKeys, hintKey])}
+                  onClick={disableAllHints}
                   className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/10 hover:text-white active:scale-95"
                 >
                   Nao mostrar dicas

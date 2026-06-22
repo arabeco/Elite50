@@ -144,7 +144,7 @@ describe('HomeTab gameplay GPS smoke', () => {
     expect(screen.getByText(/TEMPORADA/i)).toBeInTheDocument();
     expect(screen.getByText(/Time pronto/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Proximo jogo/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Mercado/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Mercado/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Depois disso: quando o relogio chegar/i)).toBeInTheDocument();
 
     await waitFor(() => {

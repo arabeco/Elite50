@@ -8,6 +8,7 @@ import { useGame } from '../store/GameContext';
 import { useTransfers } from '../hooks/useTransfers';
 import { getBootImagePath } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
+import { runElitePlayerFeedback, runInteractionFeedback } from '../utils/uiFeedback';
 
 interface PlayerCardProps {
   player: Player;
@@ -18,12 +19,17 @@ interface PlayerCardProps {
   onDragStart?: (e: React.DragEvent, player: Player) => void;
   teamLogo?: TeamLogoMetadata;
   onTeamClick?: (teamId: string) => void;
+  actionDisabled?: boolean;
+  actionLabel?: string;
+  actionDisabledLabel?: string;
 }
 
-const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onProposta, variant = 'full', draggable, onDragStart, teamLogo, onTeamClick }) => {
+const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onProposta, variant = 'full', draggable, onDragStart, teamLogo, onTeamClick, actionDisabled, actionLabel, actionDisabledLabel }) => {
   const { state } = useGame();
   const { handleCancelDraftProposal } = useTransfers(null, 0, 0);
   const isDraftPending = state.world.status === 'LOBBY' &&
+    state.world.currentDay >= 0 &&
+    state.world.currentDay < 2 &&
     state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
@@ -32,6 +38,14 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
   const globalRank = getPlayerGlobalRank(state, player.id);
   const eliteBadgeLabel = getEliteBadgeLabel(globalRank);
   const eliteTier = getEliteTier(globalRank);
+  const handleCardOpen = () => {
+    if (eliteTier) {
+      runElitePlayerFeedback(eliteTier);
+    } else {
+      runInteractionFeedback();
+    }
+    onClick(player);
+  };
   const visualSeed = Math.abs(player.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
   const isLegacyDefaultAppearance = player.appearance.bodyId === 1 && player.appearance.hairId === 1 && player.appearance.bootId === 1;
   const visualGender = isLegacyDefaultAppearance ? (visualSeed % 2 === 0 ? 'M' : 'F') : player.appearance.gender;
@@ -87,7 +101,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     return (
       <motion.div
         layoutId={`player-card-${player.id}`}
-        onClick={() => onClick(player)}
+        onClick={handleCardOpen}
         draggable={draggable}
         onDragStart={(e: any) => onDragStart && onDragStart(e, player)}
         className={`w-full bg-black/60 backdrop-blur-md border border-white/10 rounded-xl p-2 flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors shadow-[0_0_10px_rgba(0,0,0,0.3)] ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -128,7 +142,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     return (
       <motion.div
         layoutId={`player-card-${player.id}`}
-        onClick={() => onClick(player)}
+        onClick={handleCardOpen}
         draggable={draggable}
         onDragStart={(e: any) => onDragStart && onDragStart(e, player)}
         className={`w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-3 flex items-center gap-4 cursor-pointer hover:bg-white/5 transition-colors shadow-[0_0_15px_rgba(0,0,0,0.2)] group relative overflow-hidden ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -191,7 +205,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     return (
       <motion.div
         layoutId={`player-card-${player.id}`}
-        onClick={() => onClick(player)}
+        onClick={handleCardOpen}
         className={`w-full bg-black/60 backdrop-blur-md border border-white/10 rounded-lg p-1.5 flex flex-col justify-between cursor-pointer hover:bg-white/10 transition-colors shadow-lg overflow-hidden min-h-[50px]`}
       >
         <div className="flex justify-between items-start">
@@ -224,7 +238,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
     return (
       <motion.div
         layoutId={`player-card-${player.id}`}
-        onClick={() => onClick(player)}
+        onClick={handleCardOpen}
         draggable={draggable}
         onDragStart={(e: any) => onDragStart && onDragStart(e, player)}
         className={`relative w-full aspect-[1/1.3] sm:aspect-[1/1.5] rounded-xl border bg-gradient-to-br ${style.bg} ${style.border} shadow-[0_2px_8px_rgba(0,0,0,0.2)] ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} hover:scale-[1.05] transition-transform flex flex-col justify-between p-1 sm:p-1.5 overflow-hidden backdrop-blur-md`}
@@ -316,12 +330,12 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
   return (
     <motion.div
       layoutId={`player-card-${player.id}`}
-      onClick={() => onClick(player)}
+      onClick={handleCardOpen}
       draggable={draggable}
       onDragStart={(e: any) => onDragStart && onDragStart(e, player)}
       className={`relative w-full aspect-[1/1.4] sm:aspect-[1/1.6] rounded-xl sm:rounded-2xl glass-card-neon overflow-hidden group 
         ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} 
-        hover:scale-[1.05] hover:-translate-y-2 transition-all duration-500 shadow-2xl ${eliteTier === 'top50' ? 'shadow-[0_0_24px_rgba(34,211,238,0.18)]' : ''} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_28px_rgba(245,158,11,0.22)]' : ''}`}
+        hover:scale-[1.05] hover:-translate-y-2 transition-all duration-500 shadow-2xl ${eliteTier ? `elite-player-card elite-${eliteTier}` : ''} ${eliteTier === 'top50' ? 'shadow-[0_0_24px_rgba(34,211,238,0.18)]' : ''} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_28px_rgba(245,158,11,0.22)]' : ''}`}
     >
       {isDraftPending && (
         <div className="absolute inset-0 bg-amber-500/10 backdrop-blur-[2px] z-[60] flex flex-col items-center justify-center p-4 text-center">
@@ -346,6 +360,16 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
 
       {/* Holographic Shine Effect */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-30 transition-opacity duration-700 bg-gradient-to-tr from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full z-30" />
+      {eliteTier && (
+        <>
+          <div className="elite-glimmer absolute inset-0 z-30 pointer-events-none" />
+          <div className="elite-rank-chip absolute left-2 top-12 z-50 sm:left-4 sm:top-20">
+            <span className="rounded-full border border-white/15 bg-black/55 px-2 py-1 text-[6px] font-black uppercase tracking-[0.28em] text-white/85 backdrop-blur-md sm:text-[7px]">
+              #{globalRank} mundial
+            </span>
+          </div>
+        </>
+      )}
 
       {/* Background Avatar with Glass Overlay */}
       <div className="absolute inset-0 z-10">
@@ -465,12 +489,14 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
           <button
             onClick={(e) => {
               e.stopPropagation();
+              if (actionDisabled) return;
               onProposta(player);
             }}
-            className="w-full h-7 sm:h-10 mt-2 sm:mt-4 bg-white text-black text-[8px] sm:text-[10px] font-black rounded sm:rounded-xl transition-all active:scale-95 uppercase tracking-[0.2em] hover:bg-cyan-400 hover:text-black shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex items-center justify-center gap-1.5 sm:gap-2 group/btn"
+            disabled={actionDisabled}
+            className="w-full h-7 sm:h-10 mt-2 sm:mt-4 bg-white text-black text-[8px] sm:text-[10px] font-black rounded sm:rounded-xl transition-all active:scale-95 uppercase tracking-[0.2em] hover:bg-cyan-400 hover:text-black shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex items-center justify-center gap-1.5 sm:gap-2 group/btn disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
           >
             <Zap size={10} fill="currentColor" className="group-hover/btn:animate-pulse sm:size-[14px]" />
-            {state.world.status === 'DRAFT' ? 'CONTRATAR' : 'PROPOR ROUBO'}
+            {actionDisabled ? (actionDisabledLabel || 'BLOQUEADO') : (actionLabel || (state.world.status === 'DRAFT' ? 'CONTRATAR' : 'PROPOR'))}
           </button>
         )}
       </div>

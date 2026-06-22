@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Elite 2050</string>
+    <string name="title_activity_main">Elite 2050</string>
+    <string name="package_name">com.becoslab.elite2050</string>
+    <string name="custom_url_scheme">com.becoslab.elite2050</string>
+</resources>

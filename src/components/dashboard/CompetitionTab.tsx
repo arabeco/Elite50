@@ -56,13 +56,14 @@ export const CompetitionTab = (props: any) => {
   };
 
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const isBeforeKickoff = state.world.status === 'LOBBY' && state.world.currentDay < 0;
 
   React.useEffect(() => {
     const nextMatch = upcomingMatches[0];
     if (!nextMatch) return;
 
     const timer = setInterval(() => {
-      if (state.world.status === 'LOBBY') {
+      if (isBeforeKickoff) {
         setTimeLeft('--D • --H');
         return;
       }
@@ -88,7 +89,7 @@ export const CompetitionTab = (props: any) => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [upcomingMatches, state.world.currentDate]);
+  }, [isBeforeKickoff, upcomingMatches, state.world.currentDate]);
 
   const calendarEvents = React.useMemo(() => {
     const events: any[] = [];
@@ -170,7 +171,7 @@ export const CompetitionTab = (props: any) => {
                 PRÓXIMO JOGO
               </h3>
               <div className="text-3xl sm:text-7xl font-black text-white tracking-tighter italic leading-tight">
-                {state.world.status === 'LOBBY' ? '--D • --H' : timeLeft}
+                {isBeforeKickoff ? '--D • --H' : timeLeft}
               </div>
             </div>
 
@@ -193,7 +194,7 @@ export const CompetitionTab = (props: any) => {
                         </button>
               </div>
               <p className="text-[8px] sm:text-xs text-slate-500 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em]">
-                {state.world.status === 'LOBBY' ? '--/--' : formattedDate} • {state.world.status === 'LOBBY' ? '--:--' : nextMatch.time} • RODADA {nextMatch.id.split('_')[1]}
+                {isBeforeKickoff ? '--/--' : formattedDate} • {isBeforeKickoff ? '--:--' : nextMatch.time} • RODADA {nextMatch.id.split('_')[1]}
               </p>
             </div>
           </div>
@@ -281,10 +282,10 @@ export const CompetitionTab = (props: any) => {
                     {/* Date & Time */}
                     <div className="flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[4rem] pr-2 sm:pr-3 border-r border-white/5 h-full">
                       <span className="text-[7px] sm:text-[10px] font-black text-white/50 uppercase leading-none mb-0.5">
-                        {state.world.status === 'LOBBY' ? '--/--' : event.date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
+                        {isBeforeKickoff ? '--/--' : event.date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
                       </span>
                       <span className={`text-[8px] sm:text-[11px] font-bold ${isPlayed ? 'text-slate-500' : 'text-cyan-400'} leading-none`}>
-                        {isPlayed ? 'FIM' : state.world.status === 'LOBBY' ? '--:--' : event.data.time}
+                        {isPlayed ? 'FIM' : isBeforeKickoff ? '--:--' : event.data.time}
                       </span>
                     </div>
 

@@ -16,7 +16,7 @@ import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, Team, GameNotification, ClubOffer } from '../../types';
 import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3 } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } = LucideIcons;
 
 
 export const WorldTab = (props: any) => {
@@ -27,7 +27,7 @@ export const WorldTab = (props: any) => {
   const { handleUpdateTactics } = useTactics(userTeam?.id || null);
   const { handleSetFocus, handleStartCardLab, handleChemistryBoost } = useTraining(userTeam?.id || null);
   const { handleAdvanceDay } = useGameDay();
-  const { handleMakeProposal } = useTransfers(userTeam?.id || null, dashData.totalPoints, dashData.powerCap);
+  const { handleMakeProposal, handleSellPlayer } = useTransfers(userTeam?.id || null, dashData.totalPoints, dashData.powerCap);
 
   // Local states for WorldTab
   const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export const WorldTab = (props: any) => {
   const [marketSearch, setMarketSearch] = useState('');
   const [marketDistrict, setMarketDistrict] = useState('all');
   const [marketPosition, setMarketPosition] = useState('all');
-  const [marketSatisfactionMax, setMarketSatisfactionMax] = useState(100);
+  const [marketSatisfactionMax, setMarketSatisfactionMax] = useState(79);
   const [marketPointsMin, setMarketPointsMin] = useState(0);
   const [marketPointsMax, setMarketPointsMax] = useState(1000);
   const [marketOnlyExiled, setMarketOnlyExiled] = useState(false);
@@ -74,6 +74,8 @@ export const WorldTab = (props: any) => {
   const filteredMarketPlayers = players
     .filter(p => {
       const isExiled = !p.contract.teamId;
+      const isOwnPlayer = Boolean(userTeam?.id && p.contract.teamId === userTeam.id);
+      if (isOwnPlayer) return false;
       if (marketOnlyExiled && !isExiled) return false;
 
       const matchesSearch = p.name.toLowerCase().includes(marketSearch.toLowerCase()) || p.nickname.toLowerCase().includes(marketSearch.toLowerCase());
@@ -85,6 +87,46 @@ export const WorldTab = (props: any) => {
       return matchesSearch && matchesDistrict && matchesPosition && matchesPoints && matchesSatisfaction && matchesPotential;
     })
     .slice(0, marketLimit);
+  const userSquadPlayers = userTeam ? userTeam.squad.map(id => state.players[id]).filter(Boolean) : [];
+  const unhappySquadPlayers = [...userSquadPlayers]
+    .filter(player => player.satisfaction <= 65 || (player.history.benchGamesCount || 0) >= 3)
+    .sort((a, b) => {
+      if (a.satisfaction !== b.satisfaction) return a.satisfaction - b.satisfaction;
+      return a.totalRating - b.totalRating;
+    })
+    .slice(0, 4);
+  const seasonValuation = userSquadPlayers.reduce((sum, player) => sum + Math.max(0, player.history.seasonRatingDelta || 0), 0);
+  const negativeValuation = userSquadPlayers.reduce((sum, player) => sum + Math.min(0, player.history.seasonRatingDelta || 0), 0);
+  const myDraftProposals = (state.world.draftProposals || []).filter(proposal => proposal.managerId === state.userManagerId);
+  const pendingTransferProposals = (state.transferProposals || []).filter(proposal =>
+    proposal.toTeamId === userTeam?.id && proposal.status === 'PENDING'
+  );
+  const pendingIncomingTrades = (state.tradeOffers || []).filter(offer =>
+    offer.toTeamId === userTeam?.id && offer.status === 'PENDING'
+  );
+  const pendingOutgoingTrades = (state.tradeOffers || []).filter(offer =>
+    offer.fromTeamId === userTeam?.id && offer.status === 'PENDING'
+  );
+  const reservedDraftScore = myDraftProposals.reduce((sum, proposal) => sum + (state.players[proposal.playerId]?.totalRating || 0), 0);
+  const pendingMarketScore = pendingTransferProposals.reduce((sum, proposal) => sum + (state.players[proposal.playerId]?.totalRating || 0), 0);
+  const marketReservedScore = reservedDraftScore + pendingMarketScore;
+  const effectiveMarketSpace = Math.max(0, dashData.pointsLeft - marketReservedScore);
+  const capUsagePercent = dashData.powerCap > 0 ? Math.min(100, Math.round((dashData.totalPoints / dashData.powerCap) * 100)) : 0;
+  const frozenCapPercent = dashData.powerCap > 0 ? Math.min(100 - capUsagePercent, Math.round((marketReservedScore / dashData.powerCap) * 100)) : 0;
+  const freeCapPercent = Math.max(0, 100 - capUsagePercent - frozenCapPercent);
+  const marketFitCount = players.filter(player =>
+    !player.contract.teamId &&
+    player.district !== 'EXILADO' &&
+    player.satisfaction <= 79 &&
+    player.totalRating <= effectiveMarketSpace
+  ).length;
+  const affordableUpsideCount = players.filter(player =>
+    !player.contract.teamId &&
+    player.district !== 'EXILADO' &&
+    player.satisfaction <= 79 &&
+    player.totalRating <= effectiveMarketSpace &&
+    player.potential - player.totalRating >= 60
+  ).length;
   const filteredRankingPlayers = [...players]
     .filter(player => {
       const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
@@ -127,6 +169,7 @@ export const WorldTab = (props: any) => {
     });
     return acc;
   }, {});
+  const displayRole = (role: string) => role === 'ZAG' ? 'DEFENSOR' : role;
   const userClubOffers = ((state.world.clubOffers || []).filter(offer => offer.targetUserId === state.userId) as ClubOffer[]);
   const managerialHotspots = (Object.values(state.teams) as Team[])
     .filter(team => team.id.startsWith('t_'))
@@ -137,25 +180,42 @@ export const WorldTab = (props: any) => {
     .map(team => {
       const standing = leagueStandingMap[team.id];
       const squadScore = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
-      const average = team.squad.length ? Math.round(squadScore / team.squad.length) : 0;
       const offer = userClubOffers.find(item => item.teamId === team.id) || null;
       const urgency = !team.managerId ? 4 : (standing?.position || 99) >= 7 ? 3 : (standing?.position || 99) >= 5 ? 2 : 1;
-      return { team, standing, average, offer, urgency };
+      return { team, standing, squadScore, offer, urgency };
     })
     .sort((a, b) => {
       if (b.urgency !== a.urgency) return b.urgency - a.urgency;
-      return (b.average || 0) - (a.average || 0);
+      return (b.squadScore || 0) - (a.squadScore || 0);
     });
   const pressureTeams = managerialHotspots.filter(item => item.urgency >= 3).slice(0, 3);
   const opportunityTeams = managerialHotspots.slice(0, 3);
-  const teamPowerRanking = (Object.values(state.teams) as Team[])
-    .map(team => {
-      const totalRating = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
-      return { ...team, totalRating };
-    })
-    .sort((a, b) => b.totalRating - a.totalRating);
-  const userTeamRank = userTeam ? teamPowerRanking.findIndex(team => team.id === userTeam.id) + 1 : 0;
-  const rankedUserTeam = userTeamRank > 0 ? teamPowerRanking[userTeamRank - 1] : null;
+  const humanTeamIds = new Set((state.participants || [])
+    .map(participant => participant.teamId)
+    .filter((teamId): teamId is string => !!teamId));
+  const teamLeagueGroups = Object.entries(state.world.leagues || {}).map(([key, league]: [string, any]) => {
+    const standings = [...(league.standings || [])].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      const gdA = a.goalsFor - a.goalsAgainst;
+      const gdB = b.goalsFor - b.goalsAgainst;
+      return gdB - gdA;
+    });
+
+    return {
+      key,
+      name: league.name || key,
+      district: league.district || key.toUpperCase(),
+      teams: standings
+        .map((row, index) => {
+          const team = state.teams[row.teamId] as Team | undefined;
+          if (!team) return null;
+          const totalRating = team.squad.reduce((acc, id) => acc + (state.players[id]?.totalRating || 0), 0);
+          const manager = team.managerId ? state.managers[team.managerId] : null;
+          return { team, row, position: index + 1, totalRating, manager };
+        })
+        .filter(Boolean) as Array<{ team: Team; row: any; position: number; totalRating: number; manager: any }>,
+    };
+  });
 
   if (selectedTeamView) {
     const team = state.teams[selectedTeamView];
@@ -307,7 +367,7 @@ export const WorldTab = (props: any) => {
   return (
     <div className="space-y-3 sm:space-y-6 animate-in fade-in duration-700 pb-24">
       {/* Navigation Tabs */}
-      <div className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar py-2 px-1">
+      <div data-onboarding="world-tabs" className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar py-2 px-1">
         {[
           { id: 'news', icon: Newspaper, label: 'Notícias', color: 'purple' },
           { id: 'leagues', icon: Trophy, label: 'Ligas', color: 'emerald' },
@@ -1226,7 +1286,156 @@ export const WorldTab = (props: any) => {
       {
         activeWorldTab === 'market' && (
           <div className="space-y-4 animate-in fade-in duration-500">
-            {state.world.status === 'LOBBY' && (
+            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 shadow-[0_0_28px_rgba(16,185,129,0.08)]">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-300/25 bg-black/35 text-emerald-200">
+                    <Landmark size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[8px] font-black uppercase tracking-[0.28em] text-emerald-100/55">Financas do elenco</p>
+                    <h3 className="mt-0.5 text-base font-black uppercase italic tracking-tight text-white">Patrimonio do clube</h3>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-right">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">uso</p>
+                  <p className="text-lg font-black italic text-emerald-100">{capUsagePercent}%</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Teto do clube</p>
+                  <p className="mt-1 text-xl font-black italic text-white">{dashData.powerCap.toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Elenco atual</p>
+                  <p className="mt-1 text-xl font-black italic text-white">{dashData.totalPoints.toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">Livre real</p>
+                  <p className="mt-1 text-xl font-black italic text-cyan-100">{effectiveMarketSpace.toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
+                  <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/55">Congelado</p>
+                  <p className="mt-1 text-xl font-black italic text-amber-100">{marketReservedScore.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <div className="mb-1 flex justify-between text-[8px] font-black uppercase tracking-widest text-white/35">
+                  <span>cap do clube</span>
+                  <span>{(dashData.totalPoints + marketReservedScore).toLocaleString()} / {dashData.powerCap.toLocaleString()}</span>
+                </div>
+                <div className="flex h-2 overflow-hidden rounded-full bg-black/55">
+                  <div
+                    className={`h-full ${capUsagePercent >= 96 ? 'bg-rose-500' : capUsagePercent >= 88 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                    style={{ width: `${capUsagePercent}%` }}
+                  />
+                  <div
+                    className="h-full bg-amber-300"
+                    style={{ width: `${frozenCapPercent}%` }}
+                  />
+                  <div
+                    className="h-full bg-cyan-400/70"
+                    style={{ width: `${freeCapPercent}%` }}
+                  />
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[7px] font-black uppercase tracking-widest">
+                  <span className="text-emerald-200">Elenco {dashData.totalPoints.toLocaleString()}</span>
+                  <span className="text-amber-200">Congelado {marketReservedScore.toLocaleString()}</span>
+                  <span className="text-cyan-200">Livre {effectiveMarketSpace.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <WalletCards size={13} className="text-cyan-200" />
+                    <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/45">Contratáveis que cabem</p>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">
+                    {marketFitCount} livres abaixo de 80% sat cabem no cap. {affordableUpsideCount} tem potencial +60.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp size={13} className="text-emerald-200" />
+                    <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/45">Como cresce</p>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">
+                    atleta que evolui no seu clube aumenta valor do elenco e pode expandir o teto.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[8px] font-black uppercase tracking-[0.26em] text-white/35">Cap do clube</p>
+                    <h3 className="mt-1 text-sm font-black uppercase italic tracking-tight text-white">
+                      {dashData.totalPoints.toLocaleString()} / {dashData.powerCap.toLocaleString()}
+                    </h3>
+                  </div>
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-right">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">livre</p>
+                    <p className="text-sm font-black italic text-cyan-100">{effectiveMarketSpace.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">uso</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{capUsagePercent}%</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">folha atual</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-emerald-100/55">alvos</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{filteredMarketPlayers.length}</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">infelizes</p>
+                  </div>
+                  <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-fuchsia-100/55">reservado</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{marketReservedScore}</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">draft/propostas</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/55">trocas</p>
+                    <p className="mt-1 text-lg font-black italic text-white">{pendingOutgoingTrades.length + pendingIncomingTrades.length}</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">pendentes</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <p className="text-[8px] font-black uppercase tracking-[0.26em] text-white/35">Seu elenco em risco</p>
+                {unhappySquadPlayers.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {unhappySquadPlayers.map(player => (
+                      <div key={player.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                        <button type="button" onClick={() => setSelectedPlayer(player)} className="min-w-0 text-left">
+                          <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                          <p className="text-[8px] font-bold uppercase tracking-widest text-rose-200/70">{player.satisfaction}% sat / {player.totalRating} score</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSellPlayer(player.id)}
+                          className="rounded-lg border border-rose-400/25 bg-rose-400/90 px-3 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-black transition hover:bg-rose-300"
+                        >
+                          Dispensar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[9px] font-black uppercase tracking-[0.2em] text-white/35">Ninguém pressionando saída agora.</p>
+                )}
+              </div>
+            </div>
+
+            {state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2 && (
               <div className="glass-card-neon border-cyan-500/30 p-4 rounded-2xl flex items-center justify-between bg-cyan-500/5 group hover:bg-cyan-500/10 transition-all cursor-pointer mb-6"
                 onClick={() => props.onTabChange?.('draft')}
               >
@@ -1293,7 +1502,7 @@ export const WorldTab = (props: any) => {
                     >
                       <option value="all">TODAS POSIÇÕES</option>
                       <option value="GOL">GOLEIRO</option>
-                      <option value="ZAG">ZAGUEIRO</option>
+                      <option value="ZAG">DEFENSOR</option>
                       <option value="MEI">MEIO-CAMPISTA</option>
                       <option value="ATA">ATACANTE</option>
                     </select>
@@ -1302,13 +1511,13 @@ export const WorldTab = (props: any) => {
                   {/* Satisfaction Filter */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Satisfação Máxima</label>
+                      <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Satisfação até</label>
                       <span className="text-cyan-400 font-black text-[9px] sm:text-[10px]">{marketSatisfactionMax}%</span>
                     </div>
                     <input
                       type="range"
                       min="0"
-                      max="100"
+                      max="79"
                       step="5"
                       value={marketSatisfactionMax}
                       onChange={(e) => setMarketSatisfactionMax(parseInt(e.target.value))}
@@ -1360,7 +1569,7 @@ export const WorldTab = (props: any) => {
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.25em] text-white/35">
-                Mercado filtrado: {filteredMarketPlayers.length} atletas
+                Alvos infelizes: {filteredMarketPlayers.length} atletas
               </div>
               <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
                 {[
@@ -1384,35 +1593,60 @@ export const WorldTab = (props: any) => {
 
             {marketViewMode === 'cards' ? (
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-                {filteredMarketPlayers.map(player => (
-                  <PlayerCard key={player.id} player={player} onClick={setSelectedPlayer} onProposta={handleMakeProposal} onTeamClick={setSelectedTeamView} variant="compact" />
-                ))}
+                {filteredMarketPlayers.map(player => {
+                  const blockedByCap = player.totalRating > effectiveMarketSpace;
+                  return (
+                    <PlayerCard
+                      key={player.id}
+                      player={player}
+                      onClick={setSelectedPlayer}
+                      onProposta={handleMakeProposal}
+                      onTeamClick={setSelectedTeamView}
+                      variant="compact"
+                      actionDisabled={blockedByCap}
+                      actionLabel="PROPOR"
+                      actionDisabledLabel="SEM ESPAÇO"
+                    />
+                  );
+                })}
               </div>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-white/5 bg-white/[0.03] px-4 py-3 text-[8px] font-black uppercase tracking-[0.25em] text-white/35">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3 border-b border-white/5 bg-white/[0.03] px-4 py-3 text-[8px] font-black uppercase tracking-[0.25em] text-white/35">
                   <span>Jogador</span>
                   <span>Pos</span>
                   <span>Distrito</span>
+                  <span>Sat</span>
                   <span>Score</span>
+                  <span>Ação</span>
                 </div>
                 <div className="divide-y divide-white/[0.04]">
-                  {filteredMarketPlayers.map(player => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => setSelectedPlayer(player)}
-                      className="grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{player.name}</p>
+                  {filteredMarketPlayers.map(player => {
+                    const blockedByCap = player.totalRating > effectiveMarketSpace;
+                    return (
+                      <div
+                        key={player.id}
+                        className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                      >
+                        <button type="button" onClick={() => setSelectedPlayer(player)} className="min-w-0 text-left">
+                          <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                          <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{player.name}</p>
+                        </button>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">{displayRole(player.role)}</span>
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-white/45">{player.district}</span>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${player.satisfaction <= 45 ? 'text-rose-300' : 'text-amber-300'}`}>{player.satisfaction}%</span>
+                        <span className="text-lg font-black italic text-white">{player.totalRating}</span>
+                        <button
+                          type="button"
+                          onClick={() => !blockedByCap && handleMakeProposal(player)}
+                          disabled={blockedByCap}
+                          className="rounded-lg border border-cyan-400/25 bg-cyan-400/90 px-3 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-white/25"
+                        >
+                          {blockedByCap ? 'Sem espaço' : 'Propor'}
+                        </button>
                       </div>
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">{player.role}</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest text-white/45">{player.district}</span>
-                      <span className="text-lg font-black italic text-white">{player.totalRating}</span>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1499,7 +1733,7 @@ export const WorldTab = (props: any) => {
                     <select value={rankingPosition} onChange={(e) => setRankingPosition(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer">
                       <option value="all">TODAS POSICOES</option>
                       <option value="GOL">GOLEIRO</option>
-                      <option value="ZAG">ZAGUEIRO</option>
+                      <option value="ZAG">DEFENSOR</option>
                       <option value="MEI">MEIO-CAMPISTA</option>
                       <option value="ATA">ATACANTE</option>
                     </select>
@@ -1570,7 +1804,7 @@ export const WorldTab = (props: any) => {
                                   <div className="text-xs sm:text-lg font-black text-white uppercase italic tracking-tight group-hover:translate-x-1 transition-transform truncate">{player.name}</div>
                                   <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
                                     <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-cyan-500/20">
-                                      {player.role}
+                                      {displayRole(player.role)}
                                     </span>
                                     {isElite50 && (
                                       <span className="text-[7px] sm:text-[9px] font-black text-amber-100 uppercase tracking-[0.22em] px-1.5 sm:px-2 py-0.5 rounded-md border border-amber-400/25 bg-amber-500/12">
@@ -1640,7 +1874,7 @@ export const WorldTab = (props: any) => {
                     <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-100">Radar de tecnicos</h3>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {opportunityTeams.map(({ team, standing, average, offer }) => (
+                    {opportunityTeams.map(({ team, standing, squadScore, offer }) => (
                       <button
                         key={team.id}
                         onClick={() => setSelectedTeamView(team.id)}
@@ -1664,7 +1898,7 @@ export const WorldTab = (props: any) => {
                             </p>
                             <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
                             <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
-                              media {average} {offer ? `- ${offer.status.toLowerCase()}` : '- sem contato aberto'}
+                              score atual {squadScore} {offer ? `- ${offer.status.toLowerCase()}` : '- sem contato aberto'}
                             </p>
                           </div>
                         </div>
@@ -1683,7 +1917,7 @@ export const WorldTab = (props: any) => {
                       <div className="rounded-2xl border border-dashed border-white/10 p-4 text-center">
                         <p className="text-[8px] font-black uppercase tracking-widest text-white/35">Nenhum caso quente agora.</p>
                       </div>
-                    ) : pressureTeams.map(({ team, standing, average, offer, urgency }) => (
+                    ) : pressureTeams.map(({ team, standing, squadScore, offer, urgency }) => (
                       <button
                         key={team.id}
                         onClick={() => setSelectedTeamView(team.id)}
@@ -1703,7 +1937,7 @@ export const WorldTab = (props: any) => {
                             </p>
                           </div>
                           <div className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-amber-100">
-                            media {average}
+                            score {squadScore}
                           </div>
                         </div>
                       </button>
@@ -1713,104 +1947,87 @@ export const WorldTab = (props: any) => {
               </div>
             )}
 
-            {rankedUserTeam && (
-              <div className="glass-card-neon border-cyan-500/30 bg-cyan-500/10 p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] flex items-center justify-between gap-4 overflow-hidden relative">
-                <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-400/10 blur-3xl" />
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl border border-cyan-400/30 bg-black/35 flex items-center justify-center overflow-hidden shrink-0">
-                    {rankedUserTeam.logo ? (
-                      <TeamLogo
-                        primaryColor={rankedUserTeam.logo.primary}
-                        secondaryColor={rankedUserTeam.logo.secondary}
-                        accentColor={rankedUserTeam.logo.accent}
-                        shapeId={rankedUserTeam.logo.shapeId}
-                        patternId={rankedUserTeam.logo.patternId as any}
-                        symbolId={rankedUserTeam.logo.symbolId}
-                        size={window.innerWidth < 640 ? 48 : 62}
-                      />
-                    ) : (
-                      <TeamLogo
-                        primaryColor="#06b6d4"
-                        secondaryColor="#0f172a"
-                        patternId="none"
-                        symbolId="Shield"
-                        size={window.innerWidth < 640 ? 44 : 58}
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Seu clube no ranking</p>
-                    <h3 className="mt-1 truncate text-xl sm:text-3xl font-black uppercase italic text-white">{rankedUserTeam.name}</h3>
-                    <p className="mt-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-white/40">
-                      {rankedUserTeam.totalRating} score / {rankedUserTeam.squad.length} atletas
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white/30">Posicao</p>
-                  <p className="text-4xl sm:text-6xl font-black italic text-white drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]">#{userTeamRank}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {teamPowerRanking.map((team, index) => (
-                <div
-                  key={team.id}
-                  onClick={() => setSelectedTeamView(team.id)}
-                  className={`glass-card-neon rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 cursor-pointer hover:scale-[1.02] transition-all flex flex-col gap-4 sm:gap-6 group relative overflow-hidden ${team.id === userTeam?.id ? 'border-cyan-500/45 bg-cyan-500/[0.08]' : 'border-white/5'}`}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/5 blur-3xl pointer-events-none" />
-
-                  <div className="flex items-center justify-between">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 glass-card rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/5 group-hover:border-fuchsia-500/30 transition-all overflow-hidden">
-                      {team.logo ? (
-                        <TeamLogo
-                          primaryColor={team.logo.primary}
-                          secondaryColor={team.logo.secondary}
-                          accentColor={team.logo.accent}
-                          shapeId={team.logo.shapeId}
-                          patternId={team.logo.patternId as any}
-                          symbolId={team.logo.symbolId}
-                          size={window.innerWidth < 640 ? 46 : 58}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center">
-                          <TeamLogo
-                            primaryColor="#a855f7"
-                            secondaryColor="#7e22ce"
-                            patternId="none"
-                            symbolId="Shield"
-                            size={window.innerWidth < 640 ? 38 : 48}
-                          />
-                        </div>
-                      )}
+            <div className="space-y-5 sm:space-y-7">
+              {teamLeagueGroups.map(group => (
+                <section key={group.key} className="rounded-2xl sm:rounded-[2rem] border border-white/10 bg-black/25 p-3 sm:p-5">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-300/75">{group.district}</p>
+                      <h3 className="mt-1 text-lg sm:text-2xl font-black uppercase italic tracking-tight text-white">{group.name}</h3>
                     </div>
-                    <div className="text-right">
-                      <div className="text-[8px] sm:text-[10px] font-black text-white/20 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-0.5 sm:mb-1 italic">Ranking</div>
-                      <div className="text-xl sm:text-3xl font-black text-white italic drop-shadow-lg group-hover:text-fuchsia-400 transition-colors">#{index + 1}</div>
+                    <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white/35">
+                      {group.teams.length} clubes
                     </div>
                   </div>
 
-                  <div className="space-y-0.5 sm:space-y-1">
-                    <h3 className="text-lg sm:text-2xl font-black text-white uppercase italic tracking-tight group-hover:translate-x-1 transition-transform truncate">{team.name}</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[8px] sm:text-[10px] text-fuchsia-400 font-black uppercase tracking-widest">{team.squad.length} Atletas</span>
-                      <span className="w-1 h-1 rounded-full bg-white/10" />
-                      <span className="text-[8px] sm:text-[10px] text-white/30 font-bold uppercase tracking-widest truncate">{team.district}</span>
-                    </div>
-                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {group.teams.map(({ team, row, position, totalRating, manager }) => {
+                      const isHuman = humanTeamIds.has(team.id);
+                      return (
+                        <button
+                          key={team.id}
+                          type="button"
+                          onClick={() => setSelectedTeamView(team.id)}
+                          className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition hover:scale-[1.01] ${
+                            team.id === userTeam?.id
+                              ? 'border-cyan-400/45 bg-cyan-500/[0.08]'
+                              : isHuman
+                                ? 'border-emerald-400/25 bg-emerald-500/[0.06]'
+                                : 'border-white/10 bg-white/[0.03]'
+                          }`}
+                        >
+                          <div className="absolute right-0 top-0 h-24 w-24 bg-fuchsia-500/5 blur-3xl" />
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/35">
+                                <TeamLogo
+                                  primaryColor={team.logo?.primary || team.colors.primary || '#a855f7'}
+                                  secondaryColor={team.logo?.secondary || team.colors.secondary || '#111827'}
+                                  accentColor={team.logo?.accent}
+                                  shapeId={team.logo?.shapeId}
+                                  patternId={(team.logo?.patternId || 'none') as any}
+                                  symbolId={team.logo?.symbolId || 'Shield'}
+                                  size={42}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/35">
+                                  #{position} - {row.points} pts
+                                </p>
+                                <h4 className="mt-1 truncate text-base font-black uppercase italic tracking-tight text-white">{team.name}</h4>
+                                <p className="mt-1 truncate text-[8px] font-bold uppercase tracking-widest text-white/35">
+                                  {manager?.name || 'manager automatico'}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[7px] font-black uppercase tracking-widest ${
+                              isHuman
+                                ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100'
+                                : 'border-white/10 bg-white/[0.04] text-white/45'
+                            }`}>
+                              {isHuman ? 'Humano' : 'IA'}
+                            </span>
+                          </div>
 
-                  <div className="pt-4 sm:pt-6 border-t border-white/5 flex items-end justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-[7px] sm:text-[8px] text-white/20 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em]">Power Score</span>
-                      <span className="text-xl sm:text-3xl font-black text-white neon-text-white italic">{team.totalRating}</span>
-                    </div>
-                    <div className="p-2 sm:p-3 glass-card rounded-lg sm:rounded-xl border-white/5 group-hover:bg-white/10 transition-all">
-                      <ChevronRight size={window.innerWidth < 640 ? 16 : 20} className="text-white/40 group-hover:text-white transition-colors" />
-                    </div>
+                          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/5 pt-3">
+                            <div>
+                              <p className="text-[7px] font-black uppercase tracking-widest text-white/25">Score</p>
+                              <p className="mt-1 text-lg font-black italic text-white">{totalRating}</p>
+                            </div>
+                            <div>
+                              <p className="text-[7px] font-black uppercase tracking-widest text-white/25">Atletas</p>
+                              <p className="mt-1 text-lg font-black italic text-white">{team.squad.length}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[7px] font-black uppercase tracking-widest text-white/25">SG</p>
+                              <p className="mt-1 text-lg font-black italic text-white">{row.goalsFor - row.goalsAgainst}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           </div>

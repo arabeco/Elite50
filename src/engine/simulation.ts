@@ -42,10 +42,10 @@ export const calculateMatchEvent = (
 
   // Keep team/tactic edges visible, but bring scorelines closer to football.
   const qualityFactor = (attack.averageAttribute + defense.averageAttribute) / 1800;
-  const baseProb = 0.095 * Math.max(1, qualityFactor);
+  const baseProb = 0.105 * Math.max(1, qualityFactor);
 
-  const goalProbability = clamp(baseProb + (ratio - 1) * 0.16, 0.035, 0.34);
-  const defenseProbability = clamp(0.19 + (1 / ratio - 1) * 0.11, 0.08, 0.34);
+  const goalProbability = clamp(baseProb + (ratio - 1) * 0.165, 0.04, 0.36);
+  const defenseProbability = clamp(0.18 + (1 / ratio - 1) * 0.105, 0.075, 0.32);
 
   let outcome: 'goal' | 'defense' | 'turnover' = 'turnover';
   const roll = Math.random();

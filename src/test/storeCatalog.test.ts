@@ -3,6 +3,7 @@ import { STORE_ITEMS } from '../constants/storeCatalog';
 import { calculatePostMatchProgression } from '../engine/economyLogic';
 import { generatePlayer } from '../engine/generator';
 import { GameState } from '../types';
+import { equipManagerItem, getStoreState } from '../utils/store';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -38,6 +39,7 @@ describe('store boots', () => {
         equippedBootByPlayerId: {},
         equippedKitByTeamId: {},
         equippedLogoByTeamId: {},
+        equippedManagerItemIds: [],
         circuit: {
           id: 'c',
           name: 'c',
@@ -87,5 +89,46 @@ describe('store boots', () => {
     } as unknown as GameState);
 
     expect(Math.abs(rareNegative)).toBeLessThanOrEqual(Math.abs(baseNegative));
+  });
+
+  it('equips up to three manager display items', () => {
+    const state = {
+      players: {},
+      store: {
+        gold: 0,
+        fragments: 0,
+        ownedItemIds: ['accessory_founder_whistle', 'accessory_scout_lens', 'badge_elite_original_s1'],
+        equippedBootByPlayerId: {},
+        equippedKitByTeamId: {},
+        equippedLogoByTeamId: {},
+        equippedManagerItemIds: [],
+        circuit: {
+          id: 'c',
+          name: 'c',
+          premiumActive: false,
+          seasonRunsCompleted: 0,
+          targetSeasonRuns: 3,
+          endsAt: new Date().toISOString(),
+        },
+      },
+    } as unknown as GameState;
+
+    const withWhistle = equipManagerItem(state, 'accessory_founder_whistle');
+    expect(withWhistle.ok).toBe(true);
+
+    const withLens = equipManagerItem(withWhistle.state, 'accessory_scout_lens');
+    const withBadge = equipManagerItem(withLens.state, 'badge_elite_original_s1');
+
+    expect(getStoreState(withBadge.state).equippedManagerItemIds).toEqual([
+      'accessory_founder_whistle',
+      'accessory_scout_lens',
+      'badge_elite_original_s1',
+    ]);
+
+    const withoutLens = equipManagerItem(withBadge.state, 'accessory_scout_lens');
+    expect(getStoreState(withoutLens.state).equippedManagerItemIds).toEqual([
+      'accessory_founder_whistle',
+      'badge_elite_original_s1',
+    ]);
   });
 });

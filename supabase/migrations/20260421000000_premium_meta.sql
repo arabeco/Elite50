@@ -1,4 +1,4 @@
-create table if not exists public.profiles_meta (
+﻿create table if not exists public.profiles_meta (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
   premium_active boolean not null default false,
@@ -74,6 +74,7 @@ create table if not exists public.mobile_purchases (
   user_id uuid not null references auth.users(id) on delete cascade,
   provider text not null default 'google_play',
   product_code text not null,
+  product_id text,
   purchase_token text,
   order_id text,
   package_name text,
@@ -201,17 +202,7 @@ create policy "mobile_purchases_select_own"
   using (auth.uid() = user_id);
 
 drop policy if exists "mobile_purchases_insert_own" on public.mobile_purchases;
-create policy "mobile_purchases_insert_own"
-  on public.mobile_purchases
-  for insert
-  with check (auth.uid() = user_id);
-
 drop policy if exists "mobile_purchases_update_own" on public.mobile_purchases;
-create policy "mobile_purchases_update_own"
-  on public.mobile_purchases
-  for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
 
 insert into public.circuit_definitions (
   id,
@@ -355,8 +346,8 @@ values
     'RARE',
     'GOLD',
     24,
-    '/assetas/avatars/uniforms/special1.png',
-    '/assetas/avatars/uniforms/special1.png',
+    '/assetas/avatars/uniforms/store-kit-circuit-chrome.png',
+    '/assetas/avatars/uniforms/store-kit-circuit-chrome.png',
     false,
     null,
     '{}'::jsonb,
@@ -370,8 +361,8 @@ values
     'RARE',
     'GOLD',
     26,
-    '/assetas/avatars/uniforms/special2.png',
-    '/assetas/avatars/uniforms/special2.png',
+    '/assetas/avatars/uniforms/store-kit-holo-wave.png',
+    '/assetas/avatars/uniforms/store-kit-holo-wave.png',
     false,
     null,
     '{}'::jsonb,
@@ -385,8 +376,8 @@ values
     'RARE',
     'GOLD',
     27,
-    '/assetas/avatars/uniforms/special3.png',
-    '/assetas/avatars/uniforms/special3.png',
+    '/assetas/avatars/uniforms/store-kit-carbon-grid.png',
+    '/assetas/avatars/uniforms/store-kit-carbon-grid.png',
     false,
     null,
     '{}'::jsonb,
@@ -400,8 +391,8 @@ values
     'EPIC',
     'FRAGMENT',
     18,
-    '/assetas/avatars/uniforms/sspecial4.png',
-    '/assetas/avatars/uniforms/sspecial4.png',
+    '/assetas/avatars/uniforms/store-kit-pulse-white.png',
+    '/assetas/avatars/uniforms/store-kit-pulse-white.png',
     true,
     'circuito-neon-01',
     '{}'::jsonb,
@@ -415,8 +406,8 @@ values
     'EPIC',
     'FRAGMENT',
     20,
-    '/assetas/avatars/uniforms/special5.png',
-    '/assetas/avatars/uniforms/special5.png',
+    '/assetas/avatars/uniforms/store-kit-neon-flux.png',
+    '/assetas/avatars/uniforms/store-kit-neon-flux.png',
     true,
     'circuito-neon-01',
     '{}'::jsonb,
@@ -430,8 +421,8 @@ values
     'RARE',
     'GOLD',
     22,
-    '/assetas/store/logos/logo_quantum_vault.png',
-    '/assetas/store/logos/logo_quantum_vault.png',
+    '/assetas/avatars/logos/store-logo-quantum-vault.png',
+    '/assetas/avatars/logos/store-logo-quantum-vault.png',
     false,
     null,
     jsonb_build_object(
@@ -441,8 +432,8 @@ values
         'secondary', '#22d3ee',
         'accent', '#f8fafc',
         'patternId', 'radial',
-        'symbolId', 'asset:/assetas/store/logos/logo_quantum_vault.png',
-        'assetPath', '/assetas/store/logos/logo_quantum_vault.png'
+        'symbolId', 'asset:/assetas/avatars/logos/store-logo-quantum-vault.png',
+        'assetPath', '/assetas/avatars/logos/store-logo-quantum-vault.png'
       )
     ),
     true
@@ -455,8 +446,8 @@ values
     'RARE',
     'GOLD',
     23,
-    '/assetas/store/logos/logo_holo_tiger.png',
-    '/assetas/store/logos/logo_holo_tiger.png',
+    '/assetas/avatars/logos/store-logo-holo-tiger.png',
+    '/assetas/avatars/logos/store-logo-holo-tiger.png',
     false,
     null,
     jsonb_build_object(
@@ -466,8 +457,8 @@ values
         'secondary', '#ec4899',
         'accent', '#facc15',
         'patternId', 'diagonal_split',
-        'symbolId', 'asset:/assetas/store/logos/logo_holo_tiger.png',
-        'assetPath', '/assetas/store/logos/logo_holo_tiger.png'
+        'symbolId', 'asset:/assetas/avatars/logos/store-logo-holo-tiger.png',
+        'assetPath', '/assetas/avatars/logos/store-logo-holo-tiger.png'
       )
     ),
     true
@@ -480,8 +471,8 @@ values
     'EPIC',
     'FRAGMENT',
     16,
-    '/assetas/store/logos/logo_blackout_crown.png',
-    '/assetas/store/logos/logo_blackout_crown.png',
+    '/assetas/avatars/logos/store-logo-blackout-crown.png',
+    '/assetas/avatars/logos/store-logo-blackout-crown.png',
     true,
     'circuito-neon-01',
     jsonb_build_object(
@@ -491,8 +482,8 @@ values
         'secondary', '#e2e8f0',
         'accent', '#38bdf8',
         'patternId', 'solid',
-        'symbolId', 'asset:/assetas/store/logos/logo_blackout_crown.png',
-        'assetPath', '/assetas/store/logos/logo_blackout_crown.png'
+        'symbolId', 'asset:/assetas/avatars/logos/store-logo-blackout-crown.png',
+        'assetPath', '/assetas/avatars/logos/store-logo-blackout-crown.png'
       )
     ),
     true
@@ -505,8 +496,8 @@ values
     'EPIC',
     'FRAGMENT',
     17,
-    '/assetas/store/logos/logo_pulse_hex.png',
-    '/assetas/store/logos/logo_pulse_hex.png',
+    '/assetas/avatars/logos/store-logo-pulse-hex.png',
+    '/assetas/avatars/logos/store-logo-pulse-hex.png',
     true,
     'circuito-neon-01',
     jsonb_build_object(
@@ -516,8 +507,8 @@ values
         'secondary', '#a3e635',
         'accent', '#f8fafc',
         'patternId', 'stripes_vertical',
-        'symbolId', 'asset:/assetas/store/logos/logo_pulse_hex.png',
-        'assetPath', '/assetas/store/logos/logo_pulse_hex.png'
+        'symbolId', 'asset:/assetas/avatars/logos/store-logo-pulse-hex.png',
+        'assetPath', '/assetas/avatars/logos/store-logo-pulse-hex.png'
       )
     ),
     true
@@ -530,8 +521,8 @@ values
     'EPIC',
     'FRAGMENT',
     18,
-    '/assetas/store/logos/logo_solar_wire.png',
-    '/assetas/store/logos/logo_solar_wire.png',
+    '/assetas/avatars/logos/store-logo-solar-wire.png',
+    '/assetas/avatars/logos/store-logo-solar-wire.png',
     true,
     'circuito-neon-01',
     jsonb_build_object(
@@ -541,8 +532,8 @@ values
         'secondary', '#fb923c',
         'accent', '#fde68a',
         'patternId', 'stripes_horizontal',
-        'symbolId', 'asset:/assetas/store/logos/logo_solar_wire.png',
-        'assetPath', '/assetas/store/logos/logo_solar_wire.png'
+        'symbolId', 'asset:/assetas/avatars/logos/store-logo-solar-wire.png',
+        'assetPath', '/assetas/avatars/logos/store-logo-solar-wire.png'
       )
     ),
     true
@@ -576,3 +567,4 @@ set
   circuit_id = excluded.circuit_id,
   payload = excluded.payload,
   is_active = excluded.is_active;
+

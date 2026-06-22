@@ -6,6 +6,11 @@ type StoredWorldSummary = {
   updatedAt: string;
   userId: string;
   isLocalOnly: boolean;
+  status?: string;
+  phase?: string | null;
+  currentDay?: number | null;
+  currentSeason?: number | null;
+  startScheduledAt?: string | null;
 };
 
 type StoredWorldEnvelope = {
@@ -78,6 +83,11 @@ export const saveGameState = (
       updatedAt,
       userId,
       isLocalOnly,
+      status: state.world?.status,
+      phase: state.world?.phase || null,
+      currentDay: state.world?.currentDay ?? null,
+      currentSeason: state.world?.currentSeason ?? null,
+      startScheduledAt: state.world?.startScheduledAt || null,
     };
 
     const existing = readIndex().filter(item => item.id !== worldId);

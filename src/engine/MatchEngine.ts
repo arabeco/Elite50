@@ -472,7 +472,7 @@ export function simulateMatch(
     const currentEventSecond = Math.max(0, Math.min(MATCH_REAL_TIME_SECONDS - 1, baseSecond + Math.floor(Math.random() * 7) - 3));
 
     // Event cadence still reacts to tactics, but stays in a tighter football range.
-    let intensity = 0.11 + (minute / 520);
+    let intensity = 0.125 + (minute / 500);
     intensity *= hasPossession === 'home'
       ? 1 + (homeIntensity - 50) / 520
       : 1 + (awayIntensity - 50) / 520;

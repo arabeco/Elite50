@@ -5,6 +5,8 @@ import { Player, PlayerRole } from '../../types';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
 import { LayoutGrid, Rows3, Rocket, Search, Shield, Users, X, UserMinus } from 'lucide-react';
+import { advanceGameDay, getTeamPowerCap } from '../../engine/gameLogic';
+import { claimWorldTick, completeWorldDayTick } from '../../lib/worldTick';
 
 const ROLE_ORDER: PlayerRole[] = ['GOL', 'ZAG', 'MEI', 'ATA'];
 
@@ -22,7 +24,7 @@ const groupPlayersByRole = (players: Player[]) =>
   }, { GOL: [], ZAG: [], MEI: [], ATA: [] });
 
 export const DraftPanel: React.FC = () => {
-  const { state, setState, saveGame } = useGame();
+  const { state, setState, saveGame, addToast, requestConfirm, worldId } = useGame();
   const [activeTab, setActiveTab] = useState<'market' | 'squad'>('market');
   const [marketViewMode, setMarketViewMode] = useState<'cards' | 'list'>('list');
   const [squadViewMode, setSquadViewMode] = useState<'cards' | 'list'>('cards');
@@ -39,7 +41,7 @@ export const DraftPanel: React.FC = () => {
   const { handleMakeProposal, handleCancelDraftProposal, handleSellPlayer } = useTransfers(
     userTeam?.id || null,
     0,
-    userTeam?.powerCap || 0
+    getTeamPowerCap(userTeam, state.players)
   );
 
   const proposalCounts = useMemo(() => {
@@ -92,7 +94,7 @@ export const DraftPanel: React.FC = () => {
     return combinedSquad.reduce((sum, player) => sum + player.totalRating, 0);
   }, [combinedSquad]);
 
-  const draftBudget = userTeam?.powerCap || 15000;
+  const draftBudget = getTeamPowerCap(userTeam, state.players);
   const remaining = draftBudget - currentPower;
   const progress = Math.min(100, (currentPower / draftBudget) * 100);
 
@@ -102,14 +104,23 @@ export const DraftPanel: React.FC = () => {
   if (!userTeam) return null;
 
   const totalSelected = combinedSquad.length;
+  const draftPhaseLabel = state.world.currentDay <= 0 ? 'Dia 0 de 2' : 'Dia 1 de 2';
+  const draftPhaseDetail = state.world.currentDay <= 0
+    ? 'Monte sua lista. As reservas ocupam score e entram na primeira virada.'
+    : 'Ultima janela de ajuste. Na proxima virada, o Dia 2 computa disputas e completa elencos.';
 
   const handleFinalizeDraft = async () => {
     if (totalSelected < 11) {
-      window.alert('Voce precisa selecionar pelo menos 11 jogadores.');
+      addToast('Voce precisa selecionar pelo menos 11 jogadores.', 'warning');
       return;
     }
 
-    if (!window.confirm('Confirmar o Draft Genesis agora? As propostas serao processadas na virada do dia.')) {
+    const confirmed = await requestConfirm({
+      title: 'Confirmar Draft Genesis',
+      message: 'As propostas serao processadas na virada do dia.',
+      confirmLabel: 'Confirmar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -119,6 +130,60 @@ export const DraftPanel: React.FC = () => {
     }
     setState(newState);
     await saveGame(newState);
+    addToast('Draft confirmado. Propostas entram na virada do dia.', 'success');
+  };
+
+  const handleResolveDraftNow = async () => {
+    if (!state.isCreator) {
+      addToast('Apenas o criador do mundo pode resolver o Draft agora.', 'warning');
+      return;
+    }
+
+    if (totalSelected < 11) {
+      addToast('Escolha pelo menos 11 jogadores antes de resolver o Draft.', 'warning');
+      return;
+    }
+
+    if (remaining < 0) {
+      addToast('O elenco estourou o Score Maximo. Remova alguem antes de resolver.', 'warning');
+      return;
+    }
+
+    const confirmed = await requestConfirm({
+      title: 'Resolver Draft agora',
+      message: 'As disputas serao processadas, a liga completara elencos vazios e a temporada sera aberta para testes.',
+      confirmLabel: 'Resolver',
+    });
+    if (!confirmed) return;
+
+    const tickKey = `season-${state.world.currentSeason || 2050}:resolve-draft`;
+    const tickClaim = await claimWorldTick(worldId, tickKey, state.world.currentDate);
+    if (!tickClaim.ok) {
+      addToast('O Draft ja esta sendo resolvido ou foi processado.', 'warning');
+      return;
+    }
+
+    try {
+      let newState = JSON.parse(JSON.stringify(state)) as typeof state;
+      if (newState.world.currentDay === -1) {
+        newState.world.currentDay = 0;
+      }
+
+      while (newState.world.status === 'LOBBY' && newState.world.currentDay < 2) {
+        newState = advanceGameDay(newState);
+      }
+
+      newState.world.status = 'ACTIVE';
+      newState.world.startScheduledAt = null;
+      setState(newState);
+      await saveGame(newState);
+      await completeWorldDayTick(worldId, tickClaim.tickKey, true);
+      addToast('Draft resolvido. Temporada aberta.', 'success');
+    } catch (error: any) {
+      await completeWorldDayTick(worldId, tickClaim.tickKey, false, error?.message || String(error));
+      console.error('Erro ao resolver Draft:', error);
+      addToast('Erro ao resolver Draft', 'error');
+    }
   };
 
   const renderGroupedList = (
@@ -254,12 +319,16 @@ export const DraftPanel: React.FC = () => {
               <h1 className="text-2xl font-black uppercase italic tracking-tight text-white">Draft Genesis</h1>
             </div>
             <div className="flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-widest">
+              <span className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-amber-100">{draftPhaseLabel}</span>
               <span className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white/75">{currentPower.toLocaleString()} / {draftBudget.toLocaleString()} score</span>
               <span className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white/75">{totalSelected} / 15 atletas</span>
               <span className={`rounded-xl border px-3 py-2 ${remaining >= 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-rose-500/20 bg-rose-500/10 text-rose-200'}`}>
                 saldo {remaining >= 0 ? '+' : ''}{remaining}
               </span>
             </div>
+            <p className="max-w-2xl text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+              {draftPhaseDetail}
+            </p>
           </div>
 
           <div className="w-full max-w-md space-y-3">
@@ -281,6 +350,20 @@ export const DraftPanel: React.FC = () => {
             >
               Confirmar Draft
             </button>
+            {state.isCreator && (
+              <button
+                type="button"
+                onClick={handleResolveDraftNow}
+                disabled={remaining < 0 || totalSelected < 11}
+                className={`w-full rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-[0.25em] transition-all ${
+                  remaining < 0 || totalSelected < 11
+                    ? 'cursor-not-allowed border border-white/10 bg-white/[0.03] text-white/25'
+                    : 'border border-amber-300/35 bg-amber-300/15 text-amber-100 hover:bg-amber-300/20'
+                }`}
+              >
+                Resolver e comecar agora
+              </button>
+            )}
           </div>
         </div>
       </div>

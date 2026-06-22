@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Trophy, TrendingDown, TrendingUp, Shuffle, Star, Shield } from 'lucide-react';
 import { LeagueTeamStats, Manager, Player, SeasonReport, Team } from '../types';
+import { getLeagueTrophyAssetByKey, TROPHY_ASSETS } from '../utils/trophyAssets';
 
 interface SeasonReportModalProps {
   report: SeasonReport;
@@ -66,7 +67,7 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
             Temporada {report.season}
           </h2>
           <p className="mt-3 max-w-2xl text-xs font-bold uppercase tracking-widest text-slate-400">
-            Recap oficial com campeoes, migracoes e destaques da season.
+            Recap oficial com campeoes, clubes sob pressao e destaques da season.
           </p>
         </div>
 
@@ -101,8 +102,11 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
                     onClick={() => team && onTeamClick?.(team.id)}
                     className="flex w-full items-center justify-between gap-3 rounded-xl bg-black/35 px-3 py-2 text-left transition hover:bg-white/10"
                   >
-                    <span className="truncate text-[10px] font-black uppercase tracking-wider text-white">
-                      {team?.name || '---'}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <img src={getLeagueTrophyAssetByKey(leagueKey)} alt="" className="h-8 w-8 shrink-0 object-contain" />
+                      <span className="truncate text-[10px] font-black uppercase tracking-wider text-white">
+                        {team?.name || '---'}
+                      </span>
                     </span>
                     <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-slate-500">
                       {leagueKey}
@@ -161,9 +165,12 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
                   className="w-full rounded-xl bg-black/35 px-3 py-3 text-left transition hover:bg-white/10 disabled:cursor-default"
                 >
                   <p className="text-[8px] font-black uppercase tracking-widest text-white/35">Tecnico destaque</p>
-                  <p className="mt-1 truncate text-sm font-black uppercase italic text-white">
-                    {managerHighlight?.name || 'sem tecnico'} {report.managerHighlight?.reason ? `- ${report.managerHighlight.reason}` : ''}
-                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <img src={TROPHY_ASSETS.managerOfSeason} alt="" className="h-9 w-9 shrink-0 object-contain" />
+                    <p className="truncate text-sm font-black uppercase italic text-white">
+                      {managerHighlight?.name || 'sem tecnico'} {report.managerHighlight?.reason ? `- ${report.managerHighlight.reason}` : ''}
+                    </p>
+                  </div>
                 </button>
 
                 <button
@@ -195,7 +202,10 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
                 className="rounded-xl bg-black/35 px-3 py-3 text-left transition hover:bg-white/10 disabled:cursor-default"
               >
                 <p className="text-[8px] font-black uppercase tracking-widest text-white/35">Copa Elite</p>
-                <p className="mt-1 truncate text-sm font-black uppercase italic text-white">{eliteCupWinner?.name || 'A definir'}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <img src={TROPHY_ASSETS.eliteCup} alt="" className="h-11 w-11 shrink-0 object-contain" />
+                  <p className="truncate text-sm font-black uppercase italic text-white">{eliteCupWinner?.name || 'A definir'}</p>
+                </div>
               </button>
               <button
                 type="button"
@@ -204,14 +214,17 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
                 className="rounded-xl bg-black/35 px-3 py-3 text-left transition hover:bg-white/10 disabled:cursor-default"
               >
                 <p className="text-[8px] font-black uppercase tracking-widest text-white/35">Copa dos Distritos</p>
-                <p className="mt-1 truncate text-sm font-black uppercase italic text-white">{districtCupWinner?.name || 'A definir'}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <img src={TROPHY_ASSETS.districtCup} alt="" className="h-11 w-11 shrink-0 object-contain" />
+                  <p className="truncate text-sm font-black uppercase italic text-white">{districtCupWinner?.name || 'A definir'}</p>
+                </div>
               </button>
             </div>
           </section>
 
           <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fuchsia-300">
-              <Shuffle size={15} /> Realocacoes
+              <Shuffle size={15} /> Identidade distrital
             </div>
             {report.reallocatedTeams.length > 0 ? (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -236,7 +249,7 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
               </div>
             ) : (
               <p className="rounded-xl bg-black/35 px-3 py-3 text-[9px] font-bold uppercase tracking-widest text-white/35">
-                Nenhum clube foi realocado nessa season.
+                Ninguem caiu para rotacao nesta temporada. O mapa competitivo segue igual.
               </p>
             )}
           </section>

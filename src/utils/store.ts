@@ -52,6 +52,7 @@ export const createDefaultStoreState = (): StoreState => ({
   equippedBootByPlayerId: {},
   equippedKitByTeamId: {},
   equippedLogoByTeamId: {},
+  equippedManagerItemIds: [],
   circuit: {
     id: APP_CIRCUIT.id,
     name: APP_CIRCUIT.name,
@@ -80,6 +81,9 @@ export const getStoreState = (state: GameState): StoreState => ({
     ...createDefaultStoreState().equippedLogoByTeamId,
     ...(state.store?.equippedLogoByTeamId || {}),
   },
+  equippedManagerItemIds: Array.from(new Set((state.store?.equippedManagerItemIds || [])
+    .map(itemId => normalizeStoreItemId(itemId) || '')
+    .filter(Boolean))),
   circuit: {
     ...createDefaultStoreState().circuit,
     ...(state.store?.circuit || {}),
@@ -360,5 +364,57 @@ export const equipTeamLogo = (state: GameState, teamId: string, itemId: string) 
         [teamId]: itemId,
       },
     },
+  };
+};
+
+export const equipManagerItem = (state: GameState, itemId: string | null) => {
+  const store = getStoreState(state);
+
+  if (!itemId) {
+    return {
+      ok: true as const,
+      state: {
+        ...state,
+        store: {
+          ...store,
+          equippedManagerItemIds: [],
+        },
+      },
+      message: 'Itens de manager removidos.',
+    };
+  }
+
+  const item = getStoreItem(itemId);
+  if (!item || (item.category !== 'ACCESSORY' && item.category !== 'BADGE')) {
+    return { ok: false as const, state: { ...state, store }, message: 'Item de manager invalido.' };
+  }
+
+  if (!store.ownedItemIds.includes(item.id)) {
+    return { ok: false as const, state: { ...state, store }, message: 'Compre o item primeiro.' };
+  }
+
+  const currentItems = store.equippedManagerItemIds
+    .map(id => getStoreItem(id))
+    .filter((equippedItem): equippedItem is StoreItem => !!equippedItem);
+  const alreadyEquipped = currentItems.some(equippedItem => equippedItem.id === item.id);
+  let nextItems = currentItems.filter(equippedItem => equippedItem.id !== item.id);
+
+  if (!alreadyEquipped) {
+    if (nextItems.length >= 3) {
+      nextItems = nextItems.slice(1);
+    }
+    nextItems = [...nextItems, item];
+  }
+
+  return {
+    ok: true as const,
+    state: {
+      ...state,
+      store: {
+        ...store,
+        equippedManagerItemIds: nextItems.map(equippedItem => equippedItem.id),
+      },
+    },
+    message: alreadyEquipped ? `${item.name} removido do manager.` : `${item.name} equipado no manager.`,
   };
 };

@@ -46,7 +46,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ news, history }) => {
                                     </div>
                                 </div>
                                 <p className="report-realloc">
-                                    {report.reallocatedTeams.length} times foram realocados entre distritos.
+                                    Distritos de clube sao fixos; campanhas ruins geram pressao, nao realocacao.
                                 </p>
                             </div>
                         ))}

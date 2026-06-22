@@ -14,6 +14,7 @@ export interface BillingCatalogEntry {
   brlPrice: number;
   goldAmount?: number;
   premiumDays?: number;
+  imagePath?: string;
   googlePlayProductId: string;
   appStoreProductId: string;
 }
@@ -60,6 +61,7 @@ export const BILLING_CATALOG: BillingCatalogEntry[] = [
     amountLabel: '90 dias',
     brlPrice: 19.9,
     premiumDays: 90,
+    imagePath: '/assetas/avatars/pass/pass-circuit-neon-01.png',
     googlePlayProductId: 'passe_circuito_neon_01',
     appStoreProductId: 'app.elite2050.pass.circuit.neon01',
   },

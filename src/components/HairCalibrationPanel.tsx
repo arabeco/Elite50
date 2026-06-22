@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, RotateCcw } from 'lucide-react';
 import {
   AvatarGender,
@@ -22,7 +22,7 @@ export const HairCalibrationPanel: React.FC = () => {
   const selectedKey = `${gender}/${selectedFile}`;
   const selectedOffset = offsets[selectedKey] || getHairOffset(gender, selectedFile);
   const bodyPath = `/assetas/avatars/bodies/body_${gender === 'M' ? 'm' : 'f'}_1.png`;
-  const uniformPath = '/assetas/avatars/uniforms/uniform_cyan.png';
+  const uniformPath = '/assetas/avatars/uniforms/district-norte-uniform.png';
   const hairPath = getHairAssetPath(gender, selectedFile);
 
   const exportJson = useMemo(() => {
@@ -210,3 +210,4 @@ export const HairCalibrationPanel: React.FC = () => {
     </div>
   );
 };
+

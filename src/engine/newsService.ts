@@ -24,10 +24,10 @@ export const addNews = (
 };
 
 export const newsHeadlines = {
-    transfer: (state: GameState, player: Player, team: Team) => {
+    transfer: (state: GameState, player: Player, team: Team, value?: number) => {
         const title = `REFORÇO NA ÁREA!`;
         const content = `${team.name} assina com ${player.nickname}, o novo reforço de ${player.totalRating} pontos de rating!`;
-        addNews(state, title, content, 'TRANSFER', 2, {
+        addNews(state, title, content, 'TRANSFER', value && value >= 800 ? 3 : 2, {
             kind: 'PLAYER_PROFILE',
             season: state.world.currentSeason || 2050,
             playerId: player.id,
@@ -62,8 +62,9 @@ export const newsHeadlines = {
         });
     },
     migration: (state: GameState, team: Team, newDist: District) => {
-        const title = `MUDANÇA DE AR`;
-        const content = `O ${team.name} foi realocado para o distrito ${newDist} para a próxima temporada.`;
+        void newDist;
+        const title = 'PRESSAO DE TEMPORADA';
+        const content = `${team.name} segue no distrito de origem. A campanha ruim vira pressao esportiva, nao troca de identidade.`;
         addNews(state, title, content, 'MIGRATION', 1, {
             kind: 'TEAM_PROFILE',
             season: state.world.currentSeason || 2050,
@@ -72,7 +73,7 @@ export const newsHeadlines = {
     },
     seasonEnded: (state: GameState, report: SeasonReport) => {
         const title = 'TEMPORADA ENCERRADA';
-        const content = `A temporada ${report.season} foi arquivada no The Pulse: campeoes, realocacoes, destaque de rating e impacto economico estao disponiveis.`;
+        const content = `A temporada ${report.season} foi arquivada no The Pulse: campeoes, clubes sob pressao, destaque de rating e impacto economico estao disponiveis.`;
         addNews(state, title, content, 'SYSTEM', 3, {
             kind: 'SEASON_REPORT',
             season: report.season
@@ -213,6 +214,18 @@ export const generateSeasonReport = (
         }
         : null;
 
+    const topTransfers = Object.values(state.players)
+        .flatMap(player => (player.history.clubEvents || [])
+            .filter(event => event.season === (state.world.currentSeason || 2050) && !!event.value)
+            .map(event => ({
+                playerId: player.id,
+                fromTeamName: event.fromTeamName,
+                toTeamName: event.toTeamName,
+                value: event.value || 0
+            })))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+
     const report: SeasonReport = {
         season: state.world.currentSeason || 2050,
         finalStandings,
@@ -225,7 +238,8 @@ export const generateSeasonReport = (
         teamRatingMovers: {
             best: bestTeam,
             worst: worstTeam
-        }
+        },
+        topTransfers
     };
 
     state.world.history = [report, ...(state.world.history || [])];

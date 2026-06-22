@@ -85,6 +85,17 @@ describe('full season QA flow', () => {
 
     const nextState = startNewSeason(state);
     expect(nextState.world.history[0].season).toBe(state.world.currentSeason || 2050);
+    expect(nextState.world.history[0].reallocatedTeams).toHaveLength(4);
+    expect(nextState.world.history[0].reallocatedTeams.map(item => item.from)).toEqual(['NORTE', 'SUL', 'LESTE', 'OESTE']);
+    expect(nextState.world.history[0].reallocatedTeams.map(item => item.to)).toEqual(['SUL', 'LESTE', 'OESTE', 'NORTE']);
+    nextState.world.history[0].reallocatedTeams.forEach(item => {
+      const team = nextState.teams[item.teamId];
+      expect(team.originDistrict).toBe(item.from);
+      expect(team.district).toBe(item.to);
+    });
+    Object.values(nextState.world.leagues).forEach(league => {
+      expect(league.standings).toHaveLength(8);
+    });
     expect(nextState.world.news[0].title).toBe('TEMPORADA ENCERRADA');
     expect(nextState.world.news[0].action).toEqual({
       kind: 'SEASON_REPORT',

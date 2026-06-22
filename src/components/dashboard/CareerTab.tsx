@@ -4,29 +4,44 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
 import { useTransfers } from '../../hooks/useTransfers';
 import { useTactics } from '../../hooks/useTactics';
-import { useGameDay } from '../../hooks/useGameDay';
 import { useTraining } from '../../hooks/useTraining';
+import { useGameDay } from '../../hooks/useGameDay';
 import { PlayerCard } from '../PlayerCard';
 import { PlayerModal } from '../PlayerModal';
 import { HairCalibrationPanel } from '../HairCalibrationPanel';
 import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
+import { ManagerProfileHub } from '../ManagerProfileHub';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, StoreItem } from '../../types';
 import { APP_CIRCUIT, STORE_ITEMS } from '../../constants/storeCatalog';
-import { GOLD_PACKS, type BillingCatalogEntry } from '../../constants/billingCatalog';
-import { addGoldToStore, equipTeamKit, equipTeamLogo, getStoreState, isItemOwned, purchaseStoreItem } from '../../utils/store';
-import { loadMetaStoreSnapshot, grantMobilePurchase, purchaseCatalogItemWithBalance, type MetaStoreSnapshot } from '../../lib/metaStore';
-import { canUseDevBillingPreview, formatBrl, getBillingReadinessCopy, getCheckoutChannelLabel } from '../../lib/billing';
+import { MANAGER_TRAITS_BY_ID, STARTER_MANAGER_TRAITS, type ManagerTrait } from '../../constants/managerTraits';
+import { BILLING_CATALOG, GOLD_PACKS, getBillingProduct, type BillingCatalogEntry } from '../../constants/billingCatalog';
+import { addGoldToStore, equipManagerItem, equipTeamKit, equipTeamLogo, getStoreState, isItemOwned, purchaseStoreItem } from '../../utils/store';
+import {
+  isHapticsEnabled,
+  isInitialHelpEnabled,
+  isMatchNotificationsEnabled,
+  isSoundEnabled,
+  setHapticsEnabled as persistHapticsEnabled,
+  setInitialHelpEnabled as persistInitialHelpEnabled,
+  setMatchNotificationsEnabled as persistMatchNotificationsEnabled,
+  setSoundEnabled as persistSoundEnabled
+} from '../../utils/uiFeedback';
+import { cancelScheduledMatchNotification, requestMatchNotificationPermission } from '../../utils/matchNotifications';
+import { deleteCurrentAccount, loadMetaStoreSnapshot, purchaseCatalogItemWithBalance, syncManagerProfileMeta, updateProfileDisplaySlots, verifyGooglePlayPurchase, type MetaStoreSnapshot } from '../../lib/metaStore';
+import { canUseDevBillingPreview, formatBrl, getBillingReadinessCopy, getCheckoutChannelLabel, getNativeProductId, startNativeProductPurchase } from '../../lib/billing';
+import { buildManagerProfilePayload } from '../../utils/managerProfile';
 import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy, Coins } = LucideIcons;
+const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy, Coins, Trash2 } = LucideIcons;
 
 
 export const CareerTab = (props: any) => {
   const { saveGame } = useGame();
-  const { setState, addToast, togglePause } = useGameDispatch();
+  const { setState, addToast, togglePause, logout, requestConfirm } = useGameDispatch();
   const { state, isPaused, worldId } = useGameState();
+  const canUseDevTools = import.meta.env.DEV;
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches } = dashData;
   const {
@@ -51,15 +66,19 @@ export const CareerTab = (props: any) => {
   const [isBillingBusy, setIsBillingBusy] = useState(false);
   const [metaSnapshot, setMetaSnapshot] = useState<MetaStoreSnapshot | null>(null);
   const [isMetaLoading, setIsMetaLoading] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('elite.sound') !== 'off');
-  const [initialHelpEnabled, setInitialHelpEnabled] = useState(() => localStorage.getItem('elite.initialHelp') !== 'off');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => isSoundEnabled());
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => isHapticsEnabled());
+  const [initialHelpEnabled, setInitialHelpEnabled] = useState(() => isInitialHelpEnabled());
+  const [matchNotificationsEnabled, setMatchNotificationsEnabled] = useState(() => isMatchNotificationsEnabled());
   const store = getStoreState(state);
-  const { isAuthenticated } = useGameState();
+  const { isAuthenticated, worlds } = useGameState();
   const shopBoots = STORE_ITEMS.filter(item => item.category === 'BOOT');
   const shopKits = STORE_ITEMS.filter(item => item.category === 'KIT');
   const shopLogos = STORE_ITEMS.filter(item => item.category === 'LOGO');
   const shopProfileItems = STORE_ITEMS.filter(item => item.category === 'ACCESSORY' || item.category === 'BADGE');
   const userManager = state.userManagerId ? state.managers[state.userManagerId] : null;
+  const isBeforeKickoff = state.world.status === 'LOBBY' && state.world.currentDay < 0;
   const worldClockDisplayDate = useMemo(() => {
     const baseDate = new Date(
       state.world.status === 'LOBBY' && state.world.startScheduledAt
@@ -130,13 +149,36 @@ export const CareerTab = (props: any) => {
 
   const ownedItems = STORE_ITEMS.filter(item => isOwnedInView(item.id));
   const ownedProfileItems = ownedItems.filter(item => item.category === 'ACCESSORY' || item.category === 'BADGE');
+  const remoteEquippedManagerItemIds = useMemo(() => {
+    const profileItemIds = new Set(shopProfileItems.map(item => item.id));
+    return (metaSnapshot?.inventory || [])
+      .filter(row => row.is_equipped && profileItemIds.has(row.item_id))
+      .sort((a, b) => Number(a.equipped_context?.slot || 99) - Number(b.equipped_context?.slot || 99))
+      .map(row => row.item_id)
+      .slice(0, 3);
+  }, [metaSnapshot?.inventory, shopProfileItems]);
+  const visibleManagerItemIds = isAuthenticated ? remoteEquippedManagerItemIds : store.equippedManagerItemIds;
+  const equippedManagerItems = visibleManagerItemIds
+    .map(itemId => STORE_ITEMS.find(item => item.id === itemId))
+    .filter((item): item is StoreItem => !!item);
+  const equippedManagerItemIds = new Set(equippedManagerItems.map(item => item.id));
+  const ownedManagerTraitIds = userManager?.ownedTraitIds?.length
+    ? userManager.ownedTraitIds
+    : (userManager?.originTraitId ? [userManager.originTraitId] : []);
+  const equippedManagerTraitIds = userManager?.equippedTraitIds?.length
+    ? userManager.equippedTraitIds
+    : ownedManagerTraitIds.slice(0, 1);
+  const ownedManagerTraits = ownedManagerTraitIds
+    .map(traitId => MANAGER_TRAITS_BY_ID[traitId] || STARTER_MANAGER_TRAITS.find(trait => trait.id === traitId))
+    .filter((trait): trait is ManagerTrait => !!trait);
   const highRarityOwnedItems = ownedItems.filter(item => ['RARE', 'EPIC', 'LEGENDARY'].includes(item.rarity));
   const profileHonorScore = Math.round(
     (userManager?.career.titlesWon || 0) * 18 +
     (userManager?.career.hallOfFameEntries || 0) * 35 +
     (viewCircuit.seasonRunsCompleted || 0) * 12 +
     highRarityOwnedItems.length * 7 +
-    ownedProfileItems.length * 14
+    ownedProfileItems.length * 14 +
+    equippedManagerTraitIds.reduce((sum, traitId) => sum + (MANAGER_TRAITS_BY_ID[traitId]?.influence || 0), 0)
   );
   const profileTier = profileHonorScore >= 220 ? 'Lenda urbana' : profileHonorScore >= 120 ? 'Nome respeitado' : profileHonorScore >= 45 ? 'Em ascensao' : 'Primeiros passos';
 
@@ -165,15 +207,76 @@ export const CareerTab = (props: any) => {
 
   const updateSoundEnabled = (enabled: boolean) => {
     setSoundEnabled(enabled);
-    localStorage.setItem('elite.sound', enabled ? 'on' : 'off');
+    persistSoundEnabled(enabled);
     addToast(enabled ? 'Sons ligados.' : 'Sons desligados.', 'success');
+  };
+
+  const updateHapticsEnabled = (enabled: boolean) => {
+    setHapticsEnabled(enabled);
+    persistHapticsEnabled(enabled);
+    addToast(enabled ? 'Vibracao ligada.' : 'Vibracao desligada.', 'success');
   };
 
   const updateInitialHelpEnabled = (enabled: boolean) => {
     setInitialHelpEnabled(enabled);
-    localStorage.setItem('elite.initialHelp', enabled ? 'on' : 'off');
-    localStorage.setItem('elite.homeGuideHidden', enabled ? 'false' : 'true');
-    addToast(enabled ? 'Ajuda inicial ativada.' : 'Ajuda inicial ocultada.', 'success');
+    persistInitialHelpEnabled(enabled);
+    addToast(enabled ? 'Ajuda inicial ativada. As dicas voltam a aparecer.' : 'Ajuda inicial ocultada.', 'success');
+  };
+
+  const updateMatchNotificationsEnabled = async (enabled: boolean) => {
+    if (!enabled) {
+      setMatchNotificationsEnabled(false);
+      persistMatchNotificationsEnabled(false);
+      await cancelScheduledMatchNotification();
+      addToast('Alertas de jogo desligados.', 'success');
+      return;
+    }
+
+    const permission = await requestMatchNotificationPermission();
+    if (!permission.granted) {
+      setMatchNotificationsEnabled(false);
+      persistMatchNotificationsEnabled(false);
+      addToast('Permissao de notificacao nao liberada no aparelho.', 'warning');
+      return;
+    }
+
+    setMatchNotificationsEnabled(true);
+    persistMatchNotificationsEnabled(true);
+    addToast('Alertas de jogo ligados. Aviso 2h antes da partida.', 'success');
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!isAuthenticated) {
+      addToast('Entre na conta antes de solicitar exclusao.', 'warning');
+      return;
+    }
+
+    const confirmed = await requestConfirm({
+      title: 'Excluir conta',
+      message: 'Isto apaga sua conta Elite 50 e os dados online vinculados a ela. Essa acao nao pode ser desfeita.',
+      confirmLabel: 'Excluir',
+      cancelLabel: 'Cancelar',
+      tone: 'danger',
+    });
+
+    if (!confirmed) return;
+
+    setIsDeletingAccount(true);
+    try {
+      const result = await deleteCurrentAccount();
+      if (!result?.ok) {
+        addToast(result?.reason || 'Nao foi possivel excluir a conta agora.', 'error');
+        return;
+      }
+
+      addToast('Conta excluida com sucesso.', 'success');
+      await logout();
+    } catch (error) {
+      console.error('CareerTab: delete account failed', error);
+      addToast('Erro ao excluir conta. Tente novamente em instantes.', 'error');
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const handleBuyStoreItem = async (itemId: string) => {
@@ -192,6 +295,16 @@ export const CareerTab = (props: any) => {
         }
 
         await refreshMetaSnapshot();
+        setState(prev => {
+          const currentStore = getStoreState(prev);
+          return {
+            ...prev,
+            store: {
+              ...currentStore,
+              ownedItemIds: Array.from(new Set([...currentStore.ownedItemIds, itemId])),
+            },
+          };
+        });
         addToast('Item comprado com sucesso.', 'success');
         return;
       } catch (error) {
@@ -212,46 +325,84 @@ export const CareerTab = (props: any) => {
     addToast(result.message, 'success');
   };
 
-  const handleGoldPackCheckout = async (pack: BillingCatalogEntry) => {
-    if (!pack.goldAmount || isBillingBusy) return;
-
-    const canPreview = canUseDevBillingPreview();
-    if (!canPreview) {
-      addToast('Checkout real ainda nao esta ligado neste build. O catalogo ja esta pronto para Google Play/App Store.', 'warning');
-      return;
-    }
-
+  const handleBillingCheckout = async (pack: BillingCatalogEntry) => {
+    if (isBillingBusy) return;
     setIsBillingBusy(true);
     try {
-      if (isAuthenticated) {
-        const result = await grantMobilePurchase(pack.code, {
-          platform: 'web_preview',
-          purchaseToken: `dev_${pack.code}_${Date.now()}`,
-          orderId: `DEV-${Date.now()}`,
-          rawPayload: {
-            mode: 'dev_preview',
-            note: 'Credito de teste local. Nao representa cobranca real.',
-          },
-        });
+      const canPreview = canUseDevBillingPreview();
+      if (!canPreview) {
+        if (!isAuthenticated) {
+          addToast('Entre com Google antes de comprar.', 'warning');
+          return;
+        }
 
-        if (!result?.ok) {
-          addToast(result?.reason || 'Nao foi possivel creditar o pacote.', 'warning');
+        const nativeResult = await startNativeProductPurchase(pack);
+        if (nativeResult.purchaseState === 'pending') {
+          addToast('Compra pendente na Google Play. Assim que aprovar, tente restaurar/abrir a loja para conciliar.', 'warning');
+          return;
+        }
+
+        if (!nativeResult.ok) {
+          const productId = getNativeProductId(pack);
+          const message = nativeResult.reason === 'NATIVE_BILLING_BRIDGE_MISSING'
+            ? `Produto nativo ${productId} esta mapeado, mas o bridge Android nao respondeu.`
+            : nativeResult.reason === 'WEB_RUNTIME'
+              ? 'Compra real exige Android + Google Play.'
+              : `Nao foi possivel concluir a compra ${productId} na Google Play.`;
+          addToast(message, 'warning');
+          return;
+        }
+
+        if (nativeResult.platform !== 'android') {
+          addToast('Compra real ainda esta liberada apenas no Android/Google Play.', 'warning');
+          return;
+        }
+
+        const result = await verifyGooglePlayPurchase(pack.code, {
+              productId: nativeResult.productId,
+              purchaseToken: nativeResult.purchaseToken,
+              orderId: nativeResult.orderId,
+              packageName: nativeResult.packageName,
+              purchaseState: nativeResult.purchaseState,
+              rawPayload: nativeResult.rawPayload,
+            });
+
+        const grant = result.grant;
+        if (!result?.ok || !grant?.ok) {
+          addToast(result?.reason || grant?.reason || 'Nao foi possivel validar a compra nativa.', 'warning');
           return;
         }
 
         await refreshMetaSnapshot();
-        addToast(`${pack.amountLabel} creditado no perfil online de teste.`, 'success');
+        addToast(pack.kind === 'entitlement' ? 'Passe ativado no perfil.' : `${pack.amountLabel} creditado no perfil.`, 'success');
+        setSelectedGoldPack(null);
+        return;
+      }
+
+      if (isAuthenticated) {
+        addToast('Preview web nao credita perfil online. Compra real exige Android + Google Play.', 'info');
       } else {
-        const nextState = addGoldToStore(state, pack.goldAmount);
+        const nextState = pack.goldAmount
+          ? addGoldToStore(state, pack.goldAmount)
+          : {
+              ...state,
+              store: {
+                ...store,
+                circuit: {
+                  ...store.circuit,
+                  premiumActive: true,
+                },
+              },
+            };
         setState(nextState);
         await saveGame(nextState);
-        addToast(`${pack.amountLabel} creditado neste save local de teste.`, 'success');
+        addToast(pack.kind === 'entitlement' ? 'Passe ativado neste save local de teste.' : `${pack.amountLabel} creditado neste save local de teste.`, 'success');
       }
 
       setSelectedGoldPack(null);
     } catch (error) {
-      console.error('CareerTab: billing preview failed', error);
-      addToast('Falha ao testar compra de ouro.', 'error');
+      console.error('CareerTab: billing checkout failed', error);
+      addToast('Falha ao processar compra.', 'error');
     } finally {
       setIsBillingBusy(false);
     }
@@ -273,6 +424,77 @@ export const CareerTab = (props: any) => {
     addToast('Logo especial aplicado ao clube.', 'success');
   };
 
+  const handleEquipManagerItem = async (itemId: string) => {
+    if (isAuthenticated) {
+      const item = STORE_ITEMS.find(storeItem => storeItem.id === itemId);
+      if (!item || (item.category !== 'ACCESSORY' && item.category !== 'BADGE')) {
+        addToast('Item de manager invalido.', 'warning');
+        return;
+      }
+
+      if (!isOwnedInView(item.id)) {
+        addToast('Compre o item primeiro.', 'warning');
+        return;
+      }
+
+      try {
+        const isEquipped = equippedManagerItemIds.has(item.id);
+        let nextIds = visibleManagerItemIds.filter(id => id !== item.id);
+        if (!isEquipped) {
+          if (nextIds.length >= 3) nextIds = nextIds.slice(1);
+          nextIds = [...nextIds, item.id];
+        }
+
+        await updateProfileDisplaySlots(nextIds, shopProfileItems.map(profileItem => profileItem.id));
+        await refreshMetaSnapshot();
+        addToast(isEquipped ? `${item.name} removido da exibicao.` : `${item.name} exibido no perfil.`, 'success');
+      } catch (error) {
+        console.error('CareerTab: failed to update profile display slots', error);
+        addToast('Nao foi possivel atualizar a exibicao do perfil.', 'error');
+      }
+      return;
+    }
+
+    const result = equipManagerItem(state, itemId);
+    if (!result.ok) {
+      addToast(result.message, 'warning');
+      return;
+    }
+
+    setState(result.state);
+    await saveGame(result.state);
+    addToast(result.message, 'success');
+  };
+
+  const handleToggleManagerTrait = async (traitId: string) => {
+    if (!userManager || !state.userManagerId) return;
+
+    const currentOwned = ownedManagerTraitIds.includes(traitId)
+      ? ownedManagerTraitIds
+      : [...ownedManagerTraitIds, traitId];
+    const isEquipped = equippedManagerTraitIds.includes(traitId);
+    const nextEquipped = isEquipped
+      ? equippedManagerTraitIds.filter(id => id !== traitId)
+      : [...equippedManagerTraitIds.slice(-1), traitId];
+    const nextManager = {
+      ...userManager,
+      ownedTraitIds: currentOwned,
+      equippedTraitIds: nextEquipped,
+    };
+    const nextState = {
+      ...state,
+      managers: {
+        ...state.managers,
+        [state.userManagerId]: nextManager,
+      },
+    };
+
+    setState(nextState);
+    await saveGame(nextState);
+    await syncManagerProfileMeta(buildManagerProfilePayload(nextManager)).catch(() => undefined);
+    addToast(isEquipped ? 'Trait removido deste mundo.' : 'Trait equipado neste mundo.', 'success');
+  };
+
   const handleStoreItemAction = async (item: StoreItem) => {
     const owned = isOwnedInView(item.id);
 
@@ -288,6 +510,12 @@ export const CareerTab = (props: any) => {
 
     if (item.category === 'LOGO') {
       await handleEquipLogo(item.id);
+      return;
+    }
+
+    if (item.category === 'ACCESSORY' || item.category === 'BADGE') {
+      await handleEquipManagerItem(item.id);
+      setSelectedStoreItem(null);
       return;
     }
 
@@ -559,7 +787,7 @@ export const CareerTab = (props: any) => {
                             {opponent?.name || 'DESCONHECIDO'}
                           </span>
                           <span className="text-[7px] sm:text-[8px] text-cyan-400/50 font-black uppercase tracking-widest">
-                            {state.world.status === 'LOBBY' ? '--/--' : new Date(match.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            {isBeforeKickoff ? '--/--' : new Date(match.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                           </span>
                         </div>
                       </div>
@@ -758,10 +986,10 @@ export const CareerTab = (props: any) => {
                 </div>
 
                 {[
-                  { title: 'Chuteiras', items: shopBoots, onEquip: null as null | ((itemId: string) => Promise<void>) },
-                  { title: 'Uniformes', items: shopKits, onEquip: handleEquipKit },
-                  { title: 'Logos', items: shopLogos, onEquip: handleEquipLogo },
-                  { title: 'Perfil', items: shopProfileItems, onEquip: null as null | ((itemId: string) => Promise<void>) },
+                  { title: 'Chuteiras', items: shopBoots, usage: 'Jogador' },
+                  { title: 'Uniformes', items: shopKits, usage: 'Clube' },
+                  { title: 'Logos', items: shopLogos, usage: 'Clube' },
+                  { title: 'Manager', items: shopProfileItems, usage: 'Manager' },
                 ].map(section => (
                   <div key={section.title} className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -771,7 +999,12 @@ export const CareerTab = (props: any) => {
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5">
                       {section.items.map(item => {
                         const owned = isOwnedInView(item.id);
-                        const canEquip = !!section.onEquip && owned && !!userTeam;
+                        const canEquip = owned && (
+                          item.category === 'ACCESSORY' ||
+                          item.category === 'BADGE' ||
+                          ((item.category === 'KIT' || item.category === 'LOGO') && !!userTeam)
+                        );
+                        const isEquipped = equippedManagerItemIds.has(item.id);
                         return (
                           <button
                             key={item.id}
@@ -792,16 +1025,18 @@ export const CareerTab = (props: any) => {
                             </p>
                             <div className="mt-0.5 flex min-h-[0.9rem] items-center justify-center">
                               <span className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase tracking-widest ${
-                                owned
+                                isEquipped
+                                  ? 'border-amber-300/35 bg-amber-400/15 text-amber-100'
+                                  : owned
                                   ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
                                   : 'border-white/10 bg-white/[0.03] text-white/35'
                               }`}>
-                                {owned ? 'Seu' : item.rarity}
+                                {isEquipped ? 'Exibido' : owned ? 'Seu' : item.rarity}
                               </span>
                             </div>
                             {canEquip && (
                               <span className="mt-0.5 block text-[6px] font-black uppercase tracking-widest text-cyan-200">
-                                Equipavel
+                                {section.usage}
                               </span>
                             )}
                           </button>
@@ -814,44 +1049,17 @@ export const CareerTab = (props: any) => {
             )}
 
             {careerSection === 'inventory' && (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/40">Itens comprados</p>
-                    <p className="text-[7px] font-black uppercase tracking-widest text-white/20">{ownedItems.length} no inventario</p>
-                  </div>
-                </div>
-                {ownedItems.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-white/10 p-4 text-center">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-white/25">Nada comprado ainda.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5">
-                    {ownedItems.map(item => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="flex aspect-square min-w-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/35 p-1.5 text-center transition hover:bg-white/[0.05]"
-                        onClick={() => setSelectedStoreItem(item)}
-                      >
-                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 sm:h-14 sm:w-14">
-                          <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" />
-                        </div>
-                        <p className="mt-1 w-full truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
-                        <p className="text-[6px] font-bold uppercase tracking-widest text-white/35">{item.category}</p>
-                        <span className="mt-0.5 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[6px] font-black uppercase tracking-widest text-cyan-100">
-                          {item.rarity}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ManagerProfileHub worldsPlayed={worlds.length} />
             )}
 
             {careerSection === 'circuit' && (
               <div className="space-y-3">
                 <div className="relative overflow-hidden rounded-[1.75rem] border border-cyan-400/20 bg-black/45 p-4 shadow-[0_0_35px_rgba(34,211,238,0.12)]">
+                  <img
+                    src={APP_CIRCUIT.bannerImagePath}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover opacity-30"
+                  />
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_36%)]" />
                   <div className="absolute -right-10 top-2 h-28 w-28 rounded-full bg-cyan-400/10 blur-3xl" />
                   <div className="absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-fuchsia-500/10 blur-3xl" />
@@ -869,6 +1077,9 @@ export const CareerTab = (props: any) => {
                         <p className="mt-2 max-w-[28rem] text-[11px] font-bold leading-relaxed text-white/75">
                           A temporada do mundo continua sendo a do seu clube. O circuito corre por fora por 90 dias e transforma sua jornada em uma campanha premium com trilha, oraculo e trofeu social.
                         </p>
+                      </div>
+                      <div className="hidden h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-black/45 shadow-inner sm:flex">
+                        <img src={APP_CIRCUIT.passIconPath} alt="" className="h-full w-full object-contain p-2" />
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-right shadow-inner">
                         <p className="text-[7px] font-black uppercase tracking-[0.25em] text-cyan-200">Progresso</p>
@@ -890,7 +1101,10 @@ export const CareerTab = (props: any) => {
                       </div>
                       <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur-md">
                         <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Recompensa final</p>
-                        <p className="mt-1 text-sm font-black uppercase italic text-white">Elite Original</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <img src={APP_CIRCUIT.finalRewardImagePath} alt="" className="h-8 w-8 object-contain" />
+                          <p className="text-sm font-black uppercase italic text-white">Elite Original</p>
+                        </div>
                         <p className="text-[7px] font-black uppercase tracking-widest text-white/25">badge social</p>
                       </div>
                     </div>
@@ -898,6 +1112,8 @@ export const CareerTab = (props: any) => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
+                        onClick={() => setSelectedGoldPack(getBillingProduct('passe_circuito_neon_01'))}
+                        disabled={viewCircuit.premiumActive}
                         className="rounded-2xl border border-cyan-400/30 bg-cyan-500/12 px-4 py-3 text-[9px] font-black uppercase tracking-[0.28em] text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.15)] transition hover:bg-cyan-500/18"
                       >
                         {viewCircuit.premiumActive ? 'Passe ativo' : 'Ativar premium'}
@@ -996,6 +1212,9 @@ export const CareerTab = (props: any) => {
                       <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/45">
                         {profileTier} - honra {profileHonorScore}
                       </p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/35">
+                        Trofeus aparecem pelo curriculo. Inventario dos outros fica privado.
+                      </p>
                     </div>
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 text-amber-100">
                       <Crown size={24} />
@@ -1018,6 +1237,92 @@ export const CareerTab = (props: any) => {
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-amber-100">Exibicao do perfil</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                        Ate 3 itens em destaque. Trofeus ficam no curriculo e nao ocupam slot.
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-lg font-black italic text-white">{equippedManagerItems.length}/3</p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[
+                      equippedManagerItems[0],
+                      equippedManagerItems[1],
+                      equippedManagerItems[2],
+                    ].map((item, index) => (
+                      <button
+                        key={item?.id || `empty-manager-slot-${index}`}
+                        type="button"
+                        onClick={() => item && setSelectedStoreItem(item)}
+                        disabled={!item}
+                        className="aspect-square rounded-xl border border-white/10 bg-black/35 p-2 text-left transition hover:bg-white/[0.05] disabled:cursor-default disabled:opacity-45"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 text-white/70">
+                          {item ? <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" /> : <Shield size={16} />}
+                        </div>
+                        <p className="mt-2 truncate text-[7px] font-black uppercase tracking-wide text-white">
+                          {item?.name || 'Slot vazio'}
+                        </p>
+                        <p className="text-[6px] font-black uppercase tracking-widest text-white/35">
+                          {item ? 'em exibicao' : 'item'}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-violet-100">Traits do manager</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                        Traits sao conquistados no perfil. Voce equipa os que quer usar neste mundo.
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-lg font-black italic text-white">{equippedManagerTraitIds.length}/2</p>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {ownedManagerTraits.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/10 p-3 text-center sm:col-span-2">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Nenhum trait liberado ainda.</p>
+                      </div>
+                    ) : ownedManagerTraits.map(trait => {
+                      const isEquipped = equippedManagerTraitIds.includes(trait.id);
+                      return (
+                        <button
+                          key={trait.id}
+                          type="button"
+                          onClick={() => handleToggleManagerTrait(trait.id)}
+                          className={`rounded-xl border p-3 text-left transition ${
+                            isEquipped
+                              ? 'border-violet-300/40 bg-violet-300/15'
+                              : 'border-white/10 bg-black/35 hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-white">{trait.name}</p>
+                            <span className={`rounded-full border px-2 py-0.5 text-[6px] font-black uppercase tracking-widest ${
+                              isEquipped
+                                ? 'border-violet-300/30 bg-violet-400/15 text-violet-100'
+                                : 'border-white/10 bg-white/[0.03] text-white/35'
+                            }`}>
+                              {isEquipped ? 'equipado' : 'guardar'}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[8px] font-bold uppercase tracking-wider text-white/40">{trait.description}</p>
+                          <p className="mt-2 text-[7px] font-black uppercase tracking-widest text-violet-100/60">
+                            influencia +{trait.influence}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1032,22 +1337,25 @@ export const CareerTab = (props: any) => {
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {shopProfileItems.map(item => {
                       const owned = isOwnedInView(item.id);
+                      const isEquipped = equippedManagerItemIds.has(item.id);
                       return (
                         <button
                           key={item.id}
                           type="button"
                           onClick={() => setSelectedStoreItem(item)}
                           className={`aspect-square rounded-xl border p-2 text-left transition ${
-                            owned
-                              ? 'border-cyan-300/35 bg-cyan-300/12'
+                            isEquipped
+                              ? 'border-amber-300/35 bg-amber-400/12'
+                              : owned
+                                ? 'border-cyan-300/35 bg-cyan-300/12'
                               : 'border-white/10 bg-black/35 hover:bg-white/[0.05]'
                           }`}
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/45 text-white/70">
-                            {item.category === 'BADGE' ? <Award size={16} /> : <Shield size={16} />}
+                          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 text-white/70">
+                            <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" />
                           </div>
                           <p className="mt-2 truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
-                          <p className="text-[6px] font-black uppercase tracking-widest text-white/35">{owned ? 'seu' : item.rarity}</p>
+                          <p className="text-[6px] font-black uppercase tracking-widest text-white/35">{isEquipped ? 'em exibicao' : owned ? 'seu' : item.rarity}</p>
                         </button>
                       );
                     })}
@@ -1088,7 +1396,7 @@ export const CareerTab = (props: any) => {
                     <button
                       type="button"
                       onClick={() => updateSoundEnabled(!soundEnabled)}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
                         soundEnabled
                           ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
                           : 'border-white/10 bg-white/[0.04] text-white/55'
@@ -1099,8 +1407,20 @@ export const CareerTab = (props: any) => {
                     </button>
                     <button
                       type="button"
+                      onClick={() => updateHapticsEnabled(!hapticsEnabled)}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
+                        hapticsEnabled
+                          ? 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+                          : 'border-white/10 bg-white/[0.04] text-white/55'
+                      }`}
+                    >
+                      <span className="text-[9px] font-black uppercase tracking-[0.22em]">Vibracao</span>
+                      <span className="text-[8px] font-black uppercase tracking-[0.22em]">{hapticsEnabled ? 'Ligada' : 'Desligada'}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => updateInitialHelpEnabled(!initialHelpEnabled)}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
                         initialHelpEnabled
                           ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
                           : 'border-white/10 bg-white/[0.04] text-white/55'
@@ -1108,6 +1428,18 @@ export const CareerTab = (props: any) => {
                     >
                       <span className="text-[9px] font-black uppercase tracking-[0.22em]">Ajuda inicial</span>
                       <span className="text-[8px] font-black uppercase tracking-[0.22em]">{initialHelpEnabled ? 'Ativa' : 'Oculta'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMatchNotificationsEnabled(!matchNotificationsEnabled)}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
+                        matchNotificationsEnabled
+                          ? 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-100'
+                          : 'border-white/10 bg-white/[0.04] text-white/55'
+                      }`}
+                    >
+                      <span className="text-[9px] font-black uppercase tracking-[0.22em]">Alertas de jogo</span>
+                      <span className="text-[8px] font-black uppercase tracking-[0.22em]">{matchNotificationsEnabled ? 'Ligados' : 'Desligados'}</span>
                     </button>
                   </div>
                 </div>
@@ -1130,10 +1462,32 @@ export const CareerTab = (props: any) => {
                     Reportar problema
                   </button>
                 </div>
+
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-rose-200">Conta</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/40">
+                        Remove o cadastro e os dados online vinculados ao login atual.
+                      </p>
+                    </div>
+                    <Trash2 size={18} className="text-rose-200" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAccount}
+                    disabled={isDeletingAccount || !isAuthenticated}
+                    className="mt-4 w-full rounded-xl border border-rose-400/30 bg-black/35 px-3 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-rose-100 transition hover:bg-rose-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/25 disabled:hover:bg-black/35"
+                  >
+                    {isDeletingAccount ? 'Excluindo...' : 'Excluir conta'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
+          {canUseDevTools && (
+            <>
           {/* GM Panel */}
           <div className="glass-card-neon white-gradient-sheen border border-red-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-[0_0_30px_rgba(239,68,68,0.15)] flex flex-col gap-2 sm:gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl -mr-12 -mt-12" />
@@ -1194,9 +1548,12 @@ export const CareerTab = (props: any) => {
           </div>
 
           <HairCalibrationPanel />
+            </>
+          )}
         </div>
       </div>
 
+      {canUseDevTools && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {/* World Clock Control */}
         <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-[2rem] space-y-3 sm:space-y-4">
@@ -1233,7 +1590,7 @@ export const CareerTab = (props: any) => {
               <div>
                 <div className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">Ritmo Oficial</div>
                 <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-white">
-                  {state.world.clock?.label || '1 dia a cada 10 min'}
+                  {state.world.clock?.label || 'Tempo real'}
                 </div>
               </div>
             </div>
@@ -1281,6 +1638,8 @@ export const CareerTab = (props: any) => {
           )}
         </div>
       </div>
+
+      )}
 
       {/* Evolução / Pontos de Poder Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3 px-0">
@@ -1354,6 +1713,8 @@ export const CareerTab = (props: any) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setSelectedStoreItem(null)}>
           {(() => {
             const rarityStyle = getStoreRarityStyle(selectedStoreItem.rarity);
+            const isManagerItem = selectedStoreItem.category === 'ACCESSORY' || selectedStoreItem.category === 'BADGE';
+            const isManagerEquipped = equippedManagerItemIds.has(selectedStoreItem.id);
             return (
           <div
             className={`w-full max-w-sm rounded-[2rem] border ${rarityStyle.border} bg-slate-950/95 shadow-[0_0_40px_rgba(0,0,0,0.55)] ${rarityStyle.glow} overflow-hidden`}
@@ -1418,13 +1779,13 @@ export const CareerTab = (props: any) => {
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Status</p>
                   <p className="mt-1 text-sm font-black uppercase italic text-white">
-                    {isOwnedInView(selectedStoreItem.id) ? 'No inventario' : 'Nao comprado'}
+                    {isManagerEquipped ? 'Em exibicao' : isOwnedInView(selectedStoreItem.id) ? 'No inventario' : 'Nao comprado'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Uso</p>
                   <p className="mt-1 text-sm font-black uppercase italic text-white">
-                    {selectedStoreItem.category === 'BOOT' ? 'Jogador' : selectedStoreItem.category === 'KIT' || selectedStoreItem.category === 'LOGO' ? 'Clube' : 'Perfil'}
+                    {selectedStoreItem.category === 'BOOT' ? 'Jogador' : selectedStoreItem.category === 'KIT' || selectedStoreItem.category === 'LOGO' ? 'Clube' : 'Manager'}
                   </p>
                 </div>
               </div>
@@ -1444,7 +1805,9 @@ export const CareerTab = (props: any) => {
                 >
                   {!isOwnedInView(selectedStoreItem.id)
                     ? 'Comprar'
-                    : selectedStoreItem.category === 'KIT' || selectedStoreItem.category === 'LOGO'
+                    : isManagerEquipped
+                      ? 'Remover'
+                    : selectedStoreItem.category === 'KIT' || selectedStoreItem.category === 'LOGO' || isManagerItem
                       ? 'Equipar'
                       : 'Fechar'}
                 </button>
@@ -1471,7 +1834,11 @@ export const CareerTab = (props: any) => {
                 <X size={14} />
               </button>
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-300/30 bg-amber-300/10 text-amber-100">
-                <Coins size={26} />
+                {selectedGoldPack.imagePath ? (
+                  <img src={selectedGoldPack.imagePath} alt="" className="h-full w-full object-contain p-1.5" />
+                ) : (
+                  <Coins size={26} />
+                )}
               </div>
               <p className="mt-4 text-[8px] font-black uppercase tracking-[0.3em] text-amber-200">{getCheckoutChannelLabel()}</p>
               <h3 className="mt-2 text-2xl font-black uppercase italic tracking-tight text-white">{selectedGoldPack.displayName}</h3>
@@ -1479,8 +1846,8 @@ export const CareerTab = (props: any) => {
             </div>
 
             <div className="space-y-4 p-5">
-              <div className="grid grid-cols-3 gap-2">
-                {GOLD_PACKS.map(pack => (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {BILLING_CATALOG.map(pack => (
                   <button
                     key={pack.code}
                     type="button"
@@ -1491,8 +1858,17 @@ export const CareerTab = (props: any) => {
                         : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
                     }`}
                   >
-                    <p className="text-sm font-black italic text-white">{pack.goldAmount}</p>
-                    <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-amber-200">ouro</p>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/25">
+                      {pack.imagePath ? (
+                        <img src={pack.imagePath} alt="" className="h-full w-full object-contain p-1" />
+                      ) : (
+                        <Coins size={16} className="text-amber-100" />
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm font-black italic text-white">{pack.goldAmount ?? pack.amountLabel}</p>
+                    <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-amber-200">
+                      {pack.goldAmount ? 'ouro' : 'passe'}
+                    </p>
                     <p className="mt-2 text-[8px] font-black uppercase tracking-widest text-white/45">{formatBrl(pack.brlPrice)}</p>
                   </button>
                 ))}
@@ -1522,7 +1898,7 @@ export const CareerTab = (props: any) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleGoldPackCheckout(selectedGoldPack)}
+                  onClick={() => handleBillingCheckout(selectedGoldPack)}
                   disabled={isBillingBusy}
                   className="flex-1 rounded-xl border border-amber-300/35 bg-amber-300/15 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-amber-100 transition hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >

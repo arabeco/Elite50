@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict } from '../engine/gameLogic';
+import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict, canTeamGainMatchProgression } from '../engine/gameLogic';
 import { generateInitialState } from '../engine/generator';
 import { Team, Player, GameState } from '../types';
 
@@ -159,6 +159,35 @@ describe('gameLogic', () => {
         expect(state.players[humanOwnedPlayerId].contract.teamId).toBe('t_32');
         expect(state.teams.t_31.squad).not.toContain(humanOwnedPlayerId);
         expect(state.teams.t_32.squad).toContain(humanOwnedPlayerId);
+    });
+
+    it('lets inactive human teams auto-play without match progression gains', () => {
+        const state = generateInitialState();
+        attachHumanDraftManager(state, 'h_active', 't_31');
+        attachHumanDraftManager(state, 'h_idle', 't_32');
+
+        state.participants = [
+            {
+                userId: 'u_active',
+                teamId: 't_31',
+                managerId: 'h_active',
+                isCreator: false,
+                isObserver: false,
+                updatedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+            },
+            {
+                userId: 'u_idle',
+                teamId: 't_32',
+                managerId: 'h_idle',
+                isCreator: false,
+                isObserver: false,
+                updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+            }
+        ];
+
+        expect(canTeamGainMatchProgression(state, 't_31')).toBe(true);
+        expect(canTeamGainMatchProgression(state, 't_32')).toBe(false);
+        expect(canTeamGainMatchProgression(state, 't_1')).toBe(true);
     });
 
     it('promotes queued club applications when the offseason window opens', () => {

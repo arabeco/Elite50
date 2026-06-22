@@ -17,26 +17,60 @@ import {
 } from 'lucide-react';
 import { useGame } from '../store/GameContext';
 import { TeamLogo } from './TeamLogo';
-import { Player, Team, PlayerRole, District, LeagueColor, GameState } from '../types';
+import { Player, Team, PlayerRole, District, LeagueColor, GameState, PlayStyle, LogoPattern, LogoShape } from '../types';
 import { PlayerCard } from './PlayerCard';
 import { refillTeamRoster } from '../engine/generator';
+import { getTeamPowerCap } from '../engine/gameLogic';
+import { STARTER_MANAGER_TRAITS } from '../constants/managerTraits';
+import { loadManagerProfileMeta, syncManagerProfileMeta } from '../lib/metaStore';
+import { applyManagerProfileMeta, buildManagerProfilePayload } from '../utils/managerProfile';
 
 type Step = 'path-selection' | 'heir-choice' | 'founder-identity';
 
+const founderColorPresets = [
+  { id: 'auric-cyan', name: 'Auric Cyan', primary: '#22d3ee', secondary: '#0f172a', accent: '#facc15' },
+  { id: 'gold-noir', name: 'Gold Noir', primary: '#f5c542', secondary: '#111827', accent: '#fff7ad' },
+  { id: 'royal-gold', name: 'Royal Gold', primary: '#7c3aed', secondary: '#171221', accent: '#fbbf24' },
+  { id: 'ember-white', name: 'Ember White', primary: '#f97316', secondary: '#f8fafc', accent: '#0f172a' },
+  { id: 'verdant-gold', name: 'Verdant Gold', primary: '#10b981', secondary: '#052e24', accent: '#fde047' },
+  { id: 'steel-rose', name: 'Steel Rose', primary: '#e11d48', secondary: '#1f2937', accent: '#cbd5e1' },
+];
+
+const founderLogoPresets: Array<{ id: string; name: string; assetPath: string; shapeId: LogoShape; patternId: LogoPattern; symbolId: string }> =
+  Array.from({ length: 10 }, (_, index) => {
+    const number = String(index + 1).padStart(2, '0');
+    const assetPath = `/assetas/avatars/logos/founder-logo-${number}.png`;
+    return {
+      id: `founder-logo-${number}`,
+      name: `Logo ${number}`,
+      assetPath,
+      shapeId: 'circle_badge',
+      patternId: 'solid',
+      symbolId: `asset:${assetPath}`,
+    };
+  });
+
 export const NewGameFlow: React.FC = () => {
-  const { state, setState, saveGame, isSyncing, userId } = useGame();
+  const { state, setState, saveGame, isSyncing, userId, addToast } = useGame();
   const canFoundClub = state.world.status === 'LOBBY' && !state.userTeamId;
   const [step, setStep] = useState<Step>('path-selection');
   const [selectedHeirTeamId, setSelectedHeirTeamId] = useState('');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [managerName, setManagerName] = useState('');
+  const [managerPreferredPlayStyle, setManagerPreferredPlayStyle] = useState<PlayStyle>('Equilibrado');
+  const [managerTraitId, setManagerTraitId] = useState(STARTER_MANAGER_TRAITS[0].id);
 
   // Founder Data
   const [founderData, setFounderData] = useState({
     name: '',
     prefix: '',
-    primaryColor: '#22d3ee', // Cyan
-    secondaryColor: '#0f172a', // Slate 900
+    primaryColor: founderColorPresets[0].primary,
+    secondaryColor: founderColorPresets[0].secondary,
+    accentColor: founderColorPresets[0].accent,
+    logoAssetPath: founderLogoPresets[0].assetPath,
+    logoShape: founderLogoPresets[0].shapeId,
+    logoPattern: founderLogoPresets[0].patternId,
+    logoSymbol: founderLogoPresets[0].symbolId,
     replacedTeamId: '',
     district: 'NORTE' as District
   });
@@ -49,10 +83,30 @@ export const NewGameFlow: React.FC = () => {
   const players = useMemo(() => Object.values(state.players), [state.players]);
   const teams = useMemo(() => Object.values(state.teams), [state.teams]);
 
+  const getTeamScore = (team: Team) =>
+    (team.squad || []).reduce((sum, pid) => sum + (state.players[pid]?.totalRating || 0), 0);
+
   const availableHeirTeams = useMemo(() => {
-    // Return teams that don't have a manager assigned
-    return Object.values(state.teams).filter(t => !t.managerId && t.id.startsWith('t_'));
-  }, [state.teams]);
+    return Object.values(state.teams)
+      .filter(team => {
+        if (!team.id.startsWith('t_')) return false;
+        const manager = team.managerId ? state.managers[team.managerId] : null;
+        return !manager || manager.isNPC !== false;
+      })
+      .sort((a, b) => getTeamScore(a) - getTeamScore(b));
+  }, [state.managers, state.players, state.teams]);
+
+  const recommendedHeirTeam = availableHeirTeams[0] || null;
+  const defaultManagerName = managerName.trim() || 'Manager Elite';
+  const replaceableTeams = useMemo(() => {
+    return Object.values(state.teams)
+      .filter(team => {
+        if (!team.id.startsWith('t_')) return false;
+        const manager = team.managerId ? state.managers[team.managerId] : null;
+        return !manager || manager.isNPC !== false;
+      })
+      .sort((a, b) => getTeamScore(a) - getTeamScore(b));
+  }, [state.managers, state.players, state.teams]);
 
   const filteredDraftPlayers = useMemo(() => {
     return players.filter(p => {
@@ -78,13 +132,80 @@ export const NewGameFlow: React.FC = () => {
     if (selectedPlayerIds.includes(player.id)) {
       setSelectedPlayerIds(prev => prev.filter(id => id !== player.id));
     } else {
-      if (selectedPlayerIds.length >= 15) return;
+      if (selectedPlayerIds.length >= 15) {
+        addToast('Limite do draft inicial: 15 atletas.', 'warning');
+        return;
+      }
       setSelectedPlayerIds(prev => [...prev, player.id]);
     }
   };
 
+  const renderManagerProfileSetup = (tone: 'cyan' | 'amber') => {
+    const activeClass = tone === 'cyan'
+      ? 'border-cyan-400/45 bg-cyan-400/15 text-cyan-100'
+      : 'border-amber-400/45 bg-amber-400/15 text-amber-100';
+    const activePanelClass = tone === 'cyan'
+      ? 'border-cyan-400/45 bg-cyan-400/15'
+      : 'border-amber-400/45 bg-amber-400/15';
+    const monoClass = tone === 'cyan' ? 'text-cyan-500/30' : 'text-amber-500/30';
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <label className="flex items-center justify-between px-1">
+            <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Tatica preferida</span>
+            <span className={`text-[6px] sm:text-[7px] font-mono ${monoClass}`}>GLOBAL_PROFILE</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {playStyleOptions.map(style => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setManagerPreferredPlayStyle(style)}
+                className={`rounded-xl border px-3 py-2 text-[7px] font-black uppercase tracking-widest transition ${
+                  managerPreferredPlayStyle === style
+                    ? activeClass
+                    : 'border-white/10 bg-black/35 text-white/35 hover:bg-white/[0.05]'
+                }`}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="flex items-center justify-between px-1">
+            <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Trait de origem</span>
+            <span className={`text-[6px] sm:text-[7px] font-mono ${monoClass}`}>EQUIP_SLOT</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {STARTER_MANAGER_TRAITS.map(trait => (
+              <button
+                key={trait.id}
+                type="button"
+                onClick={() => setManagerTraitId(trait.id)}
+                className={`rounded-xl border px-3 py-2 text-left transition ${
+                  managerTraitId === trait.id
+                    ? activePanelClass
+                    : 'border-white/10 bg-black/35 hover:bg-white/[0.05]'
+                }`}
+              >
+                <p className="truncate text-[7px] font-black uppercase tracking-widest text-white">{trait.name}</p>
+                <p className="mt-1 line-clamp-2 text-[6px] font-bold uppercase tracking-wider text-white/35">{trait.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const selectedReplacementTeam = founderData.replacedTeamId ? state.teams[founderData.replacedTeamId] : null;
+  const recommendedLogo = recommendedHeirTeam?.logo as any;
+  const recommendedColors = recommendedHeirTeam?.colors as any;
+
   // Logic for Path B: Founder Draft
-  const draftScoreLimit = 10000; // Increased to allow more flexibility for 15 players
+  const draftScoreLimit = getTeamPowerCap(selectedReplacementTeam, state.players);
   const currentScore = useMemo(() => {
     return selectedPlayerIds.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
   }, [selectedPlayerIds, state.players]);
@@ -101,6 +222,36 @@ export const NewGameFlow: React.FC = () => {
   const eliteCount = useMemo(() => {
     return selectedPlayerIds.filter(id => (state.players[id]?.totalRating || 0) >= 900).length;
   }, [selectedPlayerIds, state.players]);
+  const playStyleOptions: PlayStyle[] = ['Equilibrado', 'Vertical', 'Tiki-Taka', 'Gegenpressing', 'Retranca Armada'];
+  const selectedManagerTrait = STARTER_MANAGER_TRAITS.find(trait => trait.id === managerTraitId) || STARTER_MANAGER_TRAITS[0];
+
+  const buildUserManager = (managerId: string, name: string, district: District, teamId: string | null) => ({
+    id: managerId,
+    name: name || 'Manager User',
+    district,
+    reputation: 50,
+    preferredPlayStyle: managerPreferredPlayStyle,
+    originTraitId: selectedManagerTrait.id,
+    ownedTraitIds: [selectedManagerTrait.id],
+    equippedTraitIds: [selectedManagerTrait.id],
+    isNPC: false,
+    attributes: {
+      evolution: selectedManagerTrait.id === 'trait_tactical_architect' ? 58 : 50,
+      negotiation: selectedManagerTrait.id === 'trait_cold_negotiator' ? 58 : 50,
+      scout: selectedManagerTrait.id === 'trait_street_scout' ? 58 : 50
+    },
+    career: {
+      titlesWon: 0,
+      totalLeagueTitles: 0,
+      totalCupTitles: 0,
+      hallOfFameEntries: 0,
+      consecutiveTitles: 0,
+      currentTeamId: teamId,
+      historyTeamIds: teamId ? [teamId] : [],
+      worldIds: [state.worldId || state.world.id || 'local_world']
+    },
+    achievements: []
+  });
 
   const isDraftValid =
     selectedPlayerIds.length === 15 &&
@@ -111,33 +262,20 @@ export const NewGameFlow: React.FC = () => {
     selectedPlayersByRole.MEI >= 3 &&
     selectedPlayersByRole.ATA >= 2;
 
-  const handleFinishHeir = () => {
-    const team = state.teams[selectedHeirTeamId];
-    if (!team) return;
+  const handleFinishHeir = async (teamId = selectedHeirTeamId, resolvedManagerName = defaultManagerName) => {
+    const team = state.teams[teamId];
+    if (!team) {
+      addToast('Escolha um clube para iniciar como herdeiro.', 'warning');
+      return;
+    }
 
     const managerId = userId || 'm_user';
-    const userManager = {
-      id: managerId,
-      name: managerName || 'Manager User',
-      district: team.district,
-      reputation: 50,
-      isNPC: false,
-      attributes: {
-        evolution: 50,
-        negotiation: 50,
-        scout: 50
-      },
-      career: {
-        titlesWon: 0,
-        totalLeagueTitles: 0,
-        totalCupTitles: 0,
-        hallOfFameEntries: 0,
-        consecutiveTitles: 0,
-        currentTeamId: selectedHeirTeamId,
-        historyTeamIds: []
-      },
-      achievements: []
-    };
+    const oldManagerId = team.managerId || null;
+    const managerProfile = await loadManagerProfileMeta().catch(() => null);
+    const userManager = applyManagerProfileMeta(
+      buildUserManager(managerId, resolvedManagerName, team.district, teamId) as any,
+      managerProfile
+    );
 
     // Auto-generate initial lineup
     const newLineup: Record<string, string> = {};
@@ -180,26 +318,55 @@ export const NewGameFlow: React.FC = () => {
       isCreator: state.isCreator === true,
       teams: {
         ...state.teams,
-        [selectedHeirTeamId]: {
+        [teamId]: {
           ...team,
           managerId: managerId,
+          tactics: {
+            ...team.tactics,
+            playStyle: managerPreferredPlayStyle,
+          },
           lineup: newLineup
         }
       },
       managers: {
         ...state.managers,
+        ...(oldManagerId && state.managers[oldManagerId]
+          ? {
+              [oldManagerId]: {
+                ...state.managers[oldManagerId],
+                career: {
+                  ...state.managers[oldManagerId].career,
+                  currentTeamId: null
+                }
+              }
+            }
+          : {}),
         [managerId]: userManager
       },
-      userTeamId: selectedHeirTeamId,
+      userTeamId: teamId,
       userManagerId: managerId
     };
 
     setState(newState);
-    saveGame(newState);
+    await saveGame(newState);
+    await syncManagerProfileMeta(buildManagerProfilePayload(userManager)).catch(() => undefined);
+    addToast(`${team.name} assumido. Carreira iniciada.`, 'success');
   };
 
-  const handleFinishFounder = () => {
-    if (!canFoundClub) return;
+  const handleFinishFounder = async () => {
+    if (!canFoundClub) {
+      addToast('Fundar clube so esta disponivel antes de assumir um time.', 'warning');
+      return;
+    }
+    if (!founderData.name || !founderData.prefix || !founderData.replacedTeamId || !managerName) {
+      addToast('Complete nome, clube e vaga substituida antes de fundar.', 'warning');
+      return;
+    }
+    const replacedTeam = state.teams[founderData.replacedTeamId];
+    if (!replacedTeam) {
+      addToast('Clube substituido nao encontrado.', 'error');
+      return;
+    }
     const newTeamId = `t_founder_${Date.now()}`;
     const managerId = userId || 'm_user';
 
@@ -208,18 +375,28 @@ export const NewGameFlow: React.FC = () => {
       name: `${founderData.name} ${founderData.prefix}`,
       city: 'Nova Capital',
       district: founderData.district,
-      league: state.teams[founderData.replacedTeamId].league,
+      league: replacedTeam.league,
       colors: {
         primary: founderData.primaryColor,
         secondary: founderData.secondaryColor
       },
+      logo: {
+        primary: founderData.primaryColor,
+        secondary: founderData.secondaryColor,
+        accent: founderData.accentColor,
+        assetPath: founderData.logoAssetPath,
+        shapeId: founderData.logoShape,
+        patternId: founderData.logoPattern,
+        symbolId: founderData.logoSymbol,
+      },
       tactics: {
-        playStyle: 'Vertical',
+        playStyle: managerPreferredPlayStyle,
         preferredFormation: '4-3-3'
       },
       managerId: managerId,
       squad: [],
-      lineup: {}
+      lineup: {},
+      powerCap: getTeamPowerCap(replacedTeam, state.players)
     } as Team;
     (newTeam as any).replacedTeamId = founderData.replacedTeamId;
 
@@ -259,28 +436,12 @@ export const NewGameFlow: React.FC = () => {
     // Remove the replaced team from teams record
     delete updatedTeams[founderData.replacedTeamId];
 
-    const userManager = {
-      id: managerId,
-      name: managerName || 'Manager User',
-      district: founderData.district,
-      reputation: 50,
-      isNPC: false,
-      attributes: {
-        evolution: 50,
-        negotiation: 50,
-        scout: 50
-      },
-      career: {
-        titlesWon: 0,
-        totalLeagueTitles: 0,
-        totalCupTitles: 0,
-        hallOfFameEntries: 0,
-        consecutiveTitles: 0,
-        currentTeamId: newTeamId,
-        historyTeamIds: []
-      },
-      achievements: []
-    };
+    const managerProfile = await loadManagerProfileMeta().catch(() => null);
+    const userManager = applyManagerProfileMeta(
+      buildUserManager(managerId, managerName, founderData.district, newTeamId) as any,
+      managerProfile
+    );
+    const replacedManagerId = oldTeam?.managerId || null;
 
     const newState: GameState = {
       ...state,
@@ -289,6 +450,17 @@ export const NewGameFlow: React.FC = () => {
       players: updatedPlayers,
       managers: {
         ...state.managers,
+        ...(replacedManagerId && state.managers[replacedManagerId]
+          ? {
+              [replacedManagerId]: {
+                ...state.managers[replacedManagerId],
+                career: {
+                  ...state.managers[replacedManagerId].career,
+                  currentTeamId: null
+                }
+              }
+            }
+          : {}),
         [managerId]: userManager
       },
       world: {
@@ -301,11 +473,23 @@ export const NewGameFlow: React.FC = () => {
     };
 
     setState(newState);
-    saveGame(newState);
+    await saveGame(newState);
+    await syncManagerProfileMeta(buildManagerProfilePayload(userManager)).catch(() => undefined);
+    addToast(`${newTeam.name} fundado. Agora monte sua historia.`, 'success');
+  };
+
+  const handleQuickStart = async () => {
+    if (!recommendedHeirTeam) {
+      addToast('Nao encontrei clube assumivel para inicio automatico.', 'warning');
+      return;
+    }
+
+    setSelectedHeirTeamId(recommendedHeirTeam.id);
+    await handleFinishHeir(recommendedHeirTeam.id, defaultManagerName);
   };
 
   const renderPathSelection = () => (
-    <div className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-[#02040a] px-4 py-5 sm:min-h-screen sm:p-4">
+    <div className="relative flex min-h-[100svh] flex-col items-center justify-start overflow-hidden bg-[#02040a] px-4 py-5 sm:min-h-screen sm:justify-center sm:p-4">
       {/* Background Decorative Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-cyan-500/10 blur-[120px] rounded-full animate-pulse" />
@@ -313,11 +497,11 @@ export const NewGameFlow: React.FC = () => {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.02)_0%,transparent_70%)]" />
       </div>
 
-      <div className="relative z-10 mb-6 space-y-3 text-center sm:mb-12 sm:space-y-4">
+      <div className="relative z-10 mb-4 space-y-2 text-center sm:mb-8 sm:space-y-3">
         <div className="inline-block px-4 py-1 bg-white/5 border border-white/10 rounded-full mb-2 backdrop-blur-md">
           <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.5em]">Protocolo Onboarding v2.0.50</span>
         </div>
-        <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-2xl">
+        <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-2xl">
           ELITE <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-amber-400">2050</span>
         </h1>
         <div className="flex items-center justify-center gap-4">
@@ -329,11 +513,43 @@ export const NewGameFlow: React.FC = () => {
         </div>
       </div>
 
+      {recommendedHeirTeam && (
+        <div className="relative z-10 mb-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-cyan-400/25 bg-cyan-500/10 p-4 text-left shadow-[0_0_30px_rgba(34,211,238,0.10)] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-300/25 bg-black/35">
+              <TeamLogo
+                primaryColor={recommendedLogo?.primary || recommendedHeirTeam.colors.primary}
+                secondaryColor={recommendedLogo?.secondary || recommendedHeirTeam.colors.secondary}
+                accentColor={recommendedLogo?.accent}
+                shapeId={recommendedLogo?.shapeId || recommendedColors?.shapeId}
+                patternId={(recommendedLogo?.patternId as any) || 'none'}
+                symbolId={recommendedLogo?.symbolId || 'Shield'}
+                size={30}
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[8px] font-black uppercase tracking-[0.28em] text-cyan-200">Recomendado para primeira partida</p>
+              <h2 className="truncate text-lg font-black uppercase italic text-white">{recommendedHeirTeam.name}</h2>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-white/45">
+                Clube mais reformavel - {getTeamScore(recommendedHeirTeam).toLocaleString('pt-BR')} score - {recommendedHeirTeam.district}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickStart}
+            className="rounded-xl bg-cyan-400 px-5 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-cyan-300"
+          >
+            Entrar automatico
+          </button>
+        </div>
+      )}
+
       <div className="relative z-10 grid w-full max-w-5xl grid-cols-1 gap-3 px-1 sm:px-4 md:grid-cols-2 sm:gap-6">
         {/* Path A: Heir */}
         <button
           onClick={() => setStep('heir-choice')}
-          className="group relative min-h-[220px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-8 xl:p-10 text-left transition-all duration-500 hover:border-cyan-500/40 hover:bg-cyan-500/[0.02] overflow-hidden shadow-2xl"
+          className="group relative min-h-[190px] sm:min-h-[280px] md:h-[330px] xl:h-[360px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-7 xl:p-8 text-left transition-all duration-500 hover:border-cyan-500/40 hover:bg-cyan-500/[0.02] overflow-hidden shadow-2xl"
         >
           {/* Animated Background Icon */}
           <div className="absolute -bottom-10 -right-10 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 group-hover:scale-110 group-hover:-rotate-12">
@@ -378,7 +594,7 @@ export const NewGameFlow: React.FC = () => {
         <button
           onClick={() => canFoundClub && setStep('founder-identity')}
           disabled={!canFoundClub}
-          className={`group relative min-h-[220px] sm:min-h-[320px] md:h-[380px] xl:h-[420px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-8 xl:p-10 text-left transition-all duration-500 overflow-hidden shadow-2xl ${
+          className={`group relative min-h-[190px] sm:min-h-[280px] md:h-[330px] xl:h-[360px] bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border rounded-[1.6rem] sm:rounded-[2.5rem] p-5 sm:p-7 xl:p-8 text-left transition-all duration-500 overflow-hidden shadow-2xl ${
             canFoundClub
               ? 'border-white/5 hover:border-amber-500/40 hover:bg-amber-500/[0.02]'
               : 'cursor-not-allowed border-white/5 opacity-45'
@@ -449,7 +665,7 @@ export const NewGameFlow: React.FC = () => {
 
   const filteredTeams = useMemo(() => {
     return availableHeirTeams.filter(t => {
-      if (selectedLeagueFilter !== 'all' && t.league !== selectedLeagueFilter) return false;
+      if (selectedLeagueFilter !== 'all' && t.district.toLowerCase() !== selectedLeagueFilter) return false;
       return true;
     });
   }, [availableHeirTeams, selectedLeagueFilter]);
@@ -548,8 +764,8 @@ export const NewGameFlow: React.FC = () => {
                                 <TeamLogo
                                   primaryColor={isSelected ? '#22d3ee' : team.colors.primary}
                                   secondaryColor={team.colors.secondary}
-                                  accentColor={team.colors.accent}
-                                  shapeId={team.colors.shapeId}
+                                  accentColor={(team.colors as any).accent}
+                                  shapeId={(team.colors as any).shapeId}
                                   patternId="none"
                                   symbolId="Shield"
                                   size={isSelected ? (window.innerWidth < 640 ? 18 : 24) : (window.innerWidth < 640 ? 16 : 20)}
@@ -659,6 +875,10 @@ export const NewGameFlow: React.FC = () => {
               />
             </div>
 
+            <div className="w-full max-w-2xl">
+              {renderManagerProfileSetup('cyan')}
+            </div>
+
             <div className="flex items-center gap-4">
               <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${selectedHeirTeamId ? 'bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'bg-slate-700'}`} />
               <div className="space-y-0.5">
@@ -674,9 +894,19 @@ export const NewGameFlow: React.FC = () => {
             </div>
           </div>
 
+          {recommendedHeirTeam && (
+            <button
+              type="button"
+              onClick={handleQuickStart}
+              className="w-full sm:w-auto rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-6 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-cyan-100 transition hover:bg-cyan-400/18"
+            >
+              Escolher recomendado
+            </button>
+          )}
+
           <button
-            disabled={!selectedHeirTeamId || !managerName}
-            onClick={handleFinishHeir}
+            disabled={!selectedHeirTeamId}
+            onClick={() => handleFinishHeir()}
             className={`relative group px-10 xl:px-14 py-3 xl:py-4 rounded-xl xl:rounded-2xl font-black text-[10px] xl:text-[11px] uppercase tracking-[0.3em] transition-all duration-500 ${selectedHeirTeamId
               ? 'bg-cyan-500 text-black shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:scale-105 hover:shadow-cyan-500/50'
               : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5'
@@ -798,12 +1028,46 @@ export const NewGameFlow: React.FC = () => {
                 </div>
               </div>
 
+              <div className="relative z-10">
+                {renderManagerProfileSetup('amber')}
+              </div>
+
               <div className="space-y-3 sm:space-y-4 relative z-10">
                 <label className="flex items-center justify-between px-1">
                   <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Cromatismo Técnico</span>
                   <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">HEX_SYNERGY</span>
                 </label>
-                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {founderColorPresets.map(preset => {
+                    const isActive = founderData.primaryColor === preset.primary
+                      && founderData.secondaryColor === preset.secondary
+                      && founderData.accentColor === preset.accent;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setFounderData(prev => ({
+                          ...prev,
+                          primaryColor: preset.primary,
+                          secondaryColor: preset.secondary,
+                          accentColor: preset.accent,
+                        }))}
+                        className={`rounded-xl border p-2 text-left transition ${
+                          isActive ? 'border-amber-300/70 bg-amber-400/10' : 'border-white/10 bg-black/30 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex h-7 overflow-hidden rounded-lg border border-white/10">
+                          <span className="flex-1" style={{ backgroundColor: preset.primary }} />
+                          <span className="flex-1" style={{ backgroundColor: preset.secondary }} />
+                          <span className="flex-1" style={{ backgroundColor: preset.accent }} />
+                        </div>
+                        <p className="mt-2 truncate text-[7px] font-black uppercase tracking-widest text-white/70">{preset.name}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 sm:gap-4">
                   <div className="bg-black/40 border border-white/10 rounded-lg sm:rounded-xl p-2.5 sm:p-4 flex items-center gap-3 sm:gap-4 transition-all hover:border-amber-500/30">
                     <div className="relative w-8 h-8 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-white/10 shrink-0 shadow-lg">
                       <input
@@ -833,6 +1097,63 @@ export const NewGameFlow: React.FC = () => {
                       <p className="text-[8px] sm:text-[10px] font-mono text-white uppercase truncate">{founderData.secondaryColor}</p>
                     </div>
                   </div>
+
+                  <div className="bg-black/40 border border-white/10 rounded-lg sm:rounded-xl p-2.5 sm:p-4 flex items-center gap-3 sm:gap-4 transition-all hover:border-amber-500/30">
+                    <div className="relative w-8 h-8 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-white/10 shrink-0 shadow-lg">
+                      <input
+                        type="color"
+                        value={founderData.accentColor}
+                        onChange={e => setFounderData(prev => ({ ...prev, accentColor: e.target.value }))}
+                        className="absolute inset-0 w-[200%] h-[200%] -translate-x-1/4 -translate-y-1/4 cursor-pointer bg-transparent border-none"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[6px] sm:text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">Acento</p>
+                      <p className="text-[8px] sm:text-[10px] font-mono text-white uppercase truncate">{founderData.accentColor}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 sm:space-y-4 relative z-10">
+                <label className="flex items-center justify-between px-1">
+                  <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Logo PNG Inicial</span>
+                  <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">ASSET_BASE</span>
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {founderLogoPresets.map(preset => {
+                    const isActive = founderData.logoShape === preset.shapeId
+                      && founderData.logoPattern === preset.patternId
+                      && founderData.logoSymbol === preset.symbolId;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setFounderData(prev => ({
+                          ...prev,
+                          logoAssetPath: preset.assetPath,
+                          logoShape: preset.shapeId,
+                          logoPattern: preset.patternId,
+                          logoSymbol: preset.symbolId,
+                        }))}
+                        className={`rounded-xl border p-2 transition ${
+                          isActive ? 'border-amber-300/70 bg-amber-400/10' : 'border-white/10 bg-black/30 hover:border-white/25'
+                        }`}
+                        title={preset.name}
+                      >
+                        <TeamLogo
+                          primaryColor={founderData.primaryColor}
+                          secondaryColor={founderData.secondaryColor}
+                          accentColor={founderData.accentColor}
+                          shapeId={preset.shapeId}
+                          patternId={preset.patternId}
+                          symbolId={preset.symbolId}
+                          size={42}
+                        />
+                        <p className="mt-1 truncate text-center text-[6px] font-black uppercase tracking-widest text-white/45">{preset.name}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -867,7 +1188,7 @@ export const NewGameFlow: React.FC = () => {
                     className="w-full bg-black/40 border border-white/10 rounded-lg sm:rounded-xl px-4 sm:px-5 py-3 sm:py-4 text-[9px] sm:text-[11px] text-white font-bold focus:border-red-500/50 outline-none transition-all appearance-none cursor-pointer uppercase tracking-tight"
                   >
                     <option value="" className="bg-[#02040a]">SELECIONE UNIDADE OBSOLETA...</option>
-                    {teams.filter(t => t.id.startsWith('t_') && !t.managerId).map(t => (
+                    {replaceableTeams.map(t => (
                       <option key={t.id} value={t.id} className="bg-[#02040a]">
                         {t.name} • {t.league} • {t.district}
                       </option>
@@ -877,6 +1198,25 @@ export const NewGameFlow: React.FC = () => {
                     <Layout size={14} className="sm:size-4" />
                   </div>
                 </div>
+
+                {selectedReplacementTeam && (
+                  <div className="grid grid-cols-3 gap-2 animate-in fade-in slide-in-from-top-2 duration-500">
+                    <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-slate-500">Score</div>
+                      <div className="mt-1 text-lg font-black italic text-white">{getTeamScore(selectedReplacementTeam).toLocaleString('pt-BR')}</div>
+                    </div>
+                    <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-amber-200/70">Cap</div>
+                      <div className="mt-1 text-lg font-black italic text-amber-200">{draftScoreLimit.toLocaleString('pt-BR')}</div>
+                    </div>
+                    <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-cyan-200/70">Controle</div>
+                      <div className="mt-1 text-lg font-black italic text-cyan-200">
+                        {selectedReplacementTeam.managerId && state.managers[selectedReplacementTeam.managerId]?.isNPC === false ? 'Humano' : 'IA'}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {founderData.replacedTeamId && (
                   <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-red-500/5 border border-red-500/10 rounded-lg sm:rounded-xl animate-in fade-in slide-in-from-top-2 duration-500">
@@ -921,8 +1261,10 @@ export const NewGameFlow: React.FC = () => {
                 <TeamLogo
                   primaryColor={founderData.primaryColor}
                   secondaryColor={founderData.secondaryColor}
-                  patternId="none"
-                  symbolId="Shield"
+                  accentColor={founderData.accentColor}
+                  shapeId={founderData.logoShape}
+                  patternId={founderData.logoPattern}
+                  symbolId={founderData.logoSymbol}
                   size={110}
                   className="relative z-10 drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] xl:size-[130px] transition-transform duration-700 group-hover/crest:scale-110"
                 />
@@ -1013,7 +1355,7 @@ export const NewGameFlow: React.FC = () => {
   );
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#050814]">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-[#050814]">
       {isSyncing && (
         <div className="absolute inset-0 z-[110] bg-[#050814]/90 backdrop-blur-md flex flex-col items-center justify-center space-y-6">
           <div className="relative">

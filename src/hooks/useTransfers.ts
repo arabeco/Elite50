@@ -1,4 +1,4 @@
-import { useGame, useGameDispatch } from '../store/GameContext';
+﻿import { useGame, useGameDispatch } from '../store/GameContext';
 import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
 import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/gameLogic';
@@ -9,14 +9,14 @@ import { releasePlayerBootToInventory } from '../utils/store';
 
 export const useTransfers = (userTeamId: string | null, totalPoints: number, powerCap: number) => {
     const { state, setState, isOnline } = useGame();
-    const { addToast } = useGameDispatch();
+    const { addToast, requestConfirm } = useGameDispatch();
 
     const handleMakeProposal = async (player: Player) => {
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
-        const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay < 3;
+        const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
 
         if (!userTeam) {
-            addToast('Você precisa estar em um time para fazer uma proposta!', 'error');
+            addToast('VocÃª precisa estar em um time para fazer uma proposta!', 'error');
             return;
         }
 
@@ -27,13 +27,23 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             return;
         }
 
+        const hasPendingMarketProposal = !isDraftDay && (state.transferProposals || []).some(proposal =>
+            proposal.playerId === player.id &&
+            proposal.toTeamId === userTeam.id &&
+            proposal.status === 'PENDING'
+        );
+        if (hasPendingMarketProposal) {
+            addToast(`${player.nickname} ja esta na sua fila de propostas para a proxima virada.`, 'warning');
+            return;
+        }
+
         if (userTeam.squad.length >= SQUAD_SIZE_MAX) {
-            addToast(`Seu elenco já está cheio (máximo ${SQUAD_SIZE_MAX} jogadores)!`, 'error');
+            addToast(`Seu elenco jÃ¡ estÃ¡ cheio (mÃ¡ximo ${SQUAD_SIZE_MAX} jogadores)!`, 'error');
             return;
         }
 
         if (!isDraftDay && (player.satisfaction || 70) >= 80) {
-            addToast(`${player.nickname} está muito feliz no clube atual e não tem interesse em sair agora. (Satisfação: ${player.satisfaction}%)`, 'warning');
+            addToast(`${player.nickname} estÃ¡ muito feliz no clube atual e nÃ£o tem interesse em sair agora. (SatisfaÃ§Ã£o: ${player.satisfaction}%)`, 'warning');
             return;
         }
 
@@ -41,16 +51,20 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             const currentTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;
             const currentManager = currentTeam?.managerId ? state.managers[currentTeam.managerId] : null;
             if (currentManager?.isNPC === false) {
-                addToast(`${player.nickname} pertence a um clube humano e nÃ£o entra no Draft Genesis.`, 'warning');
+                addToast(`${player.nickname} pertence a um clube humano e nao entra no Draft Genesis.`, 'warning');
                 return;
             }
         }
 
         const currentPower = userTeam.squad.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
         // Also account for pending proposals in the power cap check
-        const pendingPower = (state.world.draftProposals || [])
+        const pendingDraftPower = (state.world.draftProposals || [])
             .filter(p => p.managerId === state.userManagerId)
             .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
+        const pendingMarketPower = (state.transferProposals || [])
+            .filter(p => p.toTeamId === userTeam.id && p.status === 'PENDING')
+            .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
+        const pendingPower = pendingDraftPower + pendingMarketPower;
 
         const nextTotalPoints = currentPower + pendingPower + player.totalRating;
         const exceedsPowerCap = nextTotalPoints > powerCap;
@@ -61,28 +75,34 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         }
 
         if (nextTotalPoints > powerCap) {
-            addToast(`A vinda de ${player.nickname} excederia o Score Máximo de ${powerCap} pts!`, 'error');
+            addToast(`A vinda de ${player.nickname} excederia o Score MÃ¡ximo de ${powerCap} pts!`, 'error');
             return;
         }
 
         if (isDraftDay) {
             if (!state.userManagerId) {
-                addToast('User Manager ID não encontrado!', 'error');
+                addToast('User Manager ID nÃ£o encontrado!', 'error');
                 return;
             }
             // Draft proposals reserve score until the daily resolution accepts or rejects them.
             const remainingAfterReserve = powerCap - nextTotalPoints;
-            const confirmMsg = `Reservar ${player.nickname} no Draft por ${player.totalRating} de score?\n\nEsse score sai da sua pool enquanto a proposta estiver pendente. Se ele nao vier na resolucao do Draft, o score volta automaticamente.\n\nScore restante apos reserva: ${remainingAfterReserve}`;
-            if (!window.confirm(confirmMsg)) {
-                return;
-            }
+            const confirmed = await requestConfirm({
+                title: 'Reservar no Draft',
+                message: `${player.nickname} ocupa ${player.totalRating} de score ate a resolucao. Score restante apos reserva: ${remainingAfterReserve}.`,
+                confirmLabel: 'Reservar',
+            });
+            if (!confirmed) return;
 
             setState(prev => submitProposals(prev, state.userManagerId!, [player.id]));
             addToast(`Proposta enviada para ${player.nickname}. ${player.totalRating} de score reservado e removido da pool ate o Draft resolver.`, 'success');
             return;
         } else {
-            const confirmMsg = `Deseja enviar uma proposta de roubo para ${player.nickname} por ${player.totalRating} pts? A IA responderá no próximo dia.`;
-            if (window.confirm(confirmMsg)) {
+            const confirmed = await requestConfirm({
+                title: 'Propor contratação',
+                message: `${player.nickname} entra na fila da virada por ${player.totalRating} de score. Se outro clube tambem chamar, ele escolhe a melhor proposta.`,
+                confirmLabel: 'Propor',
+            });
+            if (confirmed) {
                 try {
                     const newProposal: any = {
                         id: `prop_${Date.now()}`,
@@ -99,10 +119,10 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                         transferProposals: [newProposal, ...(prev.transferProposals || [])]
                     }));
 
-                    addToast(`Proposta de roubo enviada para ${player.nickname}! Aguarde a resposta da IA.`, 'success');
+                    addToast(`${player.nickname} entrou na sua fila. A resposta vem na proxima virada.`, 'success');
                 } catch (error) {
-                    console.error('Erro na transferência:', error);
-                    addToast('Erro ao processar transferência.', 'error');
+                    console.error('Erro na transferÃªncia:', error);
+                    addToast('Erro ao processar transferÃªncia.', 'error');
                 }
             }
         }
@@ -121,14 +141,20 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
 
         if (!userTeam) {
-            addToast('Você precisa estar em um time para vender um jogador!', 'error');
+            addToast('VocÃª precisa estar em um time para vender um jogador!', 'error');
             return;
         }
 
         const player = state.players[playerId];
         if (!player) return;
 
-        if (window.confirm(`Deseja dispensar ${player.nickname}? O Score Máximo de ${powerCap} pts será mantido.`)) {
+        const confirmed = await requestConfirm({
+            title: 'Dispensar atleta',
+            message: `Dispensar ${player.nickname}? O Score Maximo de ${powerCap} pts sera mantido.`,
+            confirmLabel: 'Dispensar',
+            tone: 'danger',
+        });
+        if (confirmed) {
             try {
                 // If the player is contracted to another team, we must do a TRADE OFFER instead of selling directly
                 // Actually handleSellPlayer is for RELEASING a player from your OWN team.
@@ -209,13 +235,9 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
         const isDraft = (state.world as any).status === 'DRAFT';
 
-        if (!isDraft && !state.world.transferWindowOpen) {
-            addToast('A janela de transferências está fechada em dias de jogo!', 'error');
-            return;
-        }
 
         if (!userTeam) {
-            addToast('Você precisa estar em um time para propor trocas!', 'error');
+            addToast('VocÃª precisa estar em um time para propor trocas!', 'error');
             return;
         }
 
@@ -224,7 +246,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const targetTeamId = requestedPlayer?.contract?.teamId;
 
         if (!targetTeamId) {
-            addToast('O jogador solicitado não pertence a nenhum time!', 'error');
+            addToast('O jogador solicitado nÃ£o pertence a nenhum time!', 'error');
             return;
         }
 
@@ -232,12 +254,12 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
         const nextPowerAfterSwap = currentPower - offeredPlayer.totalRating + requestedPlayer.totalRating;
 
         if (nextPowerAfterSwap > powerCap) {
-            addToast(`Essa troca faria seu time exceder o Score Máximo de ${powerCap} pts! (Balanço: ${requestedPlayer.totalRating - offeredPlayer.totalRating} pts)`, 'error');
+            addToast(`Essa troca faria seu time exceder o Score MÃ¡ximo de ${powerCap} pts! (BalanÃ§o: ${requestedPlayer.totalRating - offeredPlayer.totalRating} pts)`, 'error');
             return;
         }
 
         if (!isDraft && (requestedPlayer.satisfaction || 70) >= 85) {
-            addToast(`${requestedPlayer.nickname} está muito satisfeito no clube atual e não aceitaria ser trocado agora.`, 'warning');
+            addToast(`${requestedPlayer.nickname} estÃ¡ muito satisfeito no clube atual e nÃ£o aceitaria ser trocado agora.`, 'warning');
             return;
         }
 
@@ -245,7 +267,12 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             ? `Trocar ${offeredPlayer.nickname} (${offeredPlayer.totalRating} pts) por ${requestedPlayer.nickname} (${requestedPlayer.totalRating} pts)?`
             : `Propor troca de ${offeredPlayer.nickname} por ${requestedPlayer.nickname}?`;
 
-        if (window.confirm(confirmMsg)) {
+        const confirmed = await requestConfirm({
+            title: isDraft ? 'Confirmar troca' : 'Propor troca',
+            message: confirmMsg,
+            confirmLabel: isDraft ? 'Trocar' : 'Propor',
+        });
+        if (confirmed) {
             if (isDraft) {
                 // Instant trade during draft
                 setState(prev => {

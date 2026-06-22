@@ -126,13 +126,22 @@ export const regenerateDNA = (player: Player): Badges => {
 
 const generateName = () => {
   const gender = randomFloat() < 0.5 ? 'M' : 'F';
-  const firstList = gender === 'M' ? firstNamesMale : firstNamesFemale;
+  const firstList = [
+    'Kael', 'Ivo', 'Noa', 'Niko', 'Lio', 'Teo', 'Rian', 'Milo', 'Soren', 'Kian', 'Ari', 'Eron',
+    'Vico', 'Ryo', 'Ilan', 'Rin', 'Tavi', 'Ezra', 'Nilo', 'Koa', 'Zara', 'Mira', 'Ayla', 'Nia',
+    'Luma', 'Kira', 'Suri', 'Iris', 'Mina', 'Vela', 'Juno', 'Rina', 'Yara', 'Nyra', 'Lia', 'Anya'
+  ];
+  const surnameList = [
+    'Voss', 'Kade', 'Soren', 'Vale', 'Ivar', 'Fenn', 'Calder', 'Vega', 'Ravel', 'Drax', 'Varga', 'Mako',
+    'Sato', 'Haru', 'Ren', 'Akari', 'Zhen', 'Onari', 'Sen', 'Arken', 'Nox', 'Corvin', 'Vey', 'Orion',
+    'Lior', 'Rial', 'Senda', 'Varyn', 'Aster', 'Quill', 'Vanta', 'Drift', 'Morrow', 'Rift'
+  ];
   const first = firstList[randomInt(0, firstList.length - 1)];
-  const last = lastNames[randomInt(0, lastNames.length - 1)];
+  const last = surnameList[randomInt(0, surnameList.length - 1)];
 
   return {
     name: `${first} ${last}`,
-    nickname: `${first[0]}. ${last}`,
+    nickname: randomFloat() < 0.08 ? `${first} ${['Zero', 'Flux', 'Corte', 'Nexus', 'Pulse', 'Rift'][randomInt(0, 5)]}` : first,
     appearance: {
       gender: gender as 'M' | 'F',
       bodyId: randomInt(1, 3),
@@ -238,12 +247,12 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
   if (forcedRole) {
     role = forcedRole;
   } else {
-    // 10% chance for Goleiro if random
-    if (Math.random() < 0.1) role = 'GOL';
+    // World 2050 roster mix: fewer keepers, defenders merge old CB/FB roles.
+    if (Math.random() < 0.11) role = 'GOL';
     else {
       const r = Math.random();
-      if (r < 0.35) role = 'ZAG';
-      else if (r < 0.7) role = 'MEI';
+      if (r < 0.38) role = 'ZAG';
+      else if (r < 0.73) role = 'MEI';
       else role = 'ATA';
     }
   }
@@ -292,6 +301,7 @@ export const generatePlayer = (id: string, district: District, ratingOverride?: 
     id,
     name,
     nickname,
+    originDistrict: district,
     appearance,
     district,
     position,
@@ -404,6 +414,7 @@ export const generateTeam = (id: string, index: number, district: District): Tea
     id,
     name,
     city: cities[randomInt(0, cities.length - 1)],
+    originDistrict: district,
     district,
     league: getLeagueForDistrict(district),
     colors,
@@ -466,8 +477,12 @@ export const generateManager = (id: string, district: District): Manager => {
   return {
     id,
     name,
+    originDistrict: district,
     district,
     reputation: randomInt(10, 90),
+    preferredPlayStyle: 'Equilibrado',
+    ownedTraitIds: [],
+    equippedTraitIds: [],
     isNPC: true,
     attributes: {
       evolution: randomInt(10, 100),
@@ -527,6 +542,7 @@ export const generateInitialState = (): GameState => {
       id,
       name: districtTeams[district],
       city: `${district} Capital`,
+      originDistrict: district,
       district,
       league: getLeagueForDistrict(district),
       colors,
@@ -681,7 +697,7 @@ export const generateInitialState = (): GameState => {
       clock: {
         profile: 'REAL',
         timeSpeed: DEFAULT_TIME_SPEED,
-        label: '1 dia a cada 10 min'
+        label: 'Tempo real'
       },
       isInitialSeed: true, // Marker for first run
     },

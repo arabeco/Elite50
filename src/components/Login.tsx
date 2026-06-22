@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ChevronRight, Chrome, Cpu, Globe, Lock, Mail, Zap } from 'lucide-react';
 import { TeamLogo } from './TeamLogo';
 import { supabase } from '../lib/supabase';
+import { getOAuthRedirectUrl, isCapacitorNativeRuntime } from '../lib/nativeAuth';
+import { useGameDispatch } from '../store/GameContext';
+import { setInitialHelpEnabled } from '../utils/uiFeedback';
+
+const LEGAL_LINKS = {
+  privacy: 'https://arabeco.github.io/privacidade-elite50.html',
+  terms: 'https://arabeco.github.io/termos-elite50.html',
+};
 
 interface LoginProps {
   onLogin: () => void;
@@ -29,6 +38,8 @@ const getAuthErrorMessage = (err: any) => {
 };
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const { addToast, setIsAuthenticated } = useGameDispatch();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +52,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
-      setError('Configuracao ausente: defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+      const message = 'Configuracao ausente: defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.';
+      setError(message);
+      addToast(message, 'error');
       return false;
     }
 
@@ -69,9 +82,12 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         if (signUpError) throw signUpError;
 
         if (data.session) {
+          addToast('Conta criada. Entrando no sistema.', 'success');
           onLogin();
         } else {
-          setNotice('Conta criada. Confira seu e-mail para confirmar o acesso.');
+          const message = 'Conta criada. Confira seu e-mail para confirmar o acesso.';
+          setNotice(message);
+          addToast(message, 'success');
         }
         return;
       }
@@ -82,10 +98,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       });
 
       if (signInError) throw signInError;
+      addToast('Login confirmado. Carregando seus mundos.', 'success');
       onLogin();
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(getAuthErrorMessage(err));
+      const message = getAuthErrorMessage(err);
+      setError(message);
+      addToast(message, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -98,23 +117,34 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError(null);
     setNotice(null);
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/worlds`
+        redirectTo: getOAuthRedirectUrl(window.location.origin),
+        skipBrowserRedirect: isCapacitorNativeRuntime(),
       }
     });
 
     if (oauthError) {
-      setError(getAuthErrorMessage(oauthError));
+      const message = getAuthErrorMessage(oauthError);
+      setError(message);
+      addToast(message, 'error');
       setIsLoading(false);
+    } else {
+      addToast('Redirecionando para o Google.', 'info');
+      if (isCapacitorNativeRuntime() && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     }
   };
 
   const handlePasswordReset = async () => {
     if (!ensureSupabaseConfigured()) return;
     if (!email) {
-      setError('Digite seu e-mail para recuperar a senha.');
+      const message = 'Digite seu e-mail para recuperar a senha.';
+      setError(message);
+      addToast(message, 'warning');
       return;
     }
 
@@ -127,12 +157,26 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     });
 
     if (resetError) {
-      setError(getAuthErrorMessage(resetError));
+      const message = getAuthErrorMessage(resetError);
+      setError(message);
+      addToast(message, 'error');
     } else {
-      setNotice('Enviamos um link de recuperacao para seu e-mail.');
+      const message = 'Enviamos um link de recuperacao para seu e-mail.';
+      setNotice(message);
+      addToast(message, 'success');
     }
 
     setIsLoading(false);
+  };
+
+  const handleDevLogin = () => {
+    if (!import.meta.env.DEV) return;
+    sessionStorage.setItem('elite.devAuth', 'true');
+    setInitialHelpEnabled(false);
+    setIsAuthenticated(true);
+    addToast('Entrada dev ativada. Dicas iniciais ocultadas para smoke local.', 'info');
+    onLogin();
+    navigate('/worlds', { replace: true });
   };
 
   return (
@@ -217,7 +261,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               className="w-full bg-white/[0.04] border border-white/10 hover:border-cyan-500/40 text-white font-black py-4 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-3"
             >
               <Chrome size={18} className="text-cyan-400" />
-              <span className="uppercase tracking-[0.2em] text-xs">Continuar com Google</span>
+              <span className="uppercase tracking-[0.2em] text-xs">Entrar com Google</span>
             </button>
 
             <div className="flex items-center gap-3">
@@ -304,6 +348,35 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <Zap size={10} className="text-amber-500 animate-pulse" />
               <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Version 2.0.50-stable</span>
             </div>
+            <div className="flex items-center gap-3 text-[8px] font-black uppercase tracking-[0.24em] text-slate-700">
+              <a
+                href={LEGAL_LINKS.privacy}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-colors hover:text-cyan-300"
+              >
+                Privacidade
+              </a>
+              <span className="h-2 w-px bg-white/10" />
+              <a
+                href={LEGAL_LINKS.terms}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-colors hover:text-cyan-300"
+              >
+                Termos
+              </a>
+            </div>
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={handleDevLogin}
+                className="rounded-full border border-white/5 bg-white/[0.02] px-3 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-slate-700 transition hover:border-amber-400/25 hover:text-amber-300"
+                title="Dev smoke local"
+              >
+                Dev smoke
+              </button>
+            )}
           </div>
         </div>
 

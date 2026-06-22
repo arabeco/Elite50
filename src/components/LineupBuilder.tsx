@@ -31,7 +31,7 @@ const FORMATION_SLOTS = [
 ];
 
 export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, onPlayerSelect }) => {
-  const { state, setState, saveGame } = useGame();
+  const { state, setState, saveGame, addToast } = useGame();
   const { upcomingMatches } = useDashboardData();
   const nextMatch = upcomingMatches?.[0];
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -74,7 +74,10 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
   const handleSlotClick = (e: React.MouseEvent, slotId: string) => {
     e.stopPropagation();
 
-    if (isLocked) return;
+    if (isLocked) {
+      addToast('Escalacao travada: a partida ja esta em pre-jogo ou ao vivo.', 'warning');
+      return;
+    }
 
     if (!selectedPlayerId) {
       // If no player selected, try to select the player in this slot
@@ -106,12 +109,16 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
 
     setState(newState);
     saveGame(newState);
+    addToast('Escalacao atualizada.', 'success');
 
     setSelectedPlayerId(null);
   };
 
   const handleRemoveFromLineup = (playerId: string) => {
-    if (isLocked) return;
+    if (isLocked) {
+      addToast('Escalacao travada: nao da para remover jogador agora.', 'warning');
+      return;
+    }
 
     const newState = { ...state };
     const newTeams = { ...newState.teams };
@@ -131,11 +138,13 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
 
     setState(newState);
     saveGame(newState);
+    addToast('Jogador removido da escalacao.', 'info');
   };
 
   const handleSaveLineup = async () => {
     setIsSaving(true);
     await saveGame();
+    addToast('Escalacao salva.', 'success');
     setTimeout(() => setIsSaving(false), 1000);
   };
 

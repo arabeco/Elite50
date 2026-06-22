@@ -1,9 +1,12 @@
 import React from 'react';
 import { Crown, Eye, Shield, Users } from 'lucide-react';
 import { useGameState } from '../store/GameContext';
+import { Manager } from '../types';
+import { ManagerModal } from './ManagerModal';
 
 export const WorldParticipantsPanel: React.FC = () => {
   const { state } = useGameState();
+  const [selectedManager, setSelectedManager] = React.useState<Manager | null>(null);
   const participants = state.participants || [];
   const leagueByTeam = new Map<string, string>();
 
@@ -40,8 +43,10 @@ export const WorldParticipantsPanel: React.FC = () => {
           const label = participant.isCreator ? 'Dono' : participant.isObserver ? 'Observador' : 'Humano';
 
           return (
-            <div
+            <button
               key={participant.userId}
+              type="button"
+              onClick={() => manager && setSelectedManager(manager)}
               className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2"
             >
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
@@ -65,10 +70,16 @@ export const WorldParticipantsPanel: React.FC = () => {
                   {team ? (leagueByTeam.get(team.id) || team.league) : 'sem clube'}
                 </p>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+      {selectedManager && (
+        <ManagerModal
+          manager={selectedManager}
+          onClose={() => setSelectedManager(null)}
+        />
+      )}
     </section>
   );
 };
