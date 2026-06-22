@@ -161,6 +161,28 @@ describe('gameLogic', () => {
         expect(state.teams.t_32.squad).toContain(humanOwnedPlayerId);
     });
 
+    it('keeps Genesis Draft open on day 2 and only auto-fills on day 3', () => {
+        const state = generateInitialState();
+        state.world.status = 'LOBBY';
+        state.world.currentSeason = 2050;
+        state.world.currentDay = 1;
+        state.world.currentDate = '2050-06-21T08:00:00.000Z';
+        state.world.history = [];
+        state.teams.t_31.squad = [];
+
+        const day2 = advanceGameDay(state);
+
+        expect(day2.world.currentDay).toBe(2);
+        expect(day2.world.status).toBe('LOBBY');
+        expect(day2.teams.t_31.squad.length).toBeLessThan(15);
+
+        const day3 = advanceGameDay(day2);
+
+        expect(day3.world.currentDay).toBe(3);
+        expect(day3.world.status).toBe('ACTIVE');
+        expect(day3.teams.t_31.squad.length).toBeGreaterThan(0);
+    });
+
     it('lets inactive human teams auto-play without match progression gains', () => {
         const state = generateInitialState();
         attachHumanDraftManager(state, 'h_active', 't_31');

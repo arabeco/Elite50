@@ -24,7 +24,8 @@ import {
   SAFETY_NET_MIN_PLAYERS,
   SAFETY_NET_FREE_AGENT_RATING,
   SQUAD_SIZE_MAX,
-  HUMAN_MANAGER_ACTIVE_GRACE_DAYS
+  HUMAN_MANAGER_ACTIVE_GRACE_DAYS,
+  GENESIS_DRAFT_AUTOFILL_DAY
 } from '../constants/gameConstants';
 import { getManagerDraftInfluence } from '../utils/managerStats';
 import { recordManagerTacticalMemory } from '../utils/managerTacticalMemory';
@@ -2147,11 +2148,11 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
   const isGenesisSeason = (world.currentSeason || 2050) === 2050 && (state.world.history?.length || 0) === 0;
   if (isGenesisSeason && world.currentDay === 1) {
     resolveDraftConflict(state);
-  } else if (isGenesisSeason && world.currentDay === 2) {
+  } else if (isGenesisSeason && world.currentDay === GENESIS_DRAFT_AUTOFILL_DAY) {
     resolveDraftConflict(state);
     autoCompleteDraft(state);
     world.status = 'ACTIVE';
-  } else if (world.currentDay >= 3 && world.status === 'LOBBY') {
+  } else if (world.currentDay >= GENESIS_DRAFT_AUTOFILL_DAY && world.status === 'LOBBY') {
     world.status = 'ACTIVE';
   }
 

@@ -84,6 +84,93 @@ const buildState = (record: GameRecord) => ({
   lastHeadline: record.last_headline || {},
 });
 
+const applyParticipantFoundedClubs = (baseWorld: any, mergedTeams: Record<string, any>, participantRecords: GameRecord[]) => {
+  const mergedWorld = {
+    ...(baseWorld || {}),
+    leagues: { ...(baseWorld?.leagues || {}) },
+  };
+
+  participantRecords.forEach((record: any) => {
+    const recordTeams = record.teams_data || {};
+
+    Object.values(recordTeams).forEach((team: any) => {
+      const replacedTeamId = team?.replacedTeamId;
+      if (!team?.id || !replacedTeamId) return;
+
+      Object.keys(mergedTeams).forEach(teamId => {
+        if (teamId === replacedTeamId) delete mergedTeams[teamId];
+      });
+
+      Object.keys(mergedWorld.leagues || {}).forEach(key => {
+        const league = mergedWorld.leagues[key] || {};
+        mergedWorld.leagues[key] = {
+          ...league,
+          standings: (league.standings || []).map((row: any) =>
+            row.teamId === replacedTeamId ? { ...row, teamId: team.id } : row
+          ),
+          matches: (league.matches || []).map((match: any) => ({
+            ...match,
+            homeTeamId: match.homeTeamId === replacedTeamId ? team.id : match.homeTeamId,
+            awayTeamId: match.awayTeamId === replacedTeamId ? team.id : match.awayTeamId,
+          })),
+        };
+      });
+    });
+  });
+
+  return mergedWorld;
+};
+
+const buildMergedState = (masterRecord: GameRecord, worldRecords: GameRecord[]) => {
+  const state = buildState(masterRecord);
+  const mergedTeams = { ...(masterRecord.teams_data || {}) };
+  const mergedPlayers = { ...(masterRecord.players_data || {}) };
+  const mergedManagers = { ...(masterRecord.managers_data || {}) };
+  const masterUpdatedAt = new Date(masterRecord.updated_at || 0).getTime();
+
+  worldRecords.forEach((record: any) => {
+    if (record.user_id === masterRecord.user_id) return;
+    const recordTeamId = record.user_team_id;
+    const participantTeam = recordTeamId ? record.teams_data?.[recordTeamId] : null;
+
+    if (recordTeamId && participantTeam) {
+      mergedTeams[recordTeamId] = {
+        ...(mergedTeams[recordTeamId] || {}),
+        ...participantTeam,
+        id: recordTeamId,
+        managerId: record.user_manager_id || participantTeam.managerId || mergedTeams[recordTeamId]?.managerId,
+      };
+    }
+
+    const recordManagerId = record.user_manager_id;
+    if (recordManagerId && record.managers_data?.[recordManagerId]) {
+      mergedManagers[recordManagerId] = record.managers_data[recordManagerId];
+    }
+
+    const participantUpdatedAt = new Date(record.updated_at || 0).getTime();
+    if (participantUpdatedAt >= masterUpdatedAt && record.players_data) {
+      Object.entries(record.players_data).forEach(([playerId, player]) => {
+        mergedPlayers[playerId] = player;
+      });
+    }
+  });
+
+  state.world = applyParticipantFoundedClubs(masterRecord.world_state, mergedTeams, worldRecords);
+  state.teams = mergedTeams;
+  state.players = mergedPlayers;
+  state.managers = mergedManagers;
+  state.participants = worldRecords.map((record: any) => ({
+    userId: record.user_id,
+    teamId: record.user_team_id,
+    managerId: record.user_manager_id,
+    isCreator: record.is_creator === true,
+    isObserver: !record.user_team_id,
+    updatedAt: record.updated_at,
+  }));
+
+  return state;
+};
+
 const openScheduledKickoff = (state: any, now: Date) => {
   const scheduledAt = validDate(state.world.startScheduledAt);
   if (state.world.status !== 'LOBBY' || state.world.currentDay !== -1 || !scheduledAt) {
@@ -148,7 +235,6 @@ Deno.serve(async (req) => {
     const { data, error } = await supabase
       .from('games')
       .select('*')
-      .eq('is_creator', true)
       .order('updated_at', { ascending: true });
 
     if (error) throw error;
@@ -156,8 +242,12 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     const worlds: any[] = [];
 
-    for (const record of (data || []) as GameRecord[]) {
-      let state = buildState(record);
+    const allRecords = (data || []) as GameRecord[];
+    const creatorRecords = allRecords.filter((record: any) => record.is_creator === true);
+
+    for (const record of creatorRecords) {
+      const worldRecords = allRecords.filter(worldRecord => worldRecord.world_id === record.world_id);
+      let state = buildMergedState(record, worldRecords);
       const kickoff = openScheduledKickoff(state, now);
       state = kickoff.state;
 

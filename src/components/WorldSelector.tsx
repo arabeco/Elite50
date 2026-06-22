@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { Globe, Plus, ChevronRight, LogOut, Users, Trash2, KeyRound, RefreshCcw, CalendarDays, Activity } from 'lucide-react';
 import { generateInitialState } from '../engine/generator';
-import { DEFAULT_TIME_SPEED, MAX_CREATED_WORLDS_PER_USER, TEST_TIME_SPEED } from '../constants/gameConstants';
+import { DEFAULT_TIME_SPEED, GENESIS_DRAFT_LAST_DAY, MAX_CREATED_WORLDS_PER_USER, TEST_TIME_SPEED } from '../constants/gameConstants';
 import { loadMetaStoreSnapshot } from '../lib/metaStore';
 import { getStoreState } from '../utils/store';
 import { STORE_ITEMS_BY_ID } from '../constants/storeCatalog';
@@ -35,10 +35,10 @@ export const WorldSelector: React.FC = () => {
       };
     }
 
-    if (status === 'LOBBY' && currentDay < 2) {
+    if (status === 'LOBBY' && currentDay <= GENESIS_DRAFT_LAST_DAY) {
       return {
         label: 'Draft Genesis',
-        detail: currentDay <= 0 ? 'Dia 0: monte lista' : 'Dia 1: ultimo ajuste',
+        detail: currentDay <= 0 ? 'Dia 0: monte lista' : currentDay < GENESIS_DRAFT_LAST_DAY ? 'Dia 1: ajustes' : 'Dia 2: janela final',
         tone: 'cyan',
         season,
         day: `Dia ${currentDay}`,

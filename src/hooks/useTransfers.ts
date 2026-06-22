@@ -2,7 +2,7 @@
 import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
 import { advanceGameDay, submitProposals, cancelDraftProposal } from '../engine/gameLogic';
-import { SQUAD_SIZE_MAX } from '../constants/gameConstants';
+import { GENESIS_DRAFT_LAST_DAY, SQUAD_SIZE_MAX } from '../constants/gameConstants';
 import { calculateTradeAcceptanceChance } from '../engine/economyLogic';
 import { addNews } from '../engine/newsService';
 import { releasePlayerBootToInventory } from '../utils/store';
@@ -13,7 +13,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
 
     const handleMakeProposal = async (player: Player) => {
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
-        const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
+        const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY;
 
         if (!userTeam) {
             addToast('VocÃª precisa estar em um time para fazer uma proposta!', 'error');

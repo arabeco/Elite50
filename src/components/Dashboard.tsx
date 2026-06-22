@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DraftPanel } from './dashboard/DraftPanel';
 import { LiveReport, PostGameReport } from './MatchReports';
 import { LeagueState, Match, Player, Team, Manager } from '../types';
-import { MATCH_REAL_TIME_SECONDS, SEASON_DAYS } from '../constants/gameConstants';
+import { GENESIS_DRAFT_LAST_DAY, MATCH_REAL_TIME_SECONDS, SEASON_DAYS } from '../constants/gameConstants';
 import { ManagerModal } from './ManagerModal';
 import { startNewSeason } from '../engine/gameLogic';
 import { TeamModal } from './TeamModal';
@@ -40,9 +40,9 @@ export const Dashboard: React.FC = () => {
   const { setState, saveGame, togglePause, logout, leaveWorld, addToast, resignFromTeam, requestConfirm } = useGameDispatch();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeTeamTab, setActiveTeamTab] = useState<TeamSubTab>(
-    (state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2) ? 'draft' : 'squad'
+    (state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY) ? 'draft' : 'squad'
   );
-  const isDraftOpen = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
+  const isDraftOpen = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY;
 
   const [liveMatch, setLiveMatch] = useState<Match | null>(null);
   const [liveMatchSecond, setLiveMatchSecond] = useState(0);
@@ -531,7 +531,7 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const requiresEntryCreation = !state.userTeamId && state.world.status === 'LOBBY' && state.world.currentDay < 2;
+  const requiresEntryCreation = !state.userTeamId && state.world.status === 'LOBBY' && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY;
 
   if (requiresEntryCreation) {
     return <NewGameFlow />;
@@ -667,20 +667,20 @@ export const Dashboard: React.FC = () => {
                   <p className="text-[7px] sm:text-[10px] xl:text-xs text-slate-400 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] leading-relaxed max-w-xl">
                     {state.world.currentDay === -1
                       ? state.world.startScheduledAt
-                        ? "Comeca no proximo 00:00. O Draft Genesis abre no Dia 0 e fica ajustavel tambem no Dia 1."
+                        ? "Comeca no proximo 00:00. O Draft Genesis abre no Dia 0 e fica ajustavel ate o Dia 2."
                         : "Aguardando participantes. O Draft Genesis so abre depois que o GM agendar o inicio."
                       : state.world.currentDay === 2
-                        ? "O Draft foi encerrado. A Liga computou disputas e completou elencos automaticamente."
+                        ? "Draft Dia 2: janela final. Na proxima virada a liga computa propostas e completa elencos vazios."
                         : state.world.currentDay === 1
-                          ? "Draft Dia 1: ultima janela de ajustes. Na virada para o Dia 2 a liga computa tudo."
+                          ? "Draft Dia 1: continue ajustando sua lista. O Dia 2 ainda fica aberto para propostas."
                           : "Draft Dia 0: escolha seus atletas preferidos. As disputas comecam a ser computadas nas viradas."}
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {[
                       ['00:00', 'Draft libera'],
                       ['Dia 0', 'Monte lista'],
-                      ['Dia 1', 'Ultimo ajuste'],
-                      ['Dia 2', 'Computa tudo'],
+                      ['Dia 1', 'Ajustes'],
+                      ['Dia 2', 'Janela final'],
                     ].map(([label, detail]) => (
                       <div key={label} className="rounded-xl border border-amber-400/15 bg-amber-400/[0.06] px-3 py-2">
                         <div className="text-[8px] font-black uppercase tracking-[0.22em] text-amber-200">{label}</div>

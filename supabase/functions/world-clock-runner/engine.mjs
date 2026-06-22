@@ -5,6 +5,7 @@ var SEASON_ROUNDS = 7;
 var ELITE_CUP_ROUNDS = 4;
 var DISTRICT_CUP_ROUNDS = 0;
 var MIDSEASON_JOIN_MAX_ROUND = 4;
+var GENESIS_DRAFT_AUTOFILL_DAY = 3;
 var TOTAL_ROUNDS = SEASON_ROUNDS + ELITE_CUP_ROUNDS + DISTRICT_CUP_ROUNDS;
 var SEASON_DAYS = 22;
 var MATCH_INTERVAL_DAYS = 2;
@@ -3793,11 +3794,11 @@ var advanceGameDay = (prevState, skipDateIncrement = false) => {
   const isGenesisSeason = (world.currentSeason || 2050) === 2050 && (state.world.history?.length || 0) === 0;
   if (isGenesisSeason && world.currentDay === 1) {
     resolveDraftConflict(state);
-  } else if (isGenesisSeason && world.currentDay === 2) {
+  } else if (isGenesisSeason && world.currentDay === GENESIS_DRAFT_AUTOFILL_DAY) {
     resolveDraftConflict(state);
     autoCompleteDraft(state);
     world.status = "ACTIVE";
-  } else if (world.currentDay >= 3 && world.status === "LOBBY") {
+  } else if (world.currentDay >= GENESIS_DRAFT_AUTOFILL_DAY && world.status === "LOBBY") {
     world.status = "ACTIVE";
   }
   const dayNumber = getSeasonDayNumber(world.currentDate, world.seasonStartReal, world.currentDay);

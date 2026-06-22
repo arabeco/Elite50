@@ -292,17 +292,26 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   allWorldRecords.forEach(record => {
     // Skip if it's the master record (already used as base)
     if (record.user_id === masterRecord.user_id) return;
+    const participantUpdatedAt = new Date(record.updated_at || 0).getTime();
+    const masterUpdatedAt = new Date(masterRecord.updated_at || 0).getTime();
+    const participantIsNewerThanMaster = participantUpdatedAt >= masterUpdatedAt;
 
     // Merge Team updates (Tactics, Lineup, etc.)
     // RULE: If a record matches a user who owns a team, that user's version of the team is the truth.
     const recordUserTeamId = record.user_team_id;
     if (recordUserTeamId && record.teams_data && (record.teams_data as any)[recordUserTeamId]) {
-      mergedTeams[recordUserTeamId] = (record.teams_data as any)[recordUserTeamId];
+      const participantTeam = (record.teams_data as any)[recordUserTeamId];
+      mergedTeams[recordUserTeamId] = {
+        ...(mergedTeams[recordUserTeamId] || {}),
+        ...participantTeam,
+        id: recordUserTeamId,
+        managerId: record.user_manager_id || participantTeam.managerId || mergedTeams[recordUserTeamId]?.managerId,
+      };
     }
 
     // Merge Player updates
-    // RULE: If a player's stats or contract changed in a newer record, we accept it.
-    if (record.players_data) {
+    // RULE: Avoid letting an older participant snapshot roll back the server clock/master contracts.
+    if (participantIsNewerThanMaster && record.players_data) {
       const recordPlayers = record.players_data as any;
       Object.keys(recordPlayers).forEach(playerId => {
         const p = recordPlayers[playerId];

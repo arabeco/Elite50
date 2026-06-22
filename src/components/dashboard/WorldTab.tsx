@@ -14,6 +14,7 @@ import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, Team, GameNotification, ClubOffer } from '../../types';
+import { GENESIS_DRAFT_LAST_DAY } from '../../constants/gameConstants';
 import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
 import * as LucideIcons from 'lucide-react';
 const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } = LucideIcons;
@@ -1435,7 +1436,7 @@ export const WorldTab = (props: any) => {
               </div>
             </div>
 
-            {state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2 && (
+            {state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY && (
               <div className="glass-card-neon border-cyan-500/30 p-4 rounded-2xl flex items-center justify-between bg-cyan-500/5 group hover:bg-cyan-500/10 transition-all cursor-pointer mb-6"
                 onClick={() => props.onTabChange?.('draft')}
               >

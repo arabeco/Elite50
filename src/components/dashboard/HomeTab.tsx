@@ -13,7 +13,7 @@ import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getCountdown, getLiveMatchSecond, getMatchDateTime, getNextMatch } from '../../utils/matchUtils';
 import { calculateTeamPower, isJoinWindowOpen } from '../../engine/gameLogic';
-import { MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
+import { GENESIS_DRAFT_LAST_DAY, MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
 import { resolveHomePhase } from '../../utils/homeFlow';
 import { getNextGameMidnight, getNextRealMidnight } from '../../utils/worldSchedule';
 import { Team, Player, Match, ClubOffer, LeagueState } from '../../types';
@@ -584,7 +584,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             ? 'O mundo ja esta agendado. Jogadores ainda podem entrar; o Draft so libera no 00:00 do proximo dia.'
             : 'Gente pode entrar agora, escolher clube e aparecer para o GM. A contagem so comeca quando o inicio for agendado.',
           status: isKickoffScheduled ? `${humanParticipants.length} humanos confirmados` : 'Aguardando agendar inicio',
-          consequence: 'Regra: Dia 0 e Dia 1 recebem listas do Draft. Na virada para o Dia 2, a liga computa disputas e completa elencos.',
+          consequence: 'Regra: Dia 0, Dia 1 e Dia 2 recebem listas do Draft. Na virada para o Dia 3, a liga computa disputas e completa elencos.',
         };
       }
 
@@ -596,7 +596,9 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
           status: `${draftCount} na wishlist`,
           consequence: state.world.currentDay <= 0
             ? 'Dia 0: monte a lista. Na proxima virada as disputas comecam a ser computadas.'
-            : 'Dia 1: ultimo dia de ajustes. Na virada para o Dia 2, a liga resolve e completa elencos.',
+            : state.world.currentDay < GENESIS_DRAFT_LAST_DAY
+              ? 'Dia 1: continue ajustando. O Dia 2 ainda fica aberto para propostas.'
+              : 'Dia 2: janela final. Na virada para o Dia 3, a liga resolve e completa elencos.',
         };
       }
 

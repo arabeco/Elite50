@@ -7,6 +7,7 @@ import { PlayerModal } from '../PlayerModal';
 import { LayoutGrid, Rows3, Rocket, Search, Shield, Users, X, UserMinus } from 'lucide-react';
 import { advanceGameDay, getTeamPowerCap } from '../../engine/gameLogic';
 import { claimWorldTick, completeWorldDayTick } from '../../lib/worldTick';
+import { GENESIS_DRAFT_AUTOFILL_DAY, GENESIS_DRAFT_LAST_DAY } from '../../constants/gameConstants';
 
 const ROLE_ORDER: PlayerRole[] = ['GOL', 'ZAG', 'MEI', 'ATA'];
 
@@ -104,10 +105,12 @@ export const DraftPanel: React.FC = () => {
   if (!userTeam) return null;
 
   const totalSelected = combinedSquad.length;
-  const draftPhaseLabel = state.world.currentDay <= 0 ? 'Dia 0 de 2' : 'Dia 1 de 2';
+  const draftPhaseLabel = `Dia ${Math.max(0, state.world.currentDay || 0)} de ${GENESIS_DRAFT_LAST_DAY}`;
   const draftPhaseDetail = state.world.currentDay <= 0
     ? 'Monte sua lista. As reservas ocupam score e entram na primeira virada.'
-    : 'Ultima janela de ajuste. Na proxima virada, o Dia 2 computa disputas e completa elencos.';
+    : state.world.currentDay < GENESIS_DRAFT_LAST_DAY
+      ? 'Continue ajustando sua lista. O Dia 2 ainda fica aberto para propostas.'
+      : 'Ultima janela de ajuste. Na proxima virada, o Dia 3 computa disputas e completa elencos.';
 
   const handleFinalizeDraft = async () => {
     if (totalSelected < 11) {
@@ -169,7 +172,7 @@ export const DraftPanel: React.FC = () => {
         newState.world.currentDay = 0;
       }
 
-      while (newState.world.status === 'LOBBY' && newState.world.currentDay < 2) {
+      while (newState.world.status === 'LOBBY' && newState.world.currentDay < GENESIS_DRAFT_AUTOFILL_DAY) {
         newState = advanceGameDay(newState);
       }
 

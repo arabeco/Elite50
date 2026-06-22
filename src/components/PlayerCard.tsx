@@ -9,6 +9,7 @@ import { useTransfers } from '../hooks/useTransfers';
 import { getBootImagePath } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 import { runElitePlayerFeedback, runInteractionFeedback } from '../utils/uiFeedback';
+import { GENESIS_DRAFT_LAST_DAY } from '../constants/gameConstants';
 
 interface PlayerCardProps {
   player: Player;
@@ -29,7 +30,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
   const { handleCancelDraftProposal } = useTransfers(null, 0, 0);
   const isDraftPending = state.world.status === 'LOBBY' &&
     state.world.currentDay >= 0 &&
-    state.world.currentDay < 2 &&
+    state.world.currentDay <= GENESIS_DRAFT_LAST_DAY &&
     state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const playerTeam = player.contract.teamId ? state.teams[player.contract.teamId] : null;

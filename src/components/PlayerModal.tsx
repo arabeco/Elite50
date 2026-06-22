@@ -11,6 +11,7 @@ import { calculateTeamPower } from '../engine/gameLogic';
 import { useTransfers } from '../hooks/useTransfers';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { TRAIT_DESCRIPTIONS } from '../constants/traitDescriptions';
+import { GENESIS_DRAFT_LAST_DAY } from '../constants/gameConstants';
 import { equipBootOnPlayer, getBootImagePath, getStoreItem, getStoreState, releasePlayerBootToInventory } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 import { groupAchievementsByTrophy } from '../utils/trophyAssets';
@@ -309,7 +310,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   const minScoreEvolution = Math.min(...scoreEvolution.map(item => item.value), player.totalRating);
   const maxScoreEvolution = Math.max(...scoreEvolution.map(item => item.value), player.potential, player.totalRating);
   const { handleSendTradeOffer, handleMakeProposal, handleCancelDraftProposal } = useTransfers(userTeam?.id || null, userTeam ? calculateTeamPower(userTeam, state.players) : 0, userTeam?.powerCap || 0);
-  const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay < 2;
+  const isDraftDay = state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY;
   const isDraftPending = state.world.draftProposals?.some(p => p.playerId === player.id && p.managerId === state.userManagerId);
 
   const [tradeMode, setTradeMode] = React.useState(false);

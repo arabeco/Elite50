@@ -1043,7 +1043,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               id: `season_started_${prev.world.currentSeason || 2050}_${Date.now()}`,
               date: gameNow.toISOString(),
               title: 'Draft Genesis aberto',
-              message: 'O mundo chegou em 00:00. O Draft Genesis abriu: Dia 0 e Dia 1 recebem listas; no Dia 2 a liga computa e abre a temporada.',
+              message: 'O mundo chegou em 00:00. O Draft Genesis abriu: Dia 0, Dia 1 e Dia 2 recebem listas; no Dia 3 a liga computa e abre a temporada.',
               type: 'success' as const,
               read: false
             },

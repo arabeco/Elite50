@@ -237,6 +237,46 @@ describe('Supabase multiplayer smoke', () => {
     expect((state?.world.leagues as any).norte.matches[0].homeTeamId).toBe('t_founder_1');
   });
 
+  it('keeps participant-owned takeover teams visible after a newer master tick', async () => {
+    const master = createMasterRecord();
+    master.updated_at = '2026-06-22T12:36:59.115Z';
+    master.teams_data.t_1.managerId = null;
+    mockDb.records.push(master);
+    mockDb.records.push({
+      ...master,
+      user_id: 'user_joiner',
+      is_creator: false,
+      is_public: false,
+      user_team_id: 't_1',
+      user_manager_id: 'user_joiner',
+      updated_at: '2026-06-19T18:40:16.813Z',
+      teams_data: {
+        t_1: {
+          ...master.teams_data.t_1,
+          managerId: 'user_joiner',
+        }
+      },
+      players_data: {},
+      managers_data: {
+        user_joiner: {
+          ...master.managers_data.m_npc,
+          id: 'user_joiner',
+          name: 'Joiner Manager',
+          isNPC: false,
+          career: { ...master.managers_data.m_npc.career, currentTeamId: 't_1', historyTeamIds: ['t_1'] }
+        }
+      }
+    });
+
+    const { loadGameState } = await import('../lib/supabase');
+
+    const state = await loadGameState('world_1');
+
+    expect(state?.teams.t_1.managerId).toBe('user_joiner');
+    expect(state?.managers.user_joiner.isNPC).toBe(false);
+    expect(state?.participants?.find(participant => participant.userId === 'user_joiner')?.teamId).toBe('t_1');
+  });
+
   it('blocks claiming a club already owned by another participant', async () => {
     mockDb.records.push({
       ...createMasterRecord(),
