@@ -5,6 +5,43 @@ Escopo: egress Supabase, segurança, código morto, incoerências, UI, checagens
 
 ---
 
+## Status da implementação
+
+Branch `fix/egress-e-auditoria`, commit `aff77d9`. `tsc` em 0 erros, 75 testes verdes,
+build 2.284 kB (era 2.571 kB).
+
+**Corrigido no código:**
+
+| Item | Onde |
+|---|---|
+| Seletores JSON nas listagens de mundo | §1.2-C |
+| `setInterval` de 60s removido | §1.2-D |
+| Debounce de autosave 5s → 15s | §1.2-D |
+| Piso de 20s entre recargas por realtime | §1.2-B |
+| `revealed` restaurado + `MatchViewModel` + teste de regressão | §4.2 |
+| 38 erros de `tsc` → 0 | §6 |
+| Zagueiro exibido como "ATA" no card | §6 |
+| `insert` em `public.notifications` inexistente | §5.1 |
+| Arquivos órfãos e dependência `@google/genai` | §5.2 |
+| `h-[30]` e classe Tailwind dinâmica | §7.1 |
+| Timeout da suíte de testes | §6 |
+| 4 migrations untracked versionadas | §5.4 |
+| Migration de RLS criada (**não aplicada**) | §2 |
+
+**Continua pendente — precisa de decisão ou acesso ao Supabase:**
+
+1. **Aplicar `20260713001000_persist_market_requests.sql`** (§4.1). Enquanto as colunas
+   não existirem, todo save falha. Rode a checagem 8.1 primeiro.
+2. **Aplicar `20260817001000_restrict_games_select.sql`** (§2) — **teste em staging antes**,
+   é a mudança de maior risco de regressão do lote.
+3. Verificar em produção que os seletores `world_state->>campo` retornam o esperado
+   (não deu para testar com o projeto em `402`).
+4. Itens estruturais: tirar `players_data` do JSONB monolítico (§1.3 item 6), remover
+   `worldTick`/`worldRepository` mortos (§5.3), safe-area mobile (§7.2), acessibilidade
+   dos botões de ícone (§7.3), memoização do `WorldTab` e do relógio do `HomeTab` (§7.4).
+
+---
+
 ## 0. Sumário executivo
 
 O estouro de egress **não é um problema de volume de jogadores**. É consequência de três
