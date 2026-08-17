@@ -4,11 +4,10 @@ import { useGame } from '../store/GameContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { getMatchStatus } from '../utils/matchUtils';
 import { Player, Team } from '../types';
-import { PlayerCard } from './PlayerCard';
 import { TeamLogo } from './TeamLogo';
 import { PlayerAvatar } from './PlayerAvatar';
-import { UserMinus, Save, Activity, Users, Zap, AlertTriangle, Lock } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { UserMinus, Save, Activity, Users, Zap, AlertTriangle, Lock, Sparkles } from 'lucide-react';
+import { buildAutoLineup, FORMATION_SLOTS } from '../utils/lineup';
 
 interface LineupBuilderProps {
   team: Team;
@@ -16,25 +15,12 @@ interface LineupBuilderProps {
   onPlayerSelect: (player: Player) => void;
 }
 
-const FORMATION_SLOTS = [
-  { id: 'ATA1', label: 'ATA', top: '20%', left: '20%' },
-  { id: 'ATA2', label: 'ATA', top: '15%', left: '50%' },
-  { id: 'ATA3', label: 'ATA', top: '20%', left: '80%' },
-  { id: 'MEI1', label: 'MEI', top: '40%', left: '30%' },
-  { id: 'MEI2', label: 'MEI', top: '40%', left: '70%' },
-  { id: 'MEI3', label: 'MEI', top: '55%', left: '50%' },
-  { id: 'ZAG1', label: 'ZAG', top: '65%', left: '15%' },
-  { id: 'ZAG2', label: 'ZAG', top: '75%', left: '35%' },
-  { id: 'ZAG3', label: 'ZAG', top: '75%', left: '65%' },
-  { id: 'ZAG4', label: 'ZAG', top: '65%', left: '85%' },
-  { id: 'GOL', label: 'GOL', top: '90%', left: '50%' },
-];
-
 export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, onPlayerSelect }) => {
   const { state, setState, saveGame, addToast } = useGame();
   const { upcomingMatches } = useDashboardData();
   const nextMatch = upcomingMatches?.[0];
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const isLocked = useMemo(() => {
@@ -62,33 +48,21 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
     return { avgRating, chemistry, pace: 85 }; // Mock pace for now
   }, [team.lineup, allPlayers]);
 
-  const handlePlayerClick = (e: React.MouseEvent, playerId: string) => {
-    e.stopPropagation();
-    if (selectedPlayerId === playerId) {
-      setSelectedPlayerId(null);
-    } else {
-      setSelectedPlayerId(playerId);
-    }
-  };
-
-  const handleSlotClick = (e: React.MouseEvent, slotId: string) => {
-    e.stopPropagation();
-
+  const assignPlayerToSlot = (playerId: string, slotId: string) => {
     if (isLocked) {
       addToast('Escalacao travada: a partida ja esta em pre-jogo ou ao vivo.', 'warning');
       return;
     }
 
-    if (!selectedPlayerId) {
-      // If no player selected, try to select the player in this slot
-      const playerInSlot = team.lineup?.[slotId];
-      if (playerInSlot) {
-        setSelectedPlayerId(playerInSlot);
-      }
+    const slot = FORMATION_SLOTS.find(item => item.id === slotId);
+    const player = allPlayers[playerId];
+    if (!slot || !player) return;
+
+    if (player.role !== slot.label) {
+      addToast(`${player.nickname} e ${player.role}. Escolha um ${slot.label} para essa posicao.`, 'warning');
       return;
     }
 
-    // Place selected player in slot
     const newState = { ...state };
     const newTeams = { ...newState.teams };
     const currentTeam = { ...newTeams[team.id] };
@@ -96,12 +70,12 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
 
     // Check if player is already in another slot and remove them
     Object.keys(newLineup).forEach(key => {
-      if (newLineup[key] === selectedPlayerId) {
+      if (newLineup[key] === playerId) {
         delete newLineup[key];
       }
     });
 
-    newLineup[slotId] = selectedPlayerId;
+    newLineup[slotId] = playerId;
 
     currentTeam.lineup = newLineup;
     newTeams[team.id] = currentTeam;
@@ -112,6 +86,32 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
     addToast('Escalacao atualizada.', 'success');
 
     setSelectedPlayerId(null);
+    setSelectedSlotId(null);
+  };
+
+  const handlePlayerClick = (e: React.MouseEvent, playerId: string) => {
+    e.stopPropagation();
+    if (selectedSlotId) {
+      assignPlayerToSlot(playerId, selectedSlotId);
+      return;
+    }
+
+    if (selectedPlayerId === playerId) {
+      setSelectedPlayerId(null);
+    } else {
+      setSelectedPlayerId(playerId);
+    }
+  };
+
+  const handleSlotClick = (e: React.MouseEvent, slotId: string) => {
+    e.stopPropagation();
+
+    if (selectedPlayerId) {
+      assignPlayerToSlot(selectedPlayerId, slotId);
+      return;
+    }
+
+    setSelectedSlotId(prev => prev === slotId ? null : slotId);
   };
 
   const handleRemoveFromLineup = (playerId: string) => {
@@ -153,6 +153,41 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
 
   // Get bench players (squad - lineup)
   const benchPlayerIds = team.squad.filter(id => !lineupPlayerIds.includes(id));
+  const selectedSlot = selectedSlotId ? FORMATION_SLOTS.find(slot => slot.id === selectedSlotId) : null;
+  const visibleRoles = selectedSlot ? [selectedSlot.label] : ['GOL', 'ZAG', 'MEI', 'ATA'];
+  const benchByRole = visibleRoles.map(role => ({
+    role,
+    players: benchPlayerIds
+      .map(playerId => allPlayers[playerId])
+      .filter((player): player is Player => !!player && player.role === role)
+      .sort((a, b) => b.totalRating - a.totalRating),
+  }));
+
+  const handleAutoFillLineup = () => {
+    if (isLocked) {
+      addToast('Escalacao travada: a partida ja esta em pre-jogo ou ao vivo.', 'warning');
+      return;
+    }
+
+    const nextLineup = buildAutoLineup(team, allPlayers);
+    const filledCount = Object.keys(nextLineup).length;
+    if (filledCount === 0) {
+      addToast('Nao encontrei jogadores validos no elenco para montar a escalacao.', 'warning');
+      return;
+    }
+
+    const newState = { ...state };
+    const newTeams = { ...newState.teams };
+    const currentTeam = { ...newTeams[team.id], lineup: nextLineup };
+    newTeams[team.id] = currentTeam;
+    newState.teams = newTeams;
+
+    setState(newState);
+    saveGame(newState);
+    setSelectedPlayerId(null);
+    setSelectedSlotId(null);
+    addToast(`Escalacao automatica montada com ${filledCount}/11 titulares.`, filledCount >= 11 ? 'success' : 'warning');
+  };
 
   return (
     <div className="flex flex-col gap-3 sm:gap-6 animate-in fade-in duration-500 h-full min-h-[500px] sm:min-h-[700px]">
@@ -209,17 +244,28 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
             </div>
           </div>
 
-          <button
-            onClick={handleSaveLineup}
-            disabled={isSaving}
-            className={`flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 rounded-xl font-bold transition-all shadow-lg border ${isSaving
-                ? 'bg-emerald-900/20 border-emerald-500/30 text-emerald-500/50 cursor-wait'
-                : 'bg-black/40 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 hover:scale-105 active:scale-95'
-              }`}
-          >
-            <Save size={16} />
-            <span className="text-xs sm:text-sm">{isSaving ? 'Salvando...' : 'Salvar'}</span>
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              onClick={handleAutoFillLineup}
+              disabled={isLocked}
+              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-200 transition-all hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Sparkles size={16} />
+              Auto
+            </button>
+            <button
+              onClick={handleSaveLineup}
+              disabled={isSaving}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold transition-all shadow-lg border ${isSaving
+                  ? 'bg-emerald-900/20 border-emerald-500/30 text-emerald-500/50 cursor-wait'
+                  : 'bg-black/40 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 hover:scale-105 active:scale-95'
+                }`}
+            >
+              <Save size={16} />
+              <span className="text-xs sm:text-sm">{isSaving ? 'Salvando...' : 'Salvar'}</span>
+            </button>
+          </div>
         </div>
 
         {/* The Pitch */}
@@ -265,7 +311,8 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
             const playerId = team.lineup?.[slot.id];
             const player = playerId ? allPlayers[playerId] : null;
             const isSelected = player?.id === selectedPlayerId;
-            const canReceiveDrop = !!selectedPlayerId;
+            const isActiveSlot = selectedSlotId === slot.id;
+            const canReceiveDrop = !!selectedPlayerId || isActiveSlot;
 
             return (
               <div
@@ -338,12 +385,12 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
                     </div>
                   </div>
                 ) : (
-                  <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl border border-dashed flex items-center justify-center transition-all duration-300 group/slot ${canReceiveDrop
+                    <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl border border-dashed flex items-center justify-center transition-all duration-300 group/slot ${canReceiveDrop
                       ? 'border-cyan-400 bg-cyan-400/10 animate-pulse scale-110 shadow-[0_0_25px_rgba(34,211,238,0.4)]'
                       : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
                     }`}>
                     <span className={`text-[8px] sm:text-[10px] font-black uppercase tracking-[0.3em] transition-colors ${canReceiveDrop ? 'text-cyan-400' : 'text-white/20 group-hover/slot:text-white/40'}`}>
-                      {slot.label}
+                      {isActiveSlot ? 'OK' : slot.label}
                     </span>
                     
                     {/* Corner accents */}
@@ -363,7 +410,7 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
       <div className="glass-card-neon border-white/5 rounded-2xl sm:rounded-[2rem] p-3 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col gap-3 sm:gap-4 overflow-hidden relative">
         <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl pointer-events-none" />
         
-        <div className="flex items-center gap-3 sm:gap-4 px-1 sm:px-2">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-1 sm:px-2">
           <div className="p-1.5 sm:p-2 glass-card rounded-lg sm:rounded-xl border-white/10">
             <Users size={14} className="text-cyan-400 sm:size-[18px]" />
           </div>
@@ -372,54 +419,73 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
               Banco de Reservas
             </h3>
             <span className="text-[7px] sm:text-[8px] font-bold text-white/20 uppercase tracking-widest mt-0.5 sm:mt-1">
-              {benchPlayerIds.length} Atletas em Espera
+              {selectedSlot ? `Escolha um ${selectedSlot.label} para ${selectedSlot.id}` : `${benchPlayerIds.length} Atletas em Espera`}
             </span>
           </div>
+          {selectedSlot && (
+            <button
+              type="button"
+              onClick={() => setSelectedSlotId(null)}
+              className="ml-auto rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[8px] font-black uppercase tracking-widest text-white/45 transition hover:text-white"
+            >
+              Ver todas
+            </button>
+          )}
+          {!selectedSlot && (
           <div className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1 bg-white/5 rounded-lg border border-white/5">
             <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
             <span className="text-[8px] text-white/40 uppercase font-black tracking-widest">
-              Toque para Escalar
+              Campo filtra por posicao
             </span>
           </div>
+          )}
         </div>
 
-        <div className="flex overflow-x-auto gap-4 sm:gap-6 p-1 sm:p-2 pb-4 sm:pb-6 snap-x no-scrollbar min-h-[120px] sm:min-h-[180px] items-center">
+        <div className="space-y-3 p-1 sm:p-2">
           {benchPlayerIds.length > 0 ? (
-            benchPlayerIds.map(playerId => {
-              const player = allPlayers[playerId];
-              if (!player) return null;
-              const isSelected = player.id === selectedPlayerId;
-
-              return (
-                <div
-                  key={player.id}
-                  onClick={(e) => handlePlayerClick(e, player.id)}
-                  onDoubleClick={(e) => { e.stopPropagation(); onPlayerSelect(player); }}
-                  className={`snap-start shrink-0 w-20 sm:w-24 cursor-pointer hover:-translate-y-2 sm:hover:-translate-y-3 transition-all duration-500 touch-none select-none relative group ${isSelected ? 'scale-110' : ''}`}
-                >
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.div
-                        layoutId="player-selection-glow"
-                        className="absolute -inset-1.5 sm:-inset-2 bg-cyan-400/20 blur-xl rounded-xl sm:rounded-2xl z-0"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      />
-                    )}
-                  </AnimatePresence>
-                  
-                  <div className={`relative z-10 transition-all duration-300 ${isSelected ? 'shadow-[0_0_30px_rgba(34,211,238,0.4)]' : 'group-hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}>
-                    <PlayerCard
-                      player={player}
-                      onClick={() => { }}
-                      variant="compact"
-                      teamLogo={team.logo}
-                    />
-                  </div>
+            benchByRole.map(group => (
+              <div key={group.role} className="rounded-2xl border border-white/5 bg-black/25 p-2 sm:p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                    {group.role}
+                  </span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/25">
+                    {group.players.length} disponiveis
+                  </span>
                 </div>
-              );
-            })
+                {group.players.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {group.players.map(player => {
+                      const isSelected = player.id === selectedPlayerId;
+                      return (
+                        <button
+                          type="button"
+                          key={player.id}
+                          onClick={(e) => handlePlayerClick(e, player.id)}
+                          onDoubleClick={(e) => { e.stopPropagation(); onPlayerSelect(player); }}
+                          className={`flex min-h-[72px] items-center gap-2 rounded-xl border p-2 text-left transition-all ${
+                            isSelected
+                              ? 'border-cyan-400 bg-cyan-400/15 shadow-[0_0_22px_rgba(34,211,238,0.28)]'
+                              : 'border-white/10 bg-white/[0.035] hover:border-cyan-400/35 hover:bg-cyan-400/[0.06]'
+                          }`}
+                        >
+                          <PlayerAvatar player={player} size="sm" mode="head" className="h-10 w-10 shrink-0 rounded-xl bg-black/40" />
+                          <div className="min-w-0">
+                            <p className="truncate text-[10px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
+                            <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-cyan-200">{player.role} / {player.totalRating}</p>
+                            <p className="mt-0.5 truncate text-[7px] font-bold uppercase tracking-widest text-white/30">{selectedSlot ? 'toca para escalar' : 'toca e escolha campo'}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-white/5 py-4 text-center text-[8px] font-black uppercase tracking-[0.22em] text-white/20">
+                    Nenhum {group.role} no banco
+                  </div>
+                )}
+              </div>
+            ))
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-white/20 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.3em] h-24 sm:h-32 border border-dashed border-white/5 rounded-xl sm:rounded-2xl">
               <Users size={24} className="mb-2 sm:mb-3 opacity-10 sm:size-[32px]" />

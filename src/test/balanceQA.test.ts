@@ -210,6 +210,8 @@ describe('balance QA', () => {
       playerId: wanted.id,
       fromTeamId: 'source',
       toTeamId: 'target',
+      value: 0,
+      date: new Date().toISOString(),
       status: 'PENDING'
     }], state.teams, state.players);
 
@@ -227,6 +229,8 @@ describe('balance QA', () => {
       playerId: happyPlayer.id,
       fromTeamId: 'source',
       toTeamId: 'target',
+      value: 0,
+      date: new Date().toISOString(),
       status: 'PENDING'
     }], state.teams, state.players);
 
@@ -245,6 +249,8 @@ describe('balance QA', () => {
       playerId: capBreaker.id,
       fromTeamId: 'source',
       toTeamId: 'capped',
+      value: 0,
+      date: new Date().toISOString(),
       status: 'PENDING'
     }], state.teams, state.players);
 

@@ -468,6 +468,21 @@ export interface DistrictCupState {
   standings: LeagueTeamStats[];
   final: Match | null;
   winnerId: string | null;
+  managerInvites?: DistrictManagerInvite[];
+  managerAssignments?: Partial<Record<District, string>>;
+}
+
+export interface DistrictManagerInvite {
+  id: string;
+  season: number;
+  district: District;
+  managerId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'AUTO_ACCEPTED' | 'EXPIRED';
+  score: number;
+  rank: number;
+  createdAt: string;
+  respondedAt?: string | null;
+  note?: string;
 }
 
 export interface LeagueState {
@@ -490,7 +505,7 @@ export interface NewsItem {
   date: string;
   title: string;
   content: string;
-  type: 'TRANSFER' | 'EXILE' | 'CHAMPION' | 'CUP' | 'MIGRATION' | 'SYSTEM';
+  type: 'TRANSFER' | 'EXILE' | 'CHAMPION' | 'CUP' | 'MATCH' | 'MIGRATION' | 'SYSTEM';
   importance: 1 | 2 | 3; // 3 is highest
   action?: {
     kind: 'SEASON_REPORT' | 'TEAM_PROFILE' | 'PLAYER_PROFILE';

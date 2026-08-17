@@ -128,8 +128,9 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
     ? secondarySymbolId
     : undefined;
   const assetPath = resolvedSymbolId.startsWith('asset:') ? resolvedSymbolId.slice('asset:'.length) : null;
+  const [assetFailed, setAssetFailed] = React.useState(false);
 
-  if (assetPath) {
+  if (assetPath && !assetFailed) {
     return (
       <div
         className={`relative flex items-center justify-center ${className}`}
@@ -138,8 +139,22 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
         <img
           src={encodeURI(assetPath)}
           alt=""
+          onError={() => setAssetFailed(true)}
           className="h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.42)]"
         />
+      </div>
+    );
+  }
+
+  if (assetPath && assetFailed) {
+    const filename = assetPath.split('/').pop()?.replace(/\.[^.]+$/, '') || 'team';
+    const initials = filename.split(/[-_\s]+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    return (
+      <div
+        className={`grid place-items-center rounded-full border-2 border-white/45 font-black uppercase text-white shadow-[0_6px_14px_rgba(0,0,0,0.42)] ${className}`}
+        style={{ width: size, height: size, backgroundColor: primaryColor, boxShadow: `inset 0 0 0 ${Math.max(3, size * 0.08)}px ${secondaryColor}` }}
+      >
+        <span style={{ fontSize: size * 0.28 }}>{initials}</span>
       </div>
     );
   }

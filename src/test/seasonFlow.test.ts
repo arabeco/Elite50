@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateInitialState } from '../engine/generator';
-import { advanceGameDay, startNewSeason } from '../engine/gameLogic';
+import { advanceGameDay, autoCompleteDraft, calculateTeamPower, startNewSeason } from '../engine/gameLogic';
+import { respondDistrictCupManagerInvite } from '../engine/districtCupLogic';
 import { SEASON_DAYS, SQUAD_SIZE_MAX, TOTAL_ROUNDS } from '../constants/gameConstants';
 import { GameState, Manager } from '../types';
 
@@ -108,6 +109,67 @@ describe('full season QA flow', () => {
     expect(nextState.world.eliteCup.winnerId).toBeNull();
     expect(nextState.world.districtCup.winnerId).toBeNull();
     expect(nextState.world.offseasonDecision).toBeUndefined();
+  });
+
+  it('asks the human manager before assigning a district selection', () => {
+    let state = generateInitialState();
+    attachUserManager(state);
+    state.managers[state.userManagerId!].reputation = 100;
+    state.managers[state.userManagerId!].career.titlesWon = 8;
+    state.managers[state.userManagerId!].career.totalLeagueTitles = 5;
+    state.managers[state.userManagerId!].career.totalCupTitles = 3;
+
+    while (state.world.currentRound < 7) {
+      state = advanceGameDay(state);
+    }
+
+    const invite = state.world.districtCup.managerInvites?.find(item =>
+      item.managerId === state.userManagerId && item.status === 'PENDING'
+    );
+
+    expect(invite).toBeTruthy();
+
+    state = respondDistrictCupManagerInvite(state, invite!.id, true);
+
+    expect(state.world.districtCup.managerAssignments?.[invite!.district]).toBe(state.userManagerId);
+
+    while (state.world.phase !== 'OFFSEASON') {
+      state = advanceGameDay(state);
+    }
+
+    const districtTeam = state.teams[`d_${invite!.district.toLowerCase()}`];
+    expect(districtTeam.managerId).toBe(state.userManagerId);
+    expect(state.world.districtCup.winnerId).toBeTruthy();
+  });
+
+  it('does not auto-complete Genesis Draft above the team power cap', () => {
+    const state = generateInitialState();
+    Object.values(state.teams)
+      .filter(team => team.id.startsWith('t_'))
+      .forEach(team => {
+        team.squad.forEach(playerId => {
+          state.players[playerId].contract.teamId = null;
+        });
+        team.squad = [];
+      });
+
+    autoCompleteDraft(state);
+
+    Object.values(state.teams)
+      .filter(team => team.id.startsWith('t_') && team.squad.length === SQUAD_SIZE_MAX)
+      .forEach(team => {
+        const roleCounts = team.squad.reduce<Record<string, number>>((counts, playerId) => {
+          const role = state.players[playerId]?.role;
+          counts[role] = (counts[role] || 0) + 1;
+          return counts;
+        }, {});
+
+        expect(calculateTeamPower(team, state.players)).toBeLessThanOrEqual(team.powerCap || 0);
+        expect(roleCounts.GOL).toBe(2);
+        expect(roleCounts.ZAG).toBe(5);
+        expect(roleCounts.MEI).toBe(4);
+        expect(roleCounts.ATA).toBe(4);
+      });
   });
 
   it('keeps a multi-season world playable without rating inflation or dead news actions', () => {

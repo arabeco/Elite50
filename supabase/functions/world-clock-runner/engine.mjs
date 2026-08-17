@@ -1278,6 +1278,27 @@ var newsHeadlines = {
       teamId: team.id
     });
   },
+  eliteCupWinner: (state, team) => {
+    addNews(state, "CAMPEAO DA COPA ELITE", `${team.name} conquista a Copa Elite e fecha o mata-mata no topo do mundo.`, "CUP", 3, {
+      kind: "TEAM_PROFILE",
+      season: state.world.currentSeason || 2050,
+      teamId: team.id
+    });
+  },
+  matchHighlight: (state, homeTeam, awayTeam, homeScore, awayScore, humanInvolved) => {
+    const winner = homeScore === awayScore ? null : homeScore > awayScore ? homeTeam : awayTeam;
+    const loser = homeScore === awayScore ? null : homeScore > awayScore ? awayTeam : homeTeam;
+    const margin = Math.abs(homeScore - awayScore);
+    const totalGoals = homeScore + awayScore;
+    const isBlowout = margin >= 3 || totalGoals >= 6;
+    const title = isBlowout ? "PLACAR PESADO" : humanInvolved ? "CLUBE HUMANO EM CAMPO" : "JOGO-CHAVE";
+    const content = winner && loser ? `${winner.name} bate ${loser.name} por ${Math.max(homeScore, awayScore)}-${Math.min(homeScore, awayScore)}.` : `${homeTeam.name} e ${awayTeam.name} ficam no ${homeScore}-${awayScore}.`;
+    addNews(state, title, content, "MATCH", isBlowout ? 3 : humanInvolved ? 2 : 1, {
+      kind: "TEAM_PROFILE",
+      season: state.world.currentSeason || 2050,
+      teamId: winner?.id || homeTeam.id
+    });
+  },
   migration: (state, team, newDist) => {
     void newDist;
     const title = "PRESSAO DE TEMPORADA";
@@ -1830,6 +1851,13 @@ var calculatePostMatchProgression = (player, matchRating, state) => {
   if (currentSeasonDelta + delta < -24) delta = -24 - currentSeasonDelta;
   return delta;
 };
+var calculateTradeAcceptanceChance = (offeredPlayer, requestedPlayer) => {
+  const diff = offeredPlayer.totalRating - requestedPlayer.totalRating;
+  if (diff >= 0) {
+    return clamp2(0.75 + Math.min(diff, 200) / 1e3, 0.75, 0.95);
+  }
+  return clamp2(0.35 + diff / 250, 0.02, 0.35);
+};
 var calculateSatisfactionUpdate = (player, matchRating, teamWon, isTitular) => {
   let change = 0;
   if (matchRating !== null) {
@@ -1885,12 +1913,15 @@ var processNightMarket = (state, proposals, teams, players) => {
     prop.status = "DECLINED";
     const player = players[prop.playerId];
     const toTeam = teams[prop.toTeamId];
-    if (message && player && toTeam) {
+    if (player && toTeam) {
       notifications.push({
         id: `refuse_${Date.now()}_${prop.id}`,
         title: "Proposta Recusada",
-        message,
-        type: "transfer"
+        message: message || `${player.nickname} nao chegou a um acordo com o ${toTeam.name}.`,
+        type: "transfer",
+        date: state.world.currentDate,
+        read: false,
+        targetTeamId: toTeam.id
       });
     }
   };
@@ -1911,7 +1942,10 @@ var processNightMarket = (state, proposals, teams, players) => {
       const toTeam2 = teams[prop.toTeamId];
       if (!toTeam2) return null;
       const currentPower = toTeam2.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
-      if (currentPower + player.totalRating > (toTeam2.powerCap || 9e3)) return null;
+      if (currentPower + player.totalRating > (toTeam2.powerCap || 9e3)) {
+        declineProposal(prop, `${player.nickname} nao pode chegar agora: o ${toTeam2.name} ultrapassaria o Score Maximo.`);
+        return null;
+      }
       const teammates = toTeam2.squad.map((id) => players[id]).filter((p) => !!p);
       const mockPosition = toTeam2.powerCap && toTeam2.powerCap > 1e4 ? 2 : 10;
       const attrScore = calculateAttractiveness(player, toTeam2, teammates, mockPosition);
@@ -1952,13 +1986,106 @@ var processNightMarket = (state, proposals, teams, players) => {
     ].slice(0, 12);
     notifications.push({
       id: `accept_${Date.now()}_${player.id}`,
-      title: "Transfer?ncia Conclu?da",
+      title: "Contratacao concluida",
       message: `${player.nickname} assinou com o ${toTeam.name}!`,
-      type: "transfer"
+      type: "transfer",
+      date: state.world.currentDate,
+      read: false,
+      targetTeamId: toTeam.id
     });
     playerProposals.filter((prop) => prop.id !== winningProp.id).forEach((prop) => declineProposal(prop));
   });
   return { notifications, proposals: remainingProposals };
+};
+var getDateKey = (date) => {
+  const parsed = date ? new Date(date) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+};
+var processTradeOffers = (state, offers, teams, players) => {
+  const notifications = [];
+  const currentDateKey = getDateKey(state.world.currentDate);
+  const nextOffers = [...offers];
+  nextOffers.forEach((offer) => {
+    if (offer.status !== "PENDING") return;
+    if (getDateKey(offer.date) === currentDateKey) return;
+    const fromTeam = teams[offer.fromTeamId];
+    const toTeam = teams[offer.toTeamId];
+    const offeredPlayer = players[offer.offeredPlayerId];
+    const requestedPlayer = players[offer.requestedPlayerId];
+    if (!fromTeam || !toTeam || !offeredPlayer || !requestedPlayer) {
+      offer.status = "DECLINED";
+      return;
+    }
+    const targetManager = toTeam.managerId ? state.managers[toTeam.managerId] : null;
+    if (targetManager?.isNPC === false) return;
+    if (!fromTeam.squad.includes(offeredPlayer.id) || !toTeam.squad.includes(requestedPlayer.id)) {
+      offer.status = "DECLINED";
+      notifications.push({
+        id: `trade_invalid_${Date.now()}_${offer.id}`,
+        title: "Troca cancelada",
+        message: `A proposta por ${requestedPlayer.nickname} perdeu validade porque o elenco mudou.`,
+        type: "transfer",
+        date: state.world.currentDate,
+        read: false,
+        targetTeamId: fromTeam.id
+      });
+      return;
+    }
+    const fromPower = fromTeam.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
+    const nextFromPower = fromPower - offeredPlayer.totalRating + requestedPlayer.totalRating;
+    if (nextFromPower > (fromTeam.powerCap || 9e3)) {
+      offer.status = "DECLINED";
+      notifications.push({
+        id: `trade_cap_${Date.now()}_${offer.id}`,
+        title: "Troca recusada",
+        message: `${requestedPlayer.nickname} faria o ${fromTeam.name} estourar o Score Maximo.`,
+        type: "transfer",
+        date: state.world.currentDate,
+        read: false,
+        targetTeamId: fromTeam.id
+      });
+      return;
+    }
+    const chance = calculateTradeAcceptanceChance(offeredPlayer, requestedPlayer);
+    if (Math.random() >= chance) {
+      offer.status = "DECLINED";
+      notifications.push({
+        id: `trade_declined_${Date.now()}_${offer.id}`,
+        title: "Troca recusada",
+        message: `${toTeam.name} recusou trocar ${requestedPlayer.nickname} por ${offeredPlayer.nickname}.`,
+        type: "transfer",
+        date: state.world.currentDate,
+        read: false,
+        targetTeamId: fromTeam.id
+      });
+      return;
+    }
+    fromTeam.squad = fromTeam.squad.filter((id) => id !== offeredPlayer.id);
+    toTeam.squad = toTeam.squad.filter((id) => id !== requestedPlayer.id);
+    fromTeam.squad.push(requestedPlayer.id);
+    toTeam.squad.push(offeredPlayer.id);
+    Object.keys(fromTeam.lineup || {}).forEach((slot) => {
+      if (fromTeam.lineup[slot] === offeredPlayer.id) delete fromTeam.lineup[slot];
+    });
+    Object.keys(toTeam.lineup || {}).forEach((slot) => {
+      if (toTeam.lineup[slot] === requestedPlayer.id) delete toTeam.lineup[slot];
+    });
+    requestedPlayer.contract.teamId = fromTeam.id;
+    offeredPlayer.contract.teamId = toTeam.id;
+    offer.status = "ACCEPTED";
+    notifications.push({
+      id: `trade_accept_${Date.now()}_${offer.id}`,
+      title: "Troca confirmada",
+      message: `${fromTeam.name} recebeu ${requestedPlayer.nickname}; ${toTeam.name} ficou com ${offeredPlayer.nickname}.`,
+      type: "transfer",
+      date: state.world.currentDate,
+      read: false,
+      targetTeamId: fromTeam.id
+    });
+    newsHeadlines.transfer(state, requestedPlayer, fromTeam, requestedPlayer.totalRating);
+  });
+  return { notifications, offers: nextOffers };
 };
 
 // src/engine/districtCupLogic.ts
@@ -1978,22 +2105,86 @@ var awardDistrictTeamTitle = (team, season) => {
     });
   }
 };
-var selectDistrictCupManagers = (state) => {
-  const activeManagers = Object.values(state.managers || {});
-  const sorted = activeManagers.filter((m) => m && typeof m.reputation === "number").sort((a, b) => {
-    const score = (manager) => {
-      const career = manager.career || {};
-      const humanBonus = manager.isNPC === false || manager.id === state.userManagerId ? 35 : 0;
-      return (manager.reputation || 0) + humanBonus + (career.titlesWon || 0) * 8 + (career.totalLeagueTitles || 0) * 6 + (career.totalCupTitles || 0) * 5 + (career.hallOfFameEntries || 0) * 10;
-    };
-    return score(b) - score(a);
-  });
-  const selected = sorted.slice(0, 4);
-  const mapping = {};
+var scoreDistrictManager = (state, manager, district) => {
+  const career = manager.career;
+  const activeTeam = career.currentTeamId ? state.teams[career.currentTeamId] : null;
+  const sameOrigin = manager.originDistrict === district;
+  const sameCurrent = manager.district === district || activeTeam?.district === district;
+  const humanBonus = manager.isNPC === false || manager.id === state.userManagerId ? 30 : 0;
+  const districtBonus = sameOrigin ? 28 : sameCurrent ? 16 : 0;
+  return (manager.reputation || 0) + humanBonus + districtBonus + (career.titlesWon || 0) * 8 + (career.totalLeagueTitles || 0) * 6 + (career.totalCupTitles || 0) * 5 + (career.hallOfFameEntries || 0) * 10;
+};
+var getDistrictManagerCandidates = (state, district) => Object.values(state.managers || {}).filter((m) => m && typeof m.reputation === "number").map((manager) => ({
+  manager,
+  score: scoreDistrictManager(state, manager, district)
+})).sort((a, b) => b.score - a.score);
+var isHumanManager = (state, managerId) => {
+  const manager = state.managers[managerId];
+  return manager?.isNPC === false || managerId === state.userManagerId;
+};
+var prepareDistrictCupManagerInvites = (state) => {
+  const season = state.world.currentSeason || 2050;
+  const cup = state.world.districtCup;
+  if (cup.managerInvites?.some((invite) => invite.season === season)) {
+    return state;
+  }
   const districts = ["NORTE", "SUL", "LESTE", "OESTE"];
-  districts.forEach((d, i) => {
-    mapping[d] = selected[i]?.id || "ai_manager_dist";
+  cup.managerInvites = cup.managerInvites || [];
+  cup.managerAssignments = cup.managerAssignments || {};
+  const usedManagers = /* @__PURE__ */ new Set();
+  districts.forEach((district) => {
+    const candidates = getDistrictManagerCandidates(state, district).filter((candidate) => !usedManagers.has(candidate.manager.id));
+    const selected = candidates[0];
+    if (!selected) return;
+    const status = isHumanManager(state, selected.manager.id) ? "PENDING" : "AUTO_ACCEPTED";
+    const invite = {
+      id: `district_invite_${season}_${district}_${selected.manager.id}`,
+      season,
+      district,
+      managerId: selected.manager.id,
+      status,
+      score: selected.score,
+      rank: 1,
+      createdAt: state.world.currentDate,
+      respondedAt: status === "AUTO_ACCEPTED" ? state.world.currentDate : null,
+      note: status === "PENDING" ? `A Federacao ${district} te indicou para comandar a selecao na Copa dos Distritos.` : `${selected.manager.name} aceitou automaticamente pela IA.`
+    };
+    cup.managerInvites.push(invite);
+    if (status === "AUTO_ACCEPTED") {
+      cup.managerAssignments[district] = selected.manager.id;
+      usedManagers.add(selected.manager.id);
+    }
   });
+  return state;
+};
+var selectDistrictCupManagers = (state) => {
+  prepareDistrictCupManagerInvites(state);
+  const mapping = { ...state.world.districtCup.managerAssignments || {} };
+  const invites = state.world.districtCup.managerInvites || [];
+  const districts = ["NORTE", "SUL", "LESTE", "OESTE"];
+  const usedManagers = new Set(Object.values(mapping).filter(Boolean));
+  districts.forEach((district) => {
+    if (mapping[district]) return;
+    invites.filter((invite) => invite.district === district && invite.status === "PENDING").forEach((invite) => {
+      invite.status = "EXPIRED";
+      invite.respondedAt = state.world.currentDate;
+      invite.note = "Sem resposta ate a Copa. A federacao chamou outro tecnico.";
+    });
+    const accepted = invites.find(
+      (invite) => invite.district === district && (invite.status === "ACCEPTED" || invite.status === "AUTO_ACCEPTED") && !usedManagers.has(invite.managerId)
+    );
+    if (accepted) {
+      mapping[district] = accepted.managerId;
+      usedManagers.add(accepted.managerId);
+      return;
+    }
+    const fallback = getDistrictManagerCandidates(state, district).find((candidate) => !usedManagers.has(candidate.manager.id));
+    if (fallback) {
+      mapping[district] = fallback.manager.id;
+      usedManagers.add(fallback.manager.id);
+    }
+  });
+  state.world.districtCup.managerAssignments = mapping;
   return mapping;
 };
 var generateDistrictRosters = (state) => {
@@ -2132,6 +2323,488 @@ var recordManagerTacticalMemory = (manager, style, understanding) => {
   };
 };
 
+// src/utils/lineup.ts
+var FORMATION_SLOTS = [
+  { id: "ATA1", label: "ATA", top: "20%", left: "20%" },
+  { id: "ATA2", label: "ATA", top: "15%", left: "50%" },
+  { id: "ATA3", label: "ATA", top: "20%", left: "80%" },
+  { id: "MEI1", label: "MEI", top: "40%", left: "30%" },
+  { id: "MEI2", label: "MEI", top: "40%", left: "70%" },
+  { id: "MEI3", label: "MEI", top: "55%", left: "50%" },
+  { id: "ZAG1", label: "ZAG", top: "65%", left: "15%" },
+  { id: "ZAG2", label: "ZAG", top: "75%", left: "35%" },
+  { id: "ZAG3", label: "ZAG", top: "75%", left: "65%" },
+  { id: "ZAG4", label: "ZAG", top: "65%", left: "85%" },
+  { id: "GOL", label: "GOL", top: "90%", left: "50%" }
+];
+var buildAutoLineup = (team, players, options) => {
+  const preserveExisting = options?.preserveExisting ?? false;
+  const usedPlayerIds = /* @__PURE__ */ new Set();
+  const nextLineup = {};
+  const squadPlayers = (team.squad || []).map((playerId) => players[playerId]).filter((player) => !!player).sort((a, b) => b.totalRating - a.totalRating);
+  if (preserveExisting) {
+    FORMATION_SLOTS.forEach((slot) => {
+      const playerId = team.lineup?.[slot.id];
+      const player = playerId ? players[playerId] : null;
+      if (!player || usedPlayerIds.has(player.id) || !(team.squad || []).includes(player.id)) return;
+      nextLineup[slot.id] = player.id;
+      usedPlayerIds.add(player.id);
+    });
+  }
+  FORMATION_SLOTS.forEach((slot) => {
+    if (nextLineup[slot.id]) return;
+    const best = squadPlayers.find((player) => player.role === slot.label && !usedPlayerIds.has(player.id));
+    if (!best) return;
+    nextLineup[slot.id] = best.id;
+    usedPlayerIds.add(best.id);
+  });
+  FORMATION_SLOTS.forEach((slot) => {
+    if (nextLineup[slot.id]) return;
+    const fallback = squadPlayers.find((player) => !usedPlayerIds.has(player.id));
+    if (!fallback) return;
+    nextLineup[slot.id] = fallback.id;
+    usedPlayerIds.add(fallback.id);
+  });
+  return nextLineup;
+};
+var countLineupPlayers = (lineup) => Object.values(lineup || {}).filter(Boolean).length;
+
+// src/engine/match2DPlayEngine.ts
+var WATCHED = ["GOAL", "CHANCE", "WOODWORK", "BLOCKED", "COUNTER", "FOUL", "CARD_YELLOW", "CARD_RED", "VAR", "MISTAKE", "OFFSIDE"];
+var clamp4 = (value, min, max) => Math.max(min, Math.min(max, value));
+var hash = (value) => {
+  let result = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    result ^= value.charCodeAt(index);
+    result = Math.imul(result, 16777619);
+  }
+  return Math.abs(result);
+};
+var noise = (seed, amount) => (hash(seed) % 1001 / 1e3 - 0.5) * amount;
+var directionFor = (side) => side === "home" ? 1 : -1;
+var mirrorX = (x, side) => side === "home" ? x : 100 - x;
+var labelFor = (player) => (player?.nickname || player?.name || "?").slice(0, 3).toUpperCase();
+var nameOfForEngine = (player) => player?.nickname || player?.name || "O marcador";
+var selectedIdsFor = (team) => {
+  const lineupIds = [...new Set(Object.values(team.lineup || {}).filter(Boolean))];
+  return lineupIds.length >= 11 ? lineupIds.slice(0, 11) : (team.squad || []).slice(0, 11);
+};
+var squadFor = (team, players) => selectedIdsFor(team).map((id) => players[id]).filter((player) => Boolean(player)).slice(0, 11);
+var SECTOR_FUSION_KEYS = {
+  attack: ["FIN", "DRI", "PAS", "DET"],
+  midfield: ["PAS", "MOV", "DRI", "DET"],
+  defense: ["DET", "MOV", "PAS", "DRI"],
+  goalkeeper: ["REF", "DEF", "POS"]
+};
+var EXPECTED_ROLE = {
+  attack: "ATA",
+  midfield: "MEI",
+  defense: "ZAG",
+  goalkeeper: "GOL"
+};
+var playerSectorSkill = (player, sector) => {
+  const fusion = player.fusion || {};
+  const values = SECTOR_FUSION_KEYS[sector].map((key) => fusion[key]).filter((value) => typeof value === "number" && value > 0);
+  const fusionRating = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length * 5 : player.totalRating;
+  return player.totalRating * 0.68 + fusionRating * 0.32;
+};
+var lineupRoleFit = (team, player, expectedRole) => {
+  const lineupEntry = Object.entries(team.lineup || {}).find(([, playerId]) => playerId === player.id);
+  if (!lineupEntry) return player.role === expectedRole ? 1 : 0.68;
+  const slotRole = lineupEntry[0].split(/[_-]/)[0].toUpperCase();
+  if (slotRole === expectedRole && player.role === expectedRole) return 1;
+  if (slotRole === expectedRole) return 0.58;
+  if (player.role === expectedRole) return 0.78;
+  return 0.52;
+};
+var teamSectorStrength = (team, players, sector) => {
+  const squad = squadFor(team, players);
+  const expectedRole = EXPECTED_ROLE[sector];
+  const specialists = squad.filter((player) => {
+    const lineupEntry = Object.entries(team.lineup || {}).find(([, playerId]) => playerId === player.id);
+    return lineupEntry ? lineupEntry[0].toUpperCase().startsWith(expectedRole) : player.role === expectedRole;
+  });
+  const selected = specialists.length ? specialists : squad.filter((player) => player.role === expectedRole);
+  const pool = selected.length ? selected : squad;
+  if (!pool.length) return 100;
+  const specialistScore = pool.reduce((sum, player) => sum + playerSectorSkill(player, sector) * lineupRoleFit(team, player, expectedRole), 0) / pool.length;
+  const supportRoles = {
+    attack: ["MEI"],
+    midfield: ["ZAG", "ATA"],
+    defense: ["MEI"],
+    goalkeeper: []
+  };
+  const support = squad.filter((player) => supportRoles[sector]?.includes(player.role));
+  const supportScore = support.length ? support.reduce((sum, player) => sum + playerSectorSkill(player, sector), 0) / support.length : specialistScore;
+  const chemistry = 0.88 + (team.chemistry || 50) / 500;
+  return (specialistScore * (sector === "goalkeeper" ? 1 : 0.84) + supportScore * (sector === "goalkeeper" ? 0 : 0.16)) * chemistry;
+};
+var STYLE_PROFILE = {
+  Equilibrado: { possession: 1, passRisk: 0, progression: 1, chance: 1, defense: 1, press: 1, transition: 1 },
+  "Tiki-Taka": { possession: 1.1, passRisk: -0.04, progression: 0.86, chance: 1.02, defense: 0.97, press: 0.96, transition: 0.92 },
+  "Motor Lento": { possession: 1.08, passRisk: -0.055, progression: 0.78, chance: 0.96, defense: 1.03, press: 0.9, transition: 0.86 },
+  Gegenpressing: { possession: 1.03, passRisk: 0.025, progression: 1.08, chance: 1.06, defense: 0.98, press: 1.17, transition: 1.08 },
+  Blitzkrieg: { possession: 0.95, passRisk: 0.075, progression: 1.2, chance: 1.1, defense: 0.9, press: 1.08, transition: 1.16 },
+  Vertical: { possession: 0.94, passRisk: 0.085, progression: 1.22, chance: 1.06, defense: 0.92, press: 0.98, transition: 1.14 },
+  "Retranca Armada": { possession: 0.9, passRisk: 0.035, progression: 1.08, chance: 0.93, defense: 1.14, press: 0.9, transition: 1.2 },
+  Catenaccio: { possession: 0.89, passRisk: 0.025, progression: 1.04, chance: 0.91, defense: 1.18, press: 0.88, transition: 1.17 }
+};
+var formation = (team, players, side) => {
+  const slots = [
+    [8, 50],
+    [24, 20],
+    [25, 39],
+    [25, 61],
+    [24, 80],
+    [43, 27],
+    [41, 50],
+    [43, 73],
+    [60, 22],
+    [64, 50],
+    [60, 78]
+  ];
+  return squadFor(team, players).map((player, index) => ({
+    id: player.id,
+    label: labelFor(player),
+    role: player.role,
+    teamId: team.id,
+    point: { x: mirrorX(slots[index]?.[0] ?? 45, side), y: slots[index]?.[1] ?? 50 }
+  }));
+};
+var distance = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+var moveToward = (from, target, maxDistance) => {
+  const span = distance(from, target);
+  if (span <= maxDistance || span === 0) return { ...target };
+  const ratio = maxDistance / span;
+  return { x: from.x + (target.x - from.x) * ratio, y: from.y + (target.y - from.y) * ratio };
+};
+var nearest = (dots, point, excluded = []) => [...dots].filter((dot) => !excluded.includes(dot.id)).sort((a, b) => distance(a.point, point) - distance(b.point, point))[0];
+var scoreAt = (events, event, homeId, awayId) => {
+  const goals = events.filter((item) => item.type === "GOAL" && item.realTimeSecond <= event.realTimeSecond);
+  return {
+    homeScore: goals.filter((item) => item.teamId === homeId).length,
+    awayScore: goals.filter((item) => item.teamId === awayId).length
+  };
+};
+var shapeTargets = (dots, base, ball, side, inPossession, carrierId, seed = "") => {
+  const direction = directionFor(side);
+  const progress = side === "home" ? ball.x : 100 - ball.x;
+  return dots.map((dot, index) => {
+    const origin = base.find((item) => item.id === dot.id)?.point || dot.point;
+    const isKeeper = dot.role === "GOL";
+    const roleFactor = dot.role === "ATA" ? 1 : dot.role === "MEI" ? 0.78 : dot.role === "ZAG" ? 0.48 : 0.12;
+    const blockAdvance = (progress - 48) * (inPossession ? 0.38 : 0.24) * roleFactor * direction;
+    const lateralPull = (ball.y - origin.y) * (inPossession ? 0.2 : 0.34) * (isKeeper ? 0.08 : 1);
+    const supportPull = inPossession && !isKeeper ? (ball.x - origin.x) * 0.12 * roleFactor : 0;
+    const target = {
+      x: clamp4(origin.x + blockAdvance + supportPull + noise(`${seed}:${dot.id}:x`, 1.2), isKeeper ? 4 : 7, isKeeper ? 96 : 93),
+      y: clamp4(origin.y + lateralPull + noise(`${seed}:${dot.id}:y`, 1.1), 9, 91)
+    };
+    if (dot.id === carrierId) return { ...dot, point: { ...ball }, active: true };
+    return { ...dot, point: moveToward(dot.point, target, isKeeper ? 1.1 : 3.8), active: false };
+  });
+};
+var makePlay = (event, match, homeTeam, awayTeam, players, allEvents) => {
+  const attackingSide = event.teamId === awayTeam.id ? "away" : "home";
+  const defendingSide = attackingSide === "home" ? "away" : "home";
+  const attackTeam = attackingSide === "home" ? homeTeam : awayTeam;
+  const homeBase = formation(homeTeam, players, "home");
+  const awayBase = formation(awayTeam, players, "away");
+  const lane = clamp4(24 + hash(event.id) % 53, 22, 78);
+  const d = directionFor(attackingSide);
+  const at = (x, y = lane) => ({ x: mirrorX(x, attackingSide), y });
+  const attackingBase = attackingSide === "home" ? homeBase : awayBase;
+  const actor = attackingBase.find((dot) => dot.id === event.playerId) || nearest(attackingBase, at(63));
+  const assistant = attackingBase.find((dot) => dot.id === event.assistantId) || nearest(attackingBase, at(47, lane + 13), actor ? [actor.id] : []);
+  const outlet = nearest(attackingBase, at(52, lane - 17), [actor?.id, assistant?.id].filter(Boolean));
+  const defendingBase = defendingSide === "home" ? homeBase : awayBase;
+  const keeper = defendingBase.find((dot) => dot.role === "GOL") || defendingBase[0];
+  const defender = nearest(defendingBase, at(78, lane), keeper ? [keeper.id] : []);
+  let state = { home: homeBase, away: awayBase, ball: at(39, lane + 8) };
+  const steps = [];
+  const push = (action, label, ball, carrierId, fromPlayerId, toPlayerId) => {
+    const homeHasBall = attackingSide === "home";
+    const home = shapeTargets(state.home, homeBase, ball, "home", homeHasBall, carrierId, `${event.id}:${steps.length}:h`);
+    const away = shapeTargets(state.away, awayBase, ball, "away", !homeHasBall, carrierId, `${event.id}:${steps.length}:a`);
+    state = { home, away, ball };
+    steps.push({ action, label, ball, home, away, focusPlayerId: carrierId, fromPlayerId, toPlayerId });
+  };
+  const pass = (label, from, to, fromId, toId) => {
+    push("pass", label, { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, void 0, fromId, toId);
+    push("pass", "Dominio", to, toId, fromId, toId);
+  };
+  const actorId = actor?.id;
+  const assistantId = assistant?.id;
+  const outletId = outlet?.id;
+  const style = attackTeam.tactics?.playStyle || "Equilibrado";
+  const start = style === "Gegenpressing" || style === "Blitzkrieg" || event.type === "COUNTER" ? at(54, lane + 7) : state.ball;
+  state.ball = start;
+  push("shape", style === "Gegenpressing" ? "Pressao recupera a posse" : `${attackTeam.name} ocupa o campo`, start, assistantId);
+  if (style === "Tiki-Taka" || style === "Motor Lento") {
+    const support = at(43, lane + 8);
+    const recycle = at(35, lane + 19);
+    const switchPoint = at(48, lane - 18);
+    push("carry", "Atrai a primeira pressao", support, assistantId);
+    pass("Passe de seguranca", support, recycle, assistantId, outletId);
+    push("carry", "O bloco reorganiza", at(39, lane + 16), outletId);
+    pass("Inversao de corredor", at(39, lane + 16), switchPoint, outletId, assistantId);
+  } else if (style === "Vertical" || style === "Blitzkrieg" || event.type === "COUNTER") {
+    const launch = at(63, lane - 8);
+    push("carry", event.type === "COUNTER" ? "Campo aberto" : "Progressao vertical", at(57, lane + 3), assistantId);
+    pass("Passe rompe a linha", at(57, lane + 3), launch, assistantId, outletId);
+  } else if (style === "Gegenpressing") {
+    push("carry", "Apoio imediato apos a roubada", at(59, lane + 5), assistantId);
+    pass("Toque curto sob pressao", at(59, lane + 5), at(66, lane - 6), assistantId, outletId);
+  } else if (style === "Retranca Armada" || style === "Catenaccio") {
+    push("carry", "Saida cautelosa", at(45, lane + 12), assistantId);
+    pass("Ligacao para o corredor", at(45, lane + 12), at(58, lane - 15), assistantId, outletId);
+  } else {
+    push("carry", "Conducao com apoio", at(48, lane + 4), assistantId);
+    pass("Passe de apoio", at(48, lane + 4), at(57, lane - 8), assistantId, outletId);
+  }
+  if (["FOUL", "CARD_YELLOW", "CARD_RED", "VAR", "MISTAKE", "OFFSIDE"].includes(event.type)) {
+    push(event.type === "VAR" ? "var" : event.type === "MISTAKE" ? "mistake" : event.type === "FOUL" ? "foul" : event.type.includes("CARD") ? "card" : "blocked", event.title, at(61, lane), actorId, outletId, actorId);
+    push("shape", "Jogo interrompido", at(61, lane), actorId);
+  } else {
+    pass("Encontra o jogador entre linhas", state.ball, at(66, lane + 3), outletId, actorId);
+    push("carry", "Gira de frente para o gol", at(68, lane + 2), actorId);
+    push("dribble", "O ataque chega em bloco", at(75, lane), actorId);
+    push("shape", "A defesa fecha o espaco", at(79, lane), actorId);
+    push("shot", "Prepara a finalizacao", at(84, lane), actorId);
+    const keeperY = clamp4(50 + (lane - 50) * 0.24, 42, 58);
+    const shotMid = at(91, (lane + keeperY) / 2);
+    push("shot", "A bola sai do pe", shotMid);
+    if (event.type === "GOAL") {
+      push("goal", "A bola cruza a linha", at(98.2, keeperY + (lane > 50 ? 6 : -6)));
+      push("goal", "Gol confirmado", at(99.1, keeperY + (lane > 50 ? 6 : -6)));
+      push("celebration", `${attackTeam.name} comemora`, at(99.1, keeperY + (lane > 50 ? 6 : -6)));
+    } else if (event.type === "WOODWORK") {
+      push("woodwork", "A bola explode na trave", at(96.3, lane > 50 ? 63 : 37), actorId);
+      push("shape", "A defesa afasta o rebote", at(83, 50), defender?.id);
+    } else if (event.type === "BLOCKED") {
+      push("blocked", "O defensor trava o chute", at(88, lane), defender?.id);
+      push("shape", "Segunda bola na entrada da area", at(77, lane + 10), outletId);
+    } else {
+      push("save", "O goleiro segura", at(94, keeperY), keeper?.id);
+      push("shape", "O bloco sai da area", at(89, keeperY), keeper?.id);
+    }
+  }
+  const score = scoreAt(allEvents, event, homeTeam.id, awayTeam.id);
+  return { id: event.id, minute: event.minute, type: event.type, title: event.title, description: event.description, teamId: event.teamId, event, ...score, steps };
+};
+var buildNativeMatch2DPlays = (match, homeTeam, awayTeam, players) => {
+  const events = [...match.result?.events || []].filter((event) => WATCHED.includes(event.type)).sort((a, b) => a.realTimeSecond - b.realTimeSecond || a.minute - b.minute).slice(0, 24);
+  return events.map((event) => makePlay(event, match, homeTeam, awayTeam, players, events));
+};
+var seededRandom = (seed) => {
+  let value = hash(seed) || 1;
+  return () => {
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+};
+var weightedPlayer = (team, players, random, roles) => {
+  const candidates = squadFor(team, players).filter((player) => roles.includes(player.role));
+  const pool = candidates.length ? candidates : squadFor(team, players);
+  const total = pool.reduce((sum, player) => sum + Math.max(1, player.totalRating), 0);
+  let roll = random() * total;
+  return pool.find((player) => (roll -= Math.max(1, player.totalRating)) <= 0) || pool[0];
+};
+var simulateNativeMatch2D = (baseMatch, homeTeam, awayTeam, players, seed = baseMatch.id) => {
+  const random = seededRandom(seed);
+  const homeProfile = STYLE_PROFILE[homeTeam.tactics?.playStyle || "Equilibrado"];
+  const awayProfile = STYLE_PROFILE[awayTeam.tactics?.playStyle || "Equilibrado"];
+  const homeMid = teamSectorStrength(homeTeam, players, "midfield") * homeProfile.possession;
+  const awayMid = teamSectorStrength(awayTeam, players, "midfield") * awayProfile.possession;
+  const expectedHomePossession = clamp4(Math.round(100 * homeMid / Math.max(1, homeMid + awayMid)), 35, 65);
+  const intensity = ((homeTeam.tactics?.intensity || 50) + (awayTeam.tactics?.intensity || 50)) / 2;
+  const possessionCount = clamp4(Math.round(64 + intensity / 5 + random() * 8), 62, 86);
+  const shotEvents = [];
+  const incidentEvents = [];
+  let homeShots = 0;
+  let awayShots = 0;
+  let homeOnTarget = 0;
+  let awayOnTarget = 0;
+  let homeScore = 0;
+  let awayScore = 0;
+  let homePossessionTime = 0;
+  let awayPossessionTime = 0;
+  const scorers = [];
+  const assists = [];
+  let previousWasHome = random() < 0.5;
+  let previousEndedInTurnover = false;
+  for (let possession = 0; possession < possessionCount; possession += 1) {
+    const targetBias = expectedHomePossession / 100;
+    const continuity = previousWasHome ? 0.12 : -0.12;
+    const isHome = random() < clamp4(targetBias + continuity, 0.22, 0.78);
+    const attackTeam = isHome ? homeTeam : awayTeam;
+    const defendTeam = isHome ? awayTeam : homeTeam;
+    const minute = clamp4(Math.round(1 + possession * (88 / possessionCount) + (random() - 0.5) * 1.4), 1, 89);
+    const duration = 18 + Math.round(random() * 58);
+    if (isHome) homePossessionTime += duration;
+    else awayPossessionTime += duration;
+    const attacker = weightedPlayer(attackTeam, players, random, ["ATA", "MEI"]);
+    const assistant = weightedPlayer(attackTeam, players, random, ["MEI", "ATA"]);
+    const defender = weightedPlayer(defendTeam, players, random, ["ZAG", "MEI"]);
+    const attackProfile = STYLE_PROFILE[attackTeam.tactics?.playStyle || "Equilibrado"];
+    const defendProfile = STYLE_PROFILE[defendTeam.tactics?.playStyle || "Equilibrado"];
+    const attack = teamSectorStrength(attackTeam, players, "attack");
+    const midfield = teamSectorStrength(attackTeam, players, "midfield");
+    const opposingMidfield = teamSectorStrength(defendTeam, players, "midfield");
+    const goalkeeper = teamSectorStrength(defendTeam, players, "goalkeeper");
+    const compactness = 1 + (50 - (defendTeam.tactics?.width ?? 50)) / 520;
+    const defensiveLine = defendTeam.tactics?.linePosition ?? 50;
+    const defense = teamSectorStrength(defendTeam, players, "defense") * defendProfile.defense * compactness;
+    const style = attackTeam.tactics?.playStyle || "Equilibrado";
+    const directStyle = ["Vertical", "Blitzkrieg", "Retranca Armada", "Catenaccio"].includes(style);
+    const controlStyle = ["Tiki-Taka", "Motor Lento"].includes(style);
+    const transition = previousEndedInTurnover && previousWasHome !== isHome;
+    let progress = transition ? 0.38 : 0.14 + random() * 0.16;
+    const actionCount = clamp4(Math.round((controlStyle ? 4.8 : directStyle ? 3.1 : 3.9) + random() * 2), 2, 7);
+    let terminal = "retained";
+    for (let action = 0; action < actionCount; action += 1) {
+      const passing = attackTeam.tactics?.passing ?? 50;
+      const chemistry = attackTeam.chemistry || 50;
+      const defendingIntensity = (defendTeam.tactics?.intensity ?? defendTeam.tactics?.aggressiveness ?? 50) * defendProfile.press;
+      const passSuccess = clamp4(0.73 + passing / 620 + chemistry / 900 + (midfield - opposingMidfield) / 4200 - defendingIntensity / 950 - attackProfile.passRisk, 0.54, 0.93);
+      const foulChance = clamp4(0.018 + (defendTeam.tactics?.aggressiveness || 50) / 1450 + (progress > 0.62 ? 0.018 : 0), 0.025, 0.095);
+      if (random() < foulChance) {
+        terminal = "foul";
+        break;
+      }
+      if (progress > 0.64 && directStyle && random() < 0.055) {
+        terminal = "offside";
+        break;
+      }
+      if (random() > passSuccess) {
+        terminal = "turnover";
+        break;
+      }
+      const backward = random() < (controlStyle ? 0.2 : 0.1);
+      const baseGain = directStyle ? 0.16 + random() * 0.17 : controlStyle ? 0.07 + random() * 0.1 : 0.1 + random() * 0.13;
+      const sectorEdge = clamp4(1 + (midfield - opposingMidfield) / 2400, 0.82, 1.18);
+      const gain = baseGain * attackProfile.progression * sectorEdge;
+      progress = clamp4(progress + (backward ? -(0.04 + random() * 0.08) : gain), 0.05, 0.98);
+      const shotChance = progress > 0.8 ? 0.5 : progress > 0.68 ? 0.24 : progress > 0.56 ? 0.07 : 0;
+      if (random() < shotChance) {
+        terminal = "shot";
+        break;
+      }
+    }
+    if (terminal === "retained" && progress > 0.7 && random() < 0.28) terminal = "shot";
+    if (terminal === "turnover" && (progress > 0.54 || random() < 0.09)) {
+      incidentEvents.push({
+        id: `${seed}_${minute}_${possession}_MISTAKE`,
+        minute,
+        realTimeSecond: Math.round(minute * 4),
+        type: "MISTAKE",
+        teamId: attackTeam.id,
+        title: "PASSE ERRADO",
+        description: `${attackTeam.name} perde a posse.`,
+        playerId: assistant?.id
+      });
+    } else if (terminal === "foul") {
+      const cardRoll = random();
+      const type = cardRoll < 0.12 ? "CARD_YELLOW" : "FOUL";
+      incidentEvents.push({
+        id: `${seed}_${minute}_${possession}_${type}`,
+        minute,
+        realTimeSecond: Math.round(minute * 4),
+        type,
+        teamId: attackTeam.id,
+        title: type === "CARD_YELLOW" ? "CARTAO AMARELO" : "FALTA",
+        description: `${nameOfForEngine(defender)} interrompe a jogada.`,
+        playerId: attacker?.id,
+        assistantId: defender?.id
+      });
+    } else if (terminal === "offside") {
+      incidentEvents.push({
+        id: `${seed}_${minute}_${possession}_OFFSIDE`,
+        minute,
+        realTimeSecond: Math.round(minute * 4),
+        type: "OFFSIDE",
+        teamId: attackTeam.id,
+        title: "IMPEDIMENTO",
+        description: `${nameOfForEngine(attacker)} parte antes da hora.`,
+        playerId: attacker?.id,
+        assistantId: assistant?.id
+      });
+    } else if (terminal === "shot") {
+      const transitionSpace = transition ? Math.max(0, defensiveLine - 50) / 260 : 0;
+      const chanceAttack = attack * attackProfile.chance * (transition ? attackProfile.transition : 1);
+      const resistance = defense * 0.72 + goalkeeper * 0.28;
+      const shotQuality = clamp4(0.3 + (progress - 0.55) * 0.82 + (chanceAttack - resistance) / 2200 + transitionSpace, 0.14, 0.9);
+      const goalChance = clamp4(0.035 + shotQuality * 0.17 + (chanceAttack - resistance) / 3600, 0.025, 0.25);
+      const woodworkChance = 0.045 + shotQuality * 0.035;
+      const blockChance = clamp4(0.3 - shotQuality * 0.13 + (defense - chanceAttack) / 5e3, 0.12, 0.36);
+      const roll = random();
+      let type;
+      if (roll < goalChance) type = "GOAL";
+      else if (roll < goalChance + woodworkChance) type = "WOODWORK";
+      else if (roll < goalChance + woodworkChance + blockChance) type = "BLOCKED";
+      else type = "CHANCE";
+      const onTarget = type === "GOAL" || type === "CHANCE" && random() < clamp4(0.3 + shotQuality * 0.38, 0.32, 0.67);
+      if (isHome) {
+        homeShots += 1;
+        if (onTarget) homeOnTarget += 1;
+        if (type === "GOAL") homeScore += 1;
+      } else {
+        awayShots += 1;
+        if (onTarget) awayOnTarget += 1;
+        if (type === "GOAL") awayScore += 1;
+      }
+      if (type === "GOAL" && attacker) {
+        scorers.push({ teamId: attackTeam.id, playerId: attacker.id });
+        if (assistant && assistant.id !== attacker.id) assists.push({ teamId: attackTeam.id, playerId: assistant.id });
+      }
+      shotEvents.push({
+        id: `${seed}_${minute}_${possession}_${type}`,
+        minute,
+        realTimeSecond: Math.round(minute * 4),
+        type,
+        teamId: attackTeam.id,
+        title: type === "GOAL" ? "GOL" : type === "WOODWORK" ? "NA TRAVE" : type === "BLOCKED" ? "BLOQUEIO" : "FINALIZACAO",
+        description: `${attackTeam.name} conclui uma cadeia de posse.`,
+        playerId: attacker?.id,
+        assistantId: assistant?.id
+      });
+    } else if (transition && progress > 0.48 && random() < 0.24) {
+      incidentEvents.push({
+        id: `${seed}_${minute}_${possession}_COUNTER`,
+        minute,
+        realTimeSecond: Math.round(minute * 4),
+        type: "COUNTER",
+        teamId: attackTeam.id,
+        title: "CONTRA-ATAQUE",
+        description: `${attackTeam.name} acelera apos a recuperacao.`,
+        playerId: attacker?.id
+      });
+    }
+    previousEndedInTurnover = terminal === "turnover" || terminal === "shot" || terminal === "offside" || terminal === "foul";
+    previousWasHome = isHome;
+  }
+  const selectedIncidents = incidentEvents.filter((_, index) => index % Math.max(1, Math.ceil(incidentEvents.length / 7)) === 0).slice(0, 7);
+  const events = [...shotEvents, ...selectedIncidents];
+  events.sort((a, b) => a.minute - b.minute || a.id.localeCompare(b.id));
+  const totalPossessionTime = Math.max(1, homePossessionTime + awayPossessionTime);
+  const homePossession = clamp4(Math.round(homePossessionTime * 100 / totalPossessionTime), 30, 70);
+  const result = {
+    homeTeamId: homeTeam.id,
+    awayTeamId: awayTeam.id,
+    homeScore,
+    awayScore,
+    scorers,
+    assists,
+    ratings: {},
+    events,
+    headline: `${homeTeam.name} ${homeScore} x ${awayScore} ${awayTeam.name}`,
+    stats: { possession: { home: homePossession, away: 100 - homePossession }, shots: { home: homeShots, away: awayShots }, shotsOnTarget: { home: homeOnTarget, away: awayOnTarget } }
+  };
+  const match = { ...baseMatch, played: true, revealed: true, homeScore, awayScore, result };
+  return { match, highlights: buildNativeMatch2DPlays(match, homeTeam, awayTeam, players) };
+};
+
 // src/engine/gameLogic.ts
 var getSeasonDayNumber = (dateStr, seasonStartRealStr, worldDay) => {
   if (worldDay !== void 0) return worldDay;
@@ -2164,6 +2837,49 @@ var getRoundFromDay = (dayNumber) => {
     return SEASON_ROUNDS + (dayNumber - eliteCupStartDay) + 1;
   }
   return 0;
+};
+var getNextDayMatchDate = (dateStr) => {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + 1);
+  date.setHours(8, 0, 0, 0);
+  return date.toISOString();
+};
+var getEliteMatchWinnerId = (match) => (match.homeScore || 0) >= (match.awayScore || 0) ? match.homeTeamId : match.awayTeamId;
+var createEliteCupMatch = (id, round, homeTeamId, awayTeamId, date) => ({
+  id,
+  round,
+  homeTeamId,
+  awayTeamId,
+  homeScore: 0,
+  awayScore: 0,
+  played: false,
+  status: "SCHEDULED",
+  date,
+  time: round === 4 ? "20:00" : "18:00"
+});
+var scheduleNextEliteCupRound = (state, eliteRound) => {
+  const { world } = state;
+  const nextDate = getNextDayMatchDate(world.currentDate);
+  if (eliteRound === 1 && world.eliteCup.bracket.quarters.length === 0) {
+    const winners = world.eliteCup.bracket.round1.map(getEliteMatchWinnerId);
+    for (let i = 0; i < winners.length; i += 2) {
+      if (winners[i] && winners[i + 1]) {
+        world.eliteCup.bracket.quarters.push(createEliteCupMatch(`ec_qf_${i}`, 2, winners[i], winners[i + 1], nextDate));
+      }
+    }
+  } else if (eliteRound === 2 && world.eliteCup.bracket.semis.length === 0) {
+    const winners = world.eliteCup.bracket.quarters.map(getEliteMatchWinnerId);
+    for (let i = 0; i < winners.length; i += 2) {
+      if (winners[i] && winners[i + 1]) {
+        world.eliteCup.bracket.semis.push(createEliteCupMatch(`ec_sf_${i}`, 3, winners[i], winners[i + 1], nextDate));
+      }
+    }
+  } else if (eliteRound === 3 && !world.eliteCup.bracket.final) {
+    const winners = world.eliteCup.bracket.semis.map(getEliteMatchWinnerId);
+    if (winners[0] && winners[1]) {
+      world.eliteCup.bracket.final = createEliteCupMatch("ec_final", 4, winners[0], winners[1], nextDate);
+    }
+  }
 };
 var isJoinWindowOpen = (state) => {
   if ((state.world.currentDay || 0) < 3) return true;
@@ -2845,6 +3561,12 @@ var simulateAndRecordMatch = (state, match, standings) => {
     console.error(`Teams not found: ${match.homeTeamId} vs ${match.awayTeamId}`);
     return { homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, homeScore: 0, awayScore: 0, scorers: [], assists: [], ratings: {}, events: [], stats: { possession: { home: 50, away: 50 }, shots: { home: 0, away: 0 }, shotsOnTarget: { home: 0, away: 0 } } };
   }
+  if (countLineupPlayers(homeTeam.lineup) < 11) {
+    homeTeam.lineup = buildAutoLineup(homeTeam, state.players, { preserveExisting: true });
+  }
+  if (countLineupPlayers(awayTeam.lineup) < 11) {
+    awayTeam.lineup = buildAutoLineup(awayTeam, state.players, { preserveExisting: true });
+  }
   const homeSelection = getMatchSquad(homeTeam, state.players);
   const awaySelection = getMatchSquad(awayTeam, state.players);
   const homeCanUseActiveManagement = canTeamUseActiveManagement(state, homeTeam.id);
@@ -2898,7 +3620,14 @@ var simulateAndRecordMatch = (state, match, standings) => {
     hypePlayerId: awayHypePlayerId,
     stabilizationPlayerId: awayStabilizationPlayerId
   };
-  const result = simulateMatch(homeStats, awayStats, homeSelection.all, awaySelection.all);
+  const legacyRatingsResult = simulateMatch(homeStats, awayStats, homeSelection.all, awaySelection.all);
+  const matchSeed = `${state.worldId || state.world.id || "world"}:${state.world.currentSeason || 2050}:${match.id}`;
+  const possessionResult = simulateNativeMatch2D(match, homeTeam, awayTeam, state.players, matchSeed).match.result;
+  const result = possessionResult ? {
+    ...possessionResult,
+    ratings: legacyRatingsResult.ratings,
+    headline: possessionResult.headline || legacyRatingsResult.headline
+  } : legacyRatingsResult;
   match.result = result;
   match.homeScore = result.homeScore;
   match.awayScore = result.awayScore;
@@ -2920,6 +3649,13 @@ var simulateAndRecordMatch = (state, match, standings) => {
   updatePlayerSatisfaction(state, match.awayTeamId, result);
   if (standings) {
     updateStandings(standings, match.homeTeamId, match.awayTeamId, result.homeScore, result.awayScore);
+  }
+  const homeHuman = homeTeam.managerId ? state.managers[homeTeam.managerId]?.isNPC === false : false;
+  const awayHuman = awayTeam.managerId ? state.managers[awayTeam.managerId]?.isNPC === false : false;
+  const margin = Math.abs(result.homeScore - result.awayScore);
+  const totalGoals = result.homeScore + result.awayScore;
+  if (homeHuman || awayHuman || margin >= 3 || totalGoals >= 6) {
+    newsHeadlines.matchHighlight(state, homeTeam, awayTeam, result.homeScore, result.awayScore, homeHuman || awayHuman);
   }
   return result;
 };
@@ -3193,6 +3929,11 @@ var processTransferDay = (state) => {
     state.transferProposals = proposals;
     state.notifications = [...notifications, ...state.notifications];
   }
+  if (state.tradeOffers && state.tradeOffers.length > 0) {
+    const { notifications, offers } = processTradeOffers(state, state.tradeOffers, state.teams, state.players);
+    state.tradeOffers = offers;
+    state.notifications = [...notifications, ...state.notifications];
+  }
 };
 var processMatchDay = (state, round) => {
   const world = state.world;
@@ -3392,6 +4133,7 @@ var processMatchDay = (state, round) => {
         }
       });
     }
+    scheduleNextEliteCupRound(state, eliteRound);
     world.eliteCup.round = eliteRound;
     if (eliteRound === 4 && world.eliteCup.bracket.final) {
       const final = world.eliteCup.bracket.final;
@@ -3404,6 +4146,7 @@ var processMatchDay = (state, round) => {
       world.eliteCup.winnerId = winnerId;
       const winnerTeam = state.teams[winnerId];
       awardTeamTitle(winnerTeam, world.currentSeason || 2050, "Campe\xE3o da Copa Elite", "cup");
+      newsHeadlines.eliteCupWinner(state, winnerTeam);
       winnerTeam.squad.forEach((pid) => {
         const p = state.players[pid];
         if (p) {
@@ -3671,8 +4414,8 @@ var draftTieBreaker = (proposal) => {
 };
 var deterministicDraftRoll = (proposal) => {
   const seed = `${proposal.managerId}:${proposal.teamId}:${proposal.playerId}:interest`;
-  const hash = seed.split("").reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
-  return hash % 100;
+  const hash2 = seed.split("").reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
+  return hash2 % 100;
 };
 var getDraftInterestReport = (state, teamId, playerId) => {
   const player = playerId ? state.players[playerId] : null;
@@ -3837,22 +4580,60 @@ var resolveDraftConflict = (state) => {
 };
 var autoCompleteDraft = (state) => {
   const teams = Object.values(state.teams).filter((t) => t.id.startsWith("t_"));
-  const allFreeAgents = Object.values(state.players).filter((p) => !p.contract.teamId && p.district !== "EXILADO").sort((a, b) => b.totalRating - a.totalRating);
-  if (allFreeAgents.length === 0) return;
-  const legendaries = allFreeAgents.filter((p) => p.totalRating >= 850);
-  legendaries.forEach((p) => {
-    const targetTeam = teams.filter((t) => t.squad.length < SQUAD_SIZE_MAX).sort((a, b) => (a.powerCap || 0) - (b.powerCap || 0))[0];
-    if (targetTeam) {
-      p.contract.teamId = targetTeam.id;
-      targetTeam.squad.push(p.id);
+  const freeAgents = Object.values(state.players).filter((p) => !p.contract.teamId && p.district !== "EXILADO").sort((a, b) => b.totalRating - a.totalRating);
+  if (freeAgents.length === 0) return;
+  const assign = (team, player) => {
+    player.contract.teamId = team.id;
+    team.squad = [.../* @__PURE__ */ new Set([...team.squad || [], player.id])];
+  };
+  const roleTargets = {
+    GOL: 2,
+    ZAG: 5,
+    MEI: 4,
+    ATA: 4
+  };
+  const getRoleCounts = (team) => (team.squad || []).reduce((counts, playerId) => {
+    const role = state.players[playerId]?.role;
+    if (role && role in roleTargets) {
+      counts[role] = (counts[role] || 0) + 1;
+    }
+    return counts;
+  }, { GOL: 0, ZAG: 0, MEI: 0, ATA: 0 });
+  const getNextNeededRole = (team) => {
+    const counts = getRoleCounts(team);
+    return Object.keys(roleTargets).map((role) => ({ role, deficit: roleTargets[role] - (counts[role] || 0) })).filter((item) => item.deficit > 0).sort((a, b) => b.deficit - a.deficit)[0]?.role || null;
+  };
+  const takeBestFit = (team, role) => {
+    const currentPower = calculateTeamPower(team, state.players);
+    const cap = getTeamPowerCap(team, state.players);
+    const remainingCap = cap - currentPower;
+    if (remainingCap <= 0) return null;
+    const sameDistrictIndex = freeAgents.findIndex(
+      (player2) => player2.totalRating <= remainingCap && (!role || player2.role === role) && (player2.originDistrict === team.district || player2.district === team.district)
+    );
+    const bestFitIndex = sameDistrictIndex >= 0 ? sameDistrictIndex : freeAgents.findIndex(
+      (player2) => player2.totalRating <= remainingCap && (!role || player2.role === role)
+    );
+    if (bestFitIndex < 0) return null;
+    const [player] = freeAgents.splice(bestFitIndex, 1);
+    return player;
+  };
+  teams.sort((a, b) => getTeamPowerCap(b, state.players) - getTeamPowerCap(a, state.players)).forEach((team) => {
+    while ((team.squad || []).length < SQUAD_SIZE_MAX && freeAgents.length > 0) {
+      const neededRole = getNextNeededRole(team);
+      const player = takeBestFit(team, neededRole) || takeBestFit(team, null);
+      if (!player) break;
+      assign(team, player);
     }
   });
-  const remainingFreeAgents = Object.values(state.players).filter((p) => !p.contract.teamId && p.district !== "EXILADO").sort((a, b) => b.totalRating - a.totalRating);
   teams.forEach((team) => {
-    while (team.squad.length < SQUAD_SIZE_MAX && remainingFreeAgents.length > 0) {
-      const p = remainingFreeAgents.shift();
-      p.contract.teamId = team.id;
-      team.squad.push(p.id);
+    while ((team.squad || []).length < SQUAD_SIZE_MAX && freeAgents.length > 0) {
+      const currentPower = calculateTeamPower(team, state.players);
+      const cap = getTeamPowerCap(team, state.players);
+      const weakestLegalIndex = [...freeAgents].map((player2, index) => ({ player: player2, index })).reverse().find((item) => currentPower + item.player.totalRating <= cap)?.index ?? -1;
+      if (weakestLegalIndex < 0) break;
+      const [player] = freeAgents.splice(weakestLegalIndex, 1);
+      assign(team, player);
     }
   });
   if (state.lastHeadline) {
@@ -3911,6 +4692,9 @@ var advanceGameDay = (prevState, skipDateIncrement = false) => {
     const round2 = getRoundFromDay(dayNumber);
     world.currentRound = round2;
     processMatchDay(state, round2);
+    if (round2 === SEASON_ROUNDS) {
+      prepareDistrictCupManagerInvites(state);
+    }
     if (round2 === TOTAL_ROUNDS) {
       runDistrictCupShowcase(state);
       world.phase = "OFFSEASON";
@@ -4036,7 +4820,7 @@ var startNewSeason = (state) => {
       clubOffers: [],
       leagues,
       eliteCup: { ...state.world.eliteCup, round: 0, teams: [], winnerId: null, bracket: { round1: [], quarters: [], semis: [], final: null } },
-      districtCup: { ...state.world.districtCup, round: 0, teams: [], matches: [], standings: [], winnerId: null, final: null }
+      districtCup: { ...state.world.districtCup, round: 0, teams: [], matches: [], standings: [], winnerId: null, final: null, managerInvites: [], managerAssignments: {} }
     },
     lastHeadline: {
       title: `Temporada ${nextSeason} Iniciada`,

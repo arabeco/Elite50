@@ -16,10 +16,8 @@ import { calculateTeamPower, isJoinWindowOpen } from '../../engine/gameLogic';
 import { GENESIS_DRAFT_LAST_DAY, MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
 import { resolveHomePhase } from '../../utils/homeFlow';
 import { getNextGameMidnight, getNextRealMidnight } from '../../utils/worldSchedule';
-import { Team, Player, Match, ClubOffer, LeagueState } from '../../types';
-import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle, Mail, Check, XCircle, Copy } = LucideIcons;
-
+import { Team, Player, Match, ClubOffer, LeagueState, NewsItem } from '../../types';
+import { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle, Mail, Check, XCircle, Copy } from 'lucide-react';
 interface HomeTabProps {
   onOpenDraft?: () => void;
   onOpenTeam?: () => void;
@@ -30,7 +28,7 @@ interface HomeTabProps {
 
 export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague }: HomeTabProps) => {
   const { state, setState, saveGame, isSyncing } = useGame();
-  const { respondToClubOffer, addToast } = useGameDispatch();
+  const { respondToClubOffer, respondToDistrictCupInvite, addToast } = useGameDispatch();
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches, pastMatches, totalPoints, powerCap, pointsLeft } = dashData;
   const daysPassed = React.useMemo(() => {
@@ -62,7 +60,16 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   const occupiedScorePercent = powerCap > 0 ? Math.min(100, Math.max(0, (occupiedScore / powerCap) * 100)) : 0;
   const isUnemployed = !userTeam;
   const [actingOfferId, setActingOfferId] = React.useState<string | null>(null);
+  const [actingDistrictInviteId, setActingDistrictInviteId] = React.useState<string | null>(null);
   const [dismissedNoticeKey, setDismissedNoticeKey] = React.useState<string | null>(null);
+  const [selectedHeadline, setSelectedHeadline] = React.useState<{
+    tone: 'cyan' | 'emerald' | 'fuchsia' | 'amber' | 'rose';
+    icon: any;
+    label: string;
+    title: string;
+    detail: string;
+    meta?: string;
+  } | null>(null);
 
   const handleRevealMatch = async (matchId: string) => {
     const nextState = (() => {
@@ -335,6 +342,28 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     || userClubOffers.find(offer => offer.status === 'PENDING')
     || userClubOffers.find(offer => offer.status === 'WAITING_NEXT_SEASON')
     || null;
+  const pendingDistrictInvite = React.useMemo(
+    () => (state.world.districtCup.managerInvites || [])
+      .find(invite => invite.managerId === state.userManagerId && invite.status === 'PENDING') || null,
+    [state.userManagerId, state.world.districtCup.managerInvites]
+  );
+  const pendingDistrictInviteRoster = React.useMemo(() => {
+    if (!pendingDistrictInvite) return [];
+    return Object.values(state.players)
+      .filter(player => (player.originDistrict || player.district) === pendingDistrictInvite.district)
+      .sort((a, b) => b.totalRating - a.totalRating)
+      .slice(0, 5);
+  }, [pendingDistrictInvite, state.players]);
+  const pendingDistrictInviteManager = pendingDistrictInvite ? state.managers[pendingDistrictInvite.managerId] : null;
+  const handleDistrictInviteDecision = async (accept: boolean) => {
+    if (!pendingDistrictInvite) return;
+    setActingDistrictInviteId(pendingDistrictInvite.id);
+    try {
+      await respondToDistrictCupInvite(pendingDistrictInvite.id, accept);
+    } finally {
+      setActingDistrictInviteId(null);
+    }
+  };
   const clubOpportunityCards = React.useMemo(() => {
     const leagues = Object.values(state.world.leagues || {}) as LeagueState[];
     const leagueByTeam = new Map<string, { name: string; position: number }>();
@@ -405,6 +434,81 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       : nextMatchData?.phase === 'live'
         ? 'live'
         : 'report';
+
+  const highlightNews = React.useMemo(() => {
+    const mapNewsType = (type: NewsItem['type']): { tone: 'cyan' | 'emerald' | 'fuchsia' | 'amber' | 'rose'; icon: any } => {
+      switch (type) {
+        case 'TRANSFER': return { tone: 'cyan', icon: ShoppingCart };
+        case 'CHAMPION': return { tone: 'emerald', icon: Crown };
+        case 'CUP': return { tone: 'amber', icon: Trophy };
+        case 'MATCH': return { tone: 'fuchsia', icon: Flame };
+        case 'EXILE': return { tone: 'rose', icon: AlertTriangle };
+        case 'MIGRATION': return { tone: 'fuchsia', icon: TrendingUp };
+        default: return { tone: 'cyan', icon: Newspaper };
+      }
+    };
+
+    const cards: Array<{
+      id: string;
+      tone: 'cyan' | 'emerald' | 'fuchsia' | 'amber' | 'rose';
+      icon: any;
+      label: string;
+      title: string;
+      detail: string;
+      meta?: string;
+      onClick?: () => void;
+    }> = [];
+
+    if (lastMatch?.revealed === false) {
+      cards.push({
+        id: `pending-report-${lastMatch.id}`,
+        tone: 'amber',
+        icon: Eye,
+        label: 'Relatorio',
+        title: 'Pos-jogo',
+        detail: `${lastMatch.home} ${lastMatch.homeScore}-${lastMatch.awayScore} ${lastMatch.away}`,
+        meta: 'Revelar agora',
+        onClick: () => setSelectedMatchReport(lastMatch)
+      });
+    }
+
+    const seen = new Set(cards.map(card => card.id));
+    [...(state.world.news || [])]
+      .sort((a, b) => {
+        if ((b.importance || 1) !== (a.importance || 1)) return (b.importance || 1) - (a.importance || 1);
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      })
+      .slice(0, 8)
+      .forEach(item => {
+        if (seen.has(item.id)) return;
+        const mapped = mapNewsType(item.type);
+        cards.push({
+          id: item.id,
+          tone: mapped.tone,
+          icon: mapped.icon,
+          label: item.type,
+          title: item.title,
+          detail: item.content,
+          meta: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase(),
+          onClick: () => setSelectedHeadline({
+            tone: mapped.tone,
+            icon: mapped.icon,
+            label: item.type,
+            title: item.title,
+            detail: item.content,
+            meta: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()
+          })
+        });
+        seen.add(item.id);
+      });
+
+    return cards.slice(0, 8);
+  }, [
+    lastMatch,
+    onOpenLeague,
+    state.world.news
+  ]);
+  const pendingReportMatch: any = lastMatch?.revealed === false ? lastMatch : nextMatchData?.phase === 'after' ? nextMatchData.match : null;
 
   const handleStartSeason = async () => {
     if (!state.isCreator) {
@@ -552,6 +656,16 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   })();
 
   const guidedTodayCopy = (() => {
+    if (pendingDistrictInvite) {
+      return {
+        eyebrow: 'CONVOCACAO',
+        title: `Selecao ${pendingDistrictInvite.district} quer voce`,
+        message: `${pendingDistrictInviteManager?.name || 'Seu manager'} foi indicado para comandar a selecao na Copa dos Distritos. Aceite para assumir a tatica; recuse para chamar o proximo nome do ranking.`,
+        status: `Merito ${Math.round(pendingDistrictInvite.score)}`,
+        consequence: 'Depois disso: a Copa dos Distritos usa o tecnico definido ou cai para IA se ninguem responder.',
+      };
+    }
+
     if (isUnemployed) {
       const spotlightTeam = spotlightOffer ? state.teams[spotlightOffer.teamId] : null;
       return {
@@ -605,10 +719,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       if (!isLineupReady) {
         return {
           eyebrow: 'ELENCO FORMADO',
-          title: 'Monte sua escalacao',
-          message: `Seu elenco tem ${squadSize} jogadores. Falta escolher os 11 titulares antes da temporada.`,
+          title: 'Monte sua escalacao agora',
+          message: `Seu elenco tem ${squadSize} jogadores, mas so ${lineupCount}/11 titulares. Sem isso, o time perde controle fino no primeiro jogo.`,
           status: `${lineupCount}/11 titulares`,
-          consequence: 'Depois disso: defina o plano de jogo.',
+          consequence: 'Depois disso: defina tatica e treino com base nos titulares.',
         };
       }
 
@@ -646,8 +760,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     if (todayPhase === 'postgame') {
       return {
         eyebrow: 'POS-JOGO',
-        title: 'Veja o impacto da rodada',
-        message: 'Existe um resultado recente para revelar. Veja o relatorio antes de seguir para o proximo dia.',
+        title: pendingReportMatch?.revealed === false ? 'Relatorio pendente' : 'Veja o impacto da rodada',
+        message: pendingReportMatch?.revealed === false
+          ? 'O jogo ja acabou. Revele o relatorio para ver placar, destaques, leitura tatica e impacto no clube.'
+          : 'Existe um resultado recente para revisar. Veja o relatorio antes de seguir para o proximo dia.',
         status: 'Relatorio pendente',
         consequence: 'Depois disso: tabela, forma e proximo compromisso ficam claros.',
       };
@@ -677,6 +793,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   })();
 
   const guidedTodayActions = (() => {
+    if (pendingDistrictInvite) {
+      return [
+        { label: 'Aceitar selecao', icon: CheckCircle2, onClick: () => handleDistrictInviteDecision(true), primary: true, disabled: actingDistrictInviteId === pendingDistrictInvite.id },
+        { label: 'Recusar', icon: XCircle, onClick: () => handleDistrictInviteDecision(false), disabled: actingDistrictInviteId === pendingDistrictInvite.id },
+        { label: 'Ver Copa', icon: Globe, onClick: onOpenLeague, disabled: !onOpenLeague },
+      ];
+    }
+
     if (isUnemployed) {
       const canSignSpotlight = !!spotlightOffer
         && spotlightOffer.status === 'ACCEPTED'
@@ -744,6 +868,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       ];
     }
 
+    if (todayPhase === 'postgame' && pendingReportMatch) {
+      return [
+        { label: pendingReportMatch.revealed === false ? 'Revelar relatorio' : 'Ver relatorio', icon: Trophy, onClick: () => setSelectedMatchReport(pendingReportMatch), primary: true, disabled: false },
+        { label: 'Liga', icon: Calendar, onClick: onOpenLeague, disabled: !onOpenLeague },
+        { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
+      ];
+    }
+
     return todayActions;
   })();
 
@@ -781,8 +913,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       return {
         key: 'postgame-report',
         tone: 'amber',
-        title: 'Relatorio disponivel',
-        message: 'Tem jogo recente para abrir e ver impacto no clube.',
+        title: pendingReportMatch?.revealed === false ? 'Relatorio pendente' : 'Relatorio disponivel',
+        message: pendingReportMatch?.revealed === false
+          ? 'Tem jogo encerrado esperando revelar placar e leitura tatica.'
+          : 'Tem jogo recente para abrir e ver impacto no clube.',
       };
     }
 
@@ -808,8 +942,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       return {
         key: 'lineup-open',
         tone: 'amber',
-        title: 'Escalacao incompleta',
-        message: `${lineupCount}/11 titulares definidos.`,
+        title: 'Montar escalacao',
+        message: `${lineupCount}/11 titulares. Escolha os 11 antes do primeiro jogo.`,
       };
     }
 
@@ -828,6 +962,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     squadSize,
     isLineupReady,
     lineupCount,
+    pendingReportMatch,
   ]);
 
   React.useEffect(() => {
@@ -1279,6 +1414,104 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         </div>
       )}
 
+      {pendingDistrictInvite && (
+        <div className="relative overflow-hidden rounded-[2rem] border border-amber-300/30 bg-amber-500/10 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.32)] sm:p-5">
+          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-amber-300/10 blur-[60px]" />
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-amber-200">
+                <Crown size={14} />
+                Convite da Federacao {pendingDistrictInvite.district}
+              </div>
+              <h3 className="mt-2 text-xl font-black uppercase italic tracking-tight text-white">
+                Treinar Selecao {pendingDistrictInvite.district}
+              </h3>
+              <p className="mt-1 max-w-2xl text-[10px] font-bold uppercase tracking-widest text-white/45">
+                Indicado por reputacao, titulos e ligacao com o distrito. Se recusar, o proximo nome do ranking recebe a chamada.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {pendingDistrictInviteRoster.map(player => (
+                  <span
+                    key={player.id}
+                    className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/65"
+                  >
+                    {player.nickname} {player.totalRating}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+              <button
+                type="button"
+                onClick={() => handleDistrictInviteDecision(true)}
+                disabled={actingDistrictInviteId === pendingDistrictInvite.id}
+                className="flex items-center justify-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-400 px-4 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckCircle2 size={14} />
+                Aceitar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDistrictInviteDecision(false)}
+                disabled={actingDistrictInviteId === pendingDistrictInvite.id}
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <XCircle size={14} />
+                Recusar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {highlightNews.length > 0 && (
+        <section className="rounded-[1.75rem] border border-white/10 bg-black/25 p-3 shadow-[0_14px_34px_rgba(0,0,0,0.24)]">
+          <div className="mb-3 flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2">
+              <Newspaper size={15} className="text-cyan-200" />
+              <p className="text-[9px] font-black uppercase tracking-[0.26em] text-white">Destaques</p>
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/35">
+              Noticias
+            </span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+            {highlightNews.map(card => {
+              const Icon = card.icon;
+              const toneClasses = {
+                cyan: 'border-cyan-400/25 bg-cyan-500/10 text-cyan-200',
+                emerald: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
+                fuchsia: 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200',
+                amber: 'border-amber-400/25 bg-amber-500/10 text-amber-200',
+                rose: 'border-rose-400/25 bg-rose-500/10 text-rose-200'
+              }[card.tone];
+
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={card.onClick}
+                  className={`min-w-[176px] max-w-[210px] rounded-2xl border p-3 text-left transition hover:bg-white/[0.06] ${toneClasses}`}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Icon size={16} />
+                      <span className="truncate text-[8px] font-black uppercase tracking-[0.2em]">{card.label}</span>
+                    </div>
+                    <ChevronRight size={13} className="shrink-0 opacity-55" />
+                  </div>
+                  <h3 className="truncate text-sm font-black uppercase italic tracking-tight text-white">{card.title}</h3>
+                  <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-white/55">{card.detail}</p>
+                  {card.meta && (
+                    <p className="mt-2 truncate text-[8px] font-black uppercase tracking-widest text-white/35">{card.meta}</p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* CENTRAL DO DIA: game-state driven actions */}
       <div
         data-onboarding="home-gps"
@@ -1446,6 +1679,26 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {guidedTodayActions.map((action, index) => (
+                <button
+                  key={`${action.label}-${index}`}
+                  type="button"
+                  data-onboarding={action.primary ? 'today-primary-action' : undefined}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl px-3 py-3 text-[9px] font-black uppercase tracking-[0.18em] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${
+                    action.primary
+                      ? 'bg-cyan-400 text-black shadow-[0_0_22px_rgba(34,211,238,0.22)] hover:bg-cyan-300'
+                      : 'border border-white/10 bg-white/[0.04] text-white/65 hover:bg-white/[0.07] hover:text-white'
+                  }`}
+                >
+                  <action.icon size={14} />
+                  {action.label}
+                </button>
+              ))}
             </div>
 
           </div>
@@ -1743,8 +1996,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             </button>
             <PostGameReport
               match={selectedMatchReport}
-              homeTeam={state.teams[selectedMatchReport.homeTeamId || selectedMatchReport.homeId]}
-              awayTeam={state.teams[selectedMatchReport.awayTeamId || selectedMatchReport.awayId]}
+              homeTeam={state.teams[selectedMatchReport.homeTeamId]}
+              awayTeam={state.teams[selectedMatchReport.awayTeamId]}
               players={state.players}
               onClose={() => setSelectedMatchReport(null)}
               onReveal={handleRevealMatch}
@@ -1772,8 +2025,8 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
             <LiveReport
               match={selectedMatchReport}
-              homeTeam={state.teams[selectedMatchReport.homeTeamId || selectedMatchReport.homeId]}
-              awayTeam={state.teams[selectedMatchReport.awayTeamId || selectedMatchReport.awayId]}
+              homeTeam={state.teams[selectedMatchReport.homeTeamId]}
+              awayTeam={state.teams[selectedMatchReport.awayTeamId]}
               players={state.players}
               currentSecond={reportSecond}
             />
@@ -1809,6 +2062,47 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
           </div>
         </div>
       )}
+
+      {selectedHeadline && (() => {
+        const Icon = selectedHeadline.icon;
+        const modalTone = {
+          cyan: 'border-cyan-400/30 from-cyan-500/20 via-black to-black text-cyan-200',
+          emerald: 'border-emerald-400/30 from-emerald-500/20 via-black to-black text-emerald-200',
+          fuchsia: 'border-fuchsia-400/30 from-fuchsia-500/20 via-black to-black text-fuchsia-200',
+          amber: 'border-amber-400/30 from-amber-500/20 via-black to-black text-amber-200',
+          rose: 'border-rose-400/30 from-rose-500/20 via-black to-black text-rose-200'
+        }[selectedHeadline.tone];
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className={`relative w-full max-w-lg overflow-hidden rounded-[2rem] border bg-gradient-to-br p-5 shadow-2xl ${modalTone}`}>
+              <button
+                type="button"
+                onClick={() => setSelectedHeadline(null)}
+                className="absolute right-4 top-4 rounded-full border border-white/10 bg-black/35 p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                aria-label="Fechar manchete"
+              >
+                <X size={16} />
+              </button>
+              <div className="mb-5 flex items-center gap-3 pr-10">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
+                  <Icon size={24} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[8px] font-black uppercase tracking-[0.28em] opacity-70">{selectedHeadline.label}</p>
+                  <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/35">{selectedHeadline.meta}</p>
+                </div>
+              </div>
+              <h2 className="text-2xl font-black uppercase italic leading-tight tracking-tight text-white">
+                {selectedHeadline.title}
+              </h2>
+              <p className="mt-4 text-sm font-bold leading-relaxed text-white/70">
+                {selectedHeadline.detail}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

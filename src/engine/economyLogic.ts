@@ -1,4 +1,4 @@
-﻿import { Player, Team, MatchResult, GameState, TransferProposal } from '../types';
+﻿import { Player, Team, MatchResult, GameState, TransferProposal, TradeOffer } from '../types';
 import { newsHeadlines } from './newsService';
 import { applyBootProgressionBonus } from '../utils/store';
 
@@ -160,12 +160,15 @@ export const processNightMarket = (
         prop.status = 'DECLINED';
         const player = players[prop.playerId];
         const toTeam = teams[prop.toTeamId];
-        if (message && player && toTeam) {
+        if (player && toTeam) {
             notifications.push({
                 id: `refuse_${Date.now()}_${prop.id}`,
                 title: 'Proposta Recusada',
-                message,
-                type: 'transfer'
+                message: message || `${player.nickname} nao chegou a um acordo com o ${toTeam.name}.`,
+                type: 'transfer',
+                date: state.world.currentDate,
+                read: false,
+                targetTeamId: toTeam.id,
             });
         }
     };
@@ -191,7 +194,10 @@ export const processNightMarket = (
                 if (!toTeam) return null;
 
                 const currentPower = toTeam.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
-                if (currentPower + player.totalRating > (toTeam.powerCap || 9000)) return null;
+                if (currentPower + player.totalRating > (toTeam.powerCap || 9000)) {
+                    declineProposal(prop, `${player.nickname} nao pode chegar agora: o ${toTeam.name} ultrapassaria o Score Maximo.`);
+                    return null;
+                }
 
                 const teammates = toTeam.squad.map(id => players[id]).filter(p => !!p);
                 const mockPosition = toTeam.powerCap && toTeam.powerCap > 10000 ? 2 : 10;
@@ -241,9 +247,12 @@ export const processNightMarket = (
 
         notifications.push({
             id: `accept_${Date.now()}_${player.id}`,
-            title: 'Transfer?ncia Conclu?da',
+            title: 'Contratacao concluida',
             message: `${player.nickname} assinou com o ${toTeam.name}!`,
-            type: 'transfer'
+            type: 'transfer',
+            date: state.world.currentDate,
+            read: false,
+            targetTeamId: toTeam.id,
         });
 
         playerProposals
@@ -252,5 +261,114 @@ export const processNightMarket = (
     });
 
     return { notifications, proposals: remainingProposals };
+};
+
+const getDateKey = (date?: string) => {
+    const parsed = date ? new Date(date) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
+};
+
+export const processTradeOffers = (
+    state: GameState,
+    offers: TradeOffer[],
+    teams: Record<string, Team>,
+    players: Record<string, Player>
+) => {
+    const notifications: any[] = [];
+    const currentDateKey = getDateKey(state.world.currentDate);
+    const nextOffers = [...offers];
+
+    nextOffers.forEach(offer => {
+        if (offer.status !== 'PENDING') return;
+        if (getDateKey(offer.date) === currentDateKey) return;
+
+        const fromTeam = teams[offer.fromTeamId];
+        const toTeam = teams[offer.toTeamId];
+        const offeredPlayer = players[offer.offeredPlayerId];
+        const requestedPlayer = players[offer.requestedPlayerId];
+
+        if (!fromTeam || !toTeam || !offeredPlayer || !requestedPlayer) {
+            offer.status = 'DECLINED';
+            return;
+        }
+
+        const targetManager = toTeam.managerId ? state.managers[toTeam.managerId] : null;
+        if (targetManager?.isNPC === false) return;
+
+        if (!fromTeam.squad.includes(offeredPlayer.id) || !toTeam.squad.includes(requestedPlayer.id)) {
+            offer.status = 'DECLINED';
+            notifications.push({
+                id: `trade_invalid_${Date.now()}_${offer.id}`,
+                title: 'Troca cancelada',
+                message: `A proposta por ${requestedPlayer.nickname} perdeu validade porque o elenco mudou.`,
+                type: 'transfer',
+                date: state.world.currentDate,
+                read: false,
+                targetTeamId: fromTeam.id,
+            });
+            return;
+        }
+
+        const fromPower = fromTeam.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
+        const nextFromPower = fromPower - offeredPlayer.totalRating + requestedPlayer.totalRating;
+        if (nextFromPower > (fromTeam.powerCap || 9000)) {
+            offer.status = 'DECLINED';
+            notifications.push({
+                id: `trade_cap_${Date.now()}_${offer.id}`,
+                title: 'Troca recusada',
+                message: `${requestedPlayer.nickname} faria o ${fromTeam.name} estourar o Score Maximo.`,
+                type: 'transfer',
+                date: state.world.currentDate,
+                read: false,
+                targetTeamId: fromTeam.id,
+            });
+            return;
+        }
+
+        const chance = calculateTradeAcceptanceChance(offeredPlayer, requestedPlayer);
+        if (Math.random() >= chance) {
+            offer.status = 'DECLINED';
+            notifications.push({
+                id: `trade_declined_${Date.now()}_${offer.id}`,
+                title: 'Troca recusada',
+                message: `${toTeam.name} recusou trocar ${requestedPlayer.nickname} por ${offeredPlayer.nickname}.`,
+                type: 'transfer',
+                date: state.world.currentDate,
+                read: false,
+                targetTeamId: fromTeam.id,
+            });
+            return;
+        }
+
+        fromTeam.squad = fromTeam.squad.filter(id => id !== offeredPlayer.id);
+        toTeam.squad = toTeam.squad.filter(id => id !== requestedPlayer.id);
+        fromTeam.squad.push(requestedPlayer.id);
+        toTeam.squad.push(offeredPlayer.id);
+
+        Object.keys(fromTeam.lineup || {}).forEach(slot => {
+            if (fromTeam.lineup[slot] === offeredPlayer.id) delete fromTeam.lineup[slot];
+        });
+        Object.keys(toTeam.lineup || {}).forEach(slot => {
+            if (toTeam.lineup[slot] === requestedPlayer.id) delete toTeam.lineup[slot];
+        });
+
+        requestedPlayer.contract.teamId = fromTeam.id;
+        offeredPlayer.contract.teamId = toTeam.id;
+        offer.status = 'ACCEPTED';
+
+        notifications.push({
+            id: `trade_accept_${Date.now()}_${offer.id}`,
+            title: 'Troca confirmada',
+            message: `${fromTeam.name} recebeu ${requestedPlayer.nickname}; ${toTeam.name} ficou com ${offeredPlayer.nickname}.`,
+            type: 'transfer',
+            date: state.world.currentDate,
+            read: false,
+            targetTeamId: fromTeam.id,
+        });
+        newsHeadlines.transfer(state, requestedPlayer, fromTeam, requestedPlayer.totalRating);
+    });
+
+    return { notifications, offers: nextOffers };
 };
 

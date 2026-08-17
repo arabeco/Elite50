@@ -9,7 +9,9 @@ import { TeamModal } from './TeamModal';
 import { useGame } from '../store/GameContext';
 import { calculateTeamPower, getDraftInterestReport } from '../engine/gameLogic';
 import { useTransfers } from '../hooks/useTransfers';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
+// recharts sozinho respondia por uma fatia grande do bundle inicial, para desenhar
+// um unico radar. Carregado sob demanda quando a ficha do atleta abre.
+const PlayerRadarChart = React.lazy(() => import('./PlayerRadarChart'));
 import { TRAIT_DESCRIPTIONS } from '../constants/traitDescriptions';
 import { GENESIS_DRAFT_LAST_DAY } from '../constants/gameConstants';
 import { equipBootOnPlayer, getBootImagePath, getStoreItem, getStoreState, releasePlayerBootToInventory } from '../utils/store';
@@ -413,7 +415,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   };
 
   const [holdProgress, setHoldProgress] = React.useState(0);
-  const holdIntervalRef = React.useRef<NodeJS.Timeout>();
+  const holdIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const startHold = () => {
     if (isProcessing || !userTeam || !isMyPlayer) return;
@@ -786,14 +788,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               </div>
 
               <div className="rounded-xl border border-white/10 bg-black/50 p-3">
-                <ResponsiveContainer width="100%" height={190}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.12)" />
-                    <PolarAngleAxis dataKey="stat" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 800 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
-                    <Radar dataKey="value" stroke="rgb(34,211,238)" fill="rgba(34,211,238,0.22)" strokeWidth={2} />
-                  </RadarChart>
-                </ResponsiveContainer>
+                <React.Suspense
+                  fallback={<div className="h-[190px] w-full animate-pulse rounded-lg bg-white/[0.03]" />}
+                >
+                  <PlayerRadarChart data={radarData} />
+                </React.Suspense>
               </div>
 
               <div className="order-first rounded-xl border border-cyan-400/20 bg-black/55 p-3 shadow-[0_0_24px_rgba(34,211,238,0.08)]">

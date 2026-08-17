@@ -14,10 +14,7 @@ import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
 import { PlayStyle, Mentality, TacticalCard } from '../../types';
-import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Plus } = LucideIcons;
-
-
+import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Plus } from 'lucide-react';
 export const TacticsTab = (props: any) => {
   const { state, setState, saveGame, addToast } = useGame();
   const dashData = useDashboardData();
@@ -59,6 +56,21 @@ export const TacticsTab = (props: any) => {
     slots: [null, null, null] as (TacticalCard | null)[],
     ...rawTactics
   };
+  const mentalityImpact = tactics.mentality === 'Predadora'
+    ? 'Mais agressao ofensiva, mais risco atras'
+    : tactics.mentality === 'Emocional'
+      ? 'Picos maiores, oscilacao maior'
+      : 'Menos caos, decisoes mais limpas';
+  const shapeImpact = tactics.linePosition >= 70
+    ? 'Linha alta pressiona, mas abre costas'
+    : tactics.linePosition <= 30
+      ? 'Linha baixa protege area, cede campo'
+      : 'Linha media equilibra risco e cobertura';
+  const ballImpact = tactics.passing >= 70
+    ? 'Passe direto acelera ataque'
+    : tactics.passing <= 30
+      ? 'Passe curto segura posse'
+      : 'Passe misto adapta a partida';
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 pb-20 px-2 sm:px-0 max-w-5xl mx-auto">
@@ -156,6 +168,24 @@ export const TacticsTab = (props: any) => {
       </div>
 
       {/* Sliders Táticos */}
+      <section className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Identidade</p>
+          <p className="mt-1 text-sm font-black uppercase italic text-white">{tactics.playStyle}</p>
+          <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-white/35">Define como o time tenta vencer.</p>
+        </div>
+        <div className="rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-purple-200">Mentalidade</p>
+          <p className="mt-1 text-sm font-black uppercase italic text-white">{tactics.mentality}</p>
+          <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-white/35">{mentalityImpact}</p>
+        </div>
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-amber-200">Leitura rapida</p>
+          <p className="mt-1 text-sm font-black uppercase italic text-white">{shapeImpact}</p>
+          <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-white/35">{ballImpact}</p>
+        </div>
+      </section>
+
       <div className="glass-card-neon white-gradient-sheen grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6 border-white/10 rounded-2xl sm:rounded-[2rem] p-3 sm:p-6 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
         <div className="space-y-4 sm:space-y-6">
           {/* Posicionamento */}

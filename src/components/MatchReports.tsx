@@ -7,6 +7,8 @@ import {
   Info, BarChart3, Star, History, AlertTriangle, Skull, Brain
 } from 'lucide-react';
 import { TeamLogo } from './TeamLogo';
+import { getFallbackTeamLogoAssetPath } from '../utils/teamIdentity';
+import { MatchBroadcastViewer } from './MatchBroadcastViewer';
 
 import { MATCH_REAL_TIME_SECONDS } from '../constants/gameConstants';
 
@@ -29,7 +31,34 @@ const countTeamEvents = (
   acceptedTypes: MatchEvent['type'][]
 ) => events.filter(event => event.teamId === teamId && acceptedTypes.includes(event.type)).length;
 
-export const LiveReport: React.FC<LiveReportProps> = ({
+const getTeamLogoProps = (team: Team) => ({
+  primaryColor: team.logo?.primary || team.colors?.primary || '#22d3ee',
+  secondaryColor: team.logo?.secondary || team.colors?.secondary || '#0f172a',
+  accentColor: team.logo?.accent || '#f8fafc',
+  shapeId: team.logo?.shapeId,
+  patternId: (team.logo?.patternId || 'solid') as any,
+  assetPath: team.logo?.assetPath || getFallbackTeamLogoAssetPath(team),
+  symbolId: team.logo?.symbolId?.startsWith('asset:')
+    ? team.logo.symbolId
+    : `asset:${team.logo?.assetPath || getFallbackTeamLogoAssetPath(team)}`,
+  secondarySymbolId: team.logo?.secondarySymbolId,
+});
+
+const MatchTeamLogo: React.FC<{ team: Team; size: number; className?: string }> = ({ team, size, className = '' }) => (
+  <TeamLogo
+    {...getTeamLogoProps(team)}
+    size={size}
+    className={className}
+  />
+);
+
+const getEventTeam = (event: MatchEvent, homeTeam: Team, awayTeam: Team) => {
+  if (event.teamId === homeTeam.id) return { team: homeTeam, side: 'home' as const };
+  if (event.teamId === awayTeam.id) return { team: awayTeam, side: 'away' as const };
+  return null;
+};
+
+const LegacyLiveReport: React.FC<LiveReportProps> = ({
   match,
   homeTeam,
   awayTeam,
@@ -84,21 +113,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
             className="flex flex-col items-center flex-1 rounded-2xl transition hover:bg-white/5"
           >
             <div className="mb-2">
-              {homeTeam.logo ? (
-                <TeamLogo
-                  primaryColor={homeTeam.logo.primary}
-                  secondaryColor={homeTeam.logo.secondary}
-                  accentColor={homeTeam.logo.accent}
-                  shapeId={homeTeam.logo.shapeId}
-                  patternId={homeTeam.logo.patternId as any}
-                  symbolId={homeTeam.logo.symbolId}
-                  size={48}
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <span className="text-[10px] font-black text-white/20 tracking-tighter uppercase italic">Club</span>
-                </div>
-              )}
+              <MatchTeamLogo team={homeTeam} size={48} />
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{homeTeam.name}</span>
           </button>
@@ -119,21 +134,7 @@ export const LiveReport: React.FC<LiveReportProps> = ({
             className="flex flex-col items-center flex-1 rounded-2xl transition hover:bg-white/5"
           >
             <div className="mb-2">
-              {awayTeam.logo ? (
-                <TeamLogo
-                  primaryColor={awayTeam.logo.primary}
-                  secondaryColor={awayTeam.logo.secondary}
-                  accentColor={awayTeam.logo.accent}
-                  shapeId={awayTeam.logo.shapeId}
-                  patternId={awayTeam.logo.patternId as any}
-                  symbolId={awayTeam.logo.symbolId}
-                  size={48}
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <span className="text-[10px] font-black text-white/20 tracking-tighter uppercase italic">Club</span>
-                </div>
-              )}
+              <MatchTeamLogo team={awayTeam} size={48} />
             </div>
             <span className="text-xs font-black text-white uppercase text-center truncate w-full">{awayTeam.name}</span>
           </button>
@@ -165,12 +166,36 @@ export const LiveReport: React.FC<LiveReportProps> = ({
       </div>
 
       {/* Events Timeline */}
-      <Timeline events={visibleEvents} players={players} onPlayerClick={onPlayerClick} />
+      <Timeline events={visibleEvents} players={players} homeTeam={homeTeam} awayTeam={awayTeam} onPlayerClick={onPlayerClick} />
     </div>
   );
 };
 
-const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>, onPlayerClick?: (player: Player) => void }> = ({ events, players, onPlayerClick }) => (
+export const LiveReport: React.FC<LiveReportProps> = ({
+  match,
+  homeTeam,
+  awayTeam,
+  players,
+  onTeamClick,
+  onPlayerClick,
+}) => (
+  <MatchBroadcastViewer
+    match={match}
+    homeTeam={homeTeam}
+    awayTeam={awayTeam}
+    players={players}
+    onTeamClick={onTeamClick}
+    onPlayerClick={onPlayerClick}
+  />
+);
+
+const Timeline: React.FC<{
+  events: MatchEvent[];
+  players: Record<string, Player>;
+  homeTeam: Team;
+  awayTeam: Team;
+  onPlayerClick?: (player: Player) => void;
+}> = ({ events, players, homeTeam, awayTeam, onPlayerClick }) => (
   <div className="flex-1 overflow-y-auto p-6 scrollbar-hide bg-slate-950/50">
     <div className="relative">
       {/* Vertical Line */}
@@ -178,7 +203,18 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
 
       <div className="space-y-6">
         {events.length > 0 ? (
-          events.map((event, idx) => (
+          events.map((event, idx) => {
+            const eventTeamInfo = getEventTeam(event, homeTeam, awayTeam);
+            const eventTeam = eventTeamInfo?.team || null;
+            const isHomeEvent = eventTeamInfo?.side === 'home';
+            const isAwayEvent = eventTeamInfo?.side === 'away';
+            const sideClass = isHomeEvent
+              ? 'border-l-cyan-400/60'
+              : isAwayEvent
+                ? 'border-l-fuchsia-400/60'
+                : 'border-l-white/10';
+
+            return (
             <div
               key={event.id}
               className="relative pl-12 animate-in slide-in-from-left-4 duration-500"
@@ -206,7 +242,7 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
               </div>
 
               {/* Balloon / Card */}
-              <div className={`relative p-4 rounded-2xl border transition-all hover:scale-[1.02] duration-300 ${event.type === 'GOAL'
+              <div className={`relative border-l-4 ${sideClass} p-4 rounded-2xl border transition-all hover:scale-[1.02] duration-300 ${event.type === 'GOAL'
                 ? 'bg-cyan-500/10 border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.1)]'
                 : 'bg-white/5 border-white/10'
                 }`}>
@@ -216,9 +252,21 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
 
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-cyan-400 tabular-nums">{event.minute}'</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="shrink-0 text-xs font-black text-cyan-400 tabular-nums">{event.minute}'</span>
                       <div className="h-3 w-px bg-white/10" />
+                      {eventTeam ? (
+                        <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1">
+                          <MatchTeamLogo team={eventTeam} size={18} />
+                          <span className="max-w-[86px] truncate text-[7px] font-black uppercase tracking-widest text-white/50">
+                            {eventTeam.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="rounded-full border border-white/10 bg-black/25 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-white/35">
+                          Jogo
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -247,7 +295,7 @@ const Timeline: React.FC<{ events: MatchEvent[], players: Record<string, Player>
                 </div>
               </div>
             </div>
-          ))
+          )})
         ) : (
           <div className="h-64 flex flex-col items-center justify-center opacity-20">
             <Activity size={48} className="mb-4 text-slate-400 animate-pulse" />
@@ -365,7 +413,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 }) => {
   const result = match.result;
   const isRevealed = match.revealed !== false;
-  const [activeTab, setActiveTab] = useState<'stats' | 'timeline'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'viewer' | 'timeline'>('stats');
 
   if (!result) return null;
 
@@ -402,35 +450,26 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               onClick={() => onTeamClick?.(homeTeam.id)}
               className="flex flex-col items-center gap-2 rounded-2xl p-1 transition hover:bg-white/5"
             >
-              {homeTeam.logo ? (
-                <TeamLogo
-                  primaryColor={homeTeam.logo.primary}
-                  secondaryColor={homeTeam.logo.secondary}
-                  accentColor={homeTeam.logo.accent}
-                  shapeId={homeTeam.logo.shapeId}
-                  patternId={homeTeam.logo.patternId as any}
-                  symbolId={homeTeam.logo.symbolId}
-                  size={64}
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <span className="text-xs font-black text-white/20 tracking-tighter uppercase italic">Club</span>
-                </div>
-              )}
+              <MatchTeamLogo team={homeTeam} size={64} />
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
-                {isRevealed ? result.homeScore : '0'}
+                {isRevealed ? result.homeScore : '??'}
               </span>
             </button>
 
             <div className="flex flex-col items-center gap-4">
               <div className="text-xl font-black text-white/20 italic">VS</div>
               {!isRevealed && (
-                <button
-                  onClick={() => onReveal?.(match.id)}
-                  className="px-4 py-1.5 bg-cyan-500 rounded-full text-[10px] font-black text-black uppercase hover:scale-105 transition-all shadow-[0_0_20px_rgba(6,182,212,0.5)]"
-                >
-                  Revelar Placar
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={() => onReveal?.(match.id)}
+                    className="px-5 py-2 bg-cyan-500 rounded-full text-[10px] font-black text-black uppercase hover:scale-105 transition-all shadow-[0_0_20px_rgba(6,182,212,0.5)]"
+                  >
+                    Revelar relatorio
+                  </button>
+                  <p className="max-w-[150px] text-center text-[8px] font-black uppercase tracking-widest text-white/35">
+                    Placar, destaques e leitura tatica ocultos
+                  </p>
+                </div>
               )}
             </div>
 
@@ -439,23 +478,9 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               onClick={() => onTeamClick?.(awayTeam.id)}
               className="flex flex-col items-center gap-2 rounded-2xl p-1 transition hover:bg-white/5"
             >
-              {awayTeam.logo ? (
-                <TeamLogo
-                  primaryColor={awayTeam.logo.primary}
-                  secondaryColor={awayTeam.logo.secondary}
-                  accentColor={awayTeam.logo.accent}
-                  shapeId={awayTeam.logo.shapeId}
-                  patternId={awayTeam.logo.patternId as any}
-                  symbolId={awayTeam.logo.symbolId}
-                  size={64}
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <span className="text-xs font-black text-white/20 tracking-tighter uppercase italic">Club</span>
-                </div>
-              )}
+              <MatchTeamLogo team={awayTeam} size={64} />
               <span className={`text-4xl font-black text-white italic transition-all duration-1000 ${!isRevealed ? 'blur-md select-none' : ''}`}>
-                {isRevealed ? result.awayScore : '0'}
+                {isRevealed ? result.awayScore : '??'}
               </span>
             </button>
           </div>
@@ -477,6 +502,14 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
             }`}
         >
           Linha do Tempo
+        </button>
+        <button
+          onClick={() => setActiveTab('viewer')}
+          disabled={!isRevealed}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${activeTab === 'viewer' ? 'bg-cyan-500 text-black' : 'text-slate-500 hover:text-white hover:bg-white/5'
+            }`}
+        >
+          Ao vivo
         </button>
       </div>
 
@@ -541,8 +574,17 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               </div>
             </div>
           </div>
+        ) : activeTab === 'viewer' && isRevealed ? (
+          <MatchBroadcastViewer
+            match={match}
+            homeTeam={homeTeam}
+            awayTeam={awayTeam}
+            players={players}
+            onTeamClick={onTeamClick}
+            onPlayerClick={onPlayerClick}
+          />
         ) : (
-          <Timeline events={sortedEvents} players={players} onPlayerClick={onPlayerClick} />
+          <Timeline events={sortedEvents} players={players} homeTeam={homeTeam} awayTeam={awayTeam} onPlayerClick={onPlayerClick} />
         )}
       </div>
 

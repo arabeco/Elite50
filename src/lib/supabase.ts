@@ -56,11 +56,25 @@ const createDefaultTrainingState = (): TrainingState => ({
 const isWorldJoinOpen = (world: any) => {
   const status = world?.status || 'LOBBY';
   const currentDay = world?.currentDay ?? -1;
+  const currentRound = world?.currentRound ?? 0;
+  const phase = world?.phase;
   const access = world?.access || {};
 
-  return status === 'LOBBY' &&
-    currentDay <= GENESIS_DRAFT_LAST_DAY &&
-    access.allowObservers !== false;
+  if (access.allowObservers === false) return false;
+
+  if (status === 'LOBBY' && currentDay <= GENESIS_DRAFT_LAST_DAY) {
+    return true;
+  }
+
+  if (access.allowMidSeasonJoin === false || access.allowTakeover === false) {
+    return false;
+  }
+
+  if (phase === 'OFFSEASON') return true;
+
+  return status === 'ACTIVE' &&
+    phase === 'REGULAR_SEASON' &&
+    currentRound <= MIDSEASON_JOIN_MAX_ROUND;
 };
 
 const applyParticipantFoundedClubs = (baseWorld: any, mergedTeams: Record<string, any>, participantRecords: any[]) => {
@@ -108,6 +122,21 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
 
   const isCreator = state.isCreator === true;
   const isPublic = state.world.isPublic === true;
+  let worldStateToSave = state.world;
+
+  if (!isCreator) {
+    const { data: masterGame } = await supabase
+      .from('games')
+      .select('world_state')
+      .eq('world_id', worldId)
+      .eq('is_creator', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (masterGame?.world_state) {
+      worldStateToSave = masterGame.world_state as any;
+    }
+  }
 
   const userTeamId = state.userTeamId;
   const userManagerId = state.userManagerId;
@@ -140,13 +169,15 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
     .upsert({
       user_id: user.id,
       world_id: worldId,
-      world_state: state.world,
+      world_state: worldStateToSave,
       teams_data: teamsToSave,
       players_data: playersToSave,
       managers_data: managersToSave,
       user_team_id: userTeamId,
       user_manager_id: userManagerId,
       notifications: state.notifications,
+      transfer_proposals: state.transferProposals || [],
+      trade_offers: state.tradeOffers || [],
       last_headline: state.lastHeadline,
       training_data: state.training,
       is_creator: isCreator,
@@ -371,6 +402,8 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     userTeamId: userRecord.user_team_id,
     userManagerId: userRecord.user_manager_id,
     notifications: userRecord.notifications || [],
+    transferProposals: userRecord.transfer_proposals || [],
+    tradeOffers: userRecord.trade_offers || [],
     lastHeadline: userRecord.last_headline,
     training: userRecord.training_data || createDefaultTrainingState()
   };
@@ -559,33 +592,85 @@ export const resignFromTeamInWorld = async (worldId: string): Promise<GameState 
   return loadGameState(worldId);
 };
 
+/**
+ * Campos escalares extraidos de world_state via seletor JSON do PostgREST.
+ *
+ * IMPORTANTE PARA EGRESS: nunca selecione `world_state` inteiro aqui. O blob tem
+ * ~20 KB por mundo (e cresce durante a temporada) e estas listagens precisam de
+ * apenas seis escalares. Selecionar o JSONB completo para desenhar um card foi
+ * uma das principais fontes de egress do projeto.
+ */
+const WORLD_SUMMARY_SELECT =
+  'world_id, updated_at, user_id, is_public, is_creator, ' +
+  'name:world_state->>name, ' +
+  'status:world_state->>status, ' +
+  'phase:world_state->>phase, ' +
+  'startScheduledAt:world_state->>startScheduledAt, ' +
+  'currentDay:world_state->currentDay, ' +
+  'currentSeason:world_state->currentSeason';
+
+type WorldSummaryRow = {
+  world_id: string;
+  updated_at: string;
+  user_id: string;
+  is_public: boolean | null;
+  is_creator: boolean | null;
+  name: string | null;
+  status: string | null;
+  phase: string | null;
+  startScheduledAt: string | null;
+  currentDay: number | null;
+  currentSeason: number | null;
+};
+
 export const listUserWorlds = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
   const { data, error } = await supabase
     .from('games')
-    .select('world_id, updated_at, world_state, user_id, is_public, is_creator')
-    .eq('user_id', user.id);
+    .select(WORLD_SUMMARY_SELECT)
+    .eq('user_id', user.id)
+    .returns<WorldSummaryRow[]>();
 
   if (error) {
     console.error('Error listing worlds:', error);
     return [];
   }
 
+  const worldIds = Array.from(new Set(data.map(row => row.world_id).filter(Boolean)));
+  const { data: masterRows } = worldIds.length
+    ? await supabase
+      .from('games')
+      .select(WORLD_SUMMARY_SELECT)
+      .in('world_id', worldIds)
+      .eq('is_creator', true)
+      .returns<WorldSummaryRow[]>()
+    : { data: [] as WorldSummaryRow[] };
+
+  const masterByWorld = new Map((masterRows || []).map(row => [row.world_id, row]));
+
   return data
-    .filter(d => isWorldJoinOpen(d.world_state))
-    .map(d => ({
-    id: d.world_id,
-    updatedAt: d.updated_at,
-    userId: d.user_id,
-    name: (d.world_state as any).name || `Mundo ${d.world_id}`,
-    isCreator: d.is_creator !== false,
-    status: (d.world_state as any).status || null,
-    phase: (d.world_state as any).phase || null,
-    currentDay: (d.world_state as any).currentDay ?? null,
-    currentSeason: (d.world_state as any).currentSeason ?? null,
-      startScheduledAt: (d.world_state as any).startScheduledAt || null
+    .map(d => {
+      const master = masterByWorld.get(d.world_id) || d;
+      return {
+        id: d.world_id,
+        updatedAt: master.updated_at || d.updated_at,
+        userId: master.user_id || d.user_id,
+        name: master.name || `Mundo ${d.world_id}`,
+        isCreator: d.is_creator !== false,
+        status: master.status || null,
+        phase: master.phase || null,
+        currentDay: master.currentDay ?? null,
+        currentSeason: master.currentSeason ?? null,
+        startScheduledAt: master.startScheduledAt || null
+      };
+    })
+    .filter(world => isWorldJoinOpen({
+      status: world.status,
+      phase: world.phase,
+      currentDay: world.currentDay,
+      startScheduledAt: world.startScheduledAt
     }));
 };
 
@@ -612,7 +697,7 @@ export const listPublicWorlds = async () => {
   // Fetch all worlds except the user's own (to show as "Community" worlds)
   let query = supabase
     .from('games')
-    .select('world_id, updated_at, world_state, user_id, is_public, is_creator')
+    .select(WORLD_SUMMARY_SELECT)
     .eq('is_public', true)
     .eq('is_creator', true)
     .order('updated_at', { ascending: false })
@@ -622,7 +707,7 @@ export const listPublicWorlds = async () => {
     query = query.neq('user_id', user.id);
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.returns<WorldSummaryRow[]>();
 
   if (error) {
     console.error('Error listing public worlds:', error);
@@ -633,25 +718,40 @@ export const listPublicWorlds = async () => {
     id: d.world_id,
     updatedAt: d.updated_at,
     userId: d.user_id,
-    name: (d.world_state as any).name || `Mundo ${d.world_id}`,
-    status: (d.world_state as any).status || null,
-    phase: (d.world_state as any).phase || null,
-    currentDay: (d.world_state as any).currentDay ?? null,
-    currentSeason: (d.world_state as any).currentSeason ?? null,
-    startScheduledAt: (d.world_state as any).startScheduledAt || null
+    name: d.name || `Mundo ${d.world_id}`,
+    status: d.status || null,
+    phase: d.phase || null,
+    currentDay: d.currentDay ?? null,
+    currentSeason: d.currentSeason ?? null,
+    startScheduledAt: d.startScheduledAt || null
   }));
 };
 
+export type WorldRealtimeEvent = {
+  id: number;
+  world_id: string;
+  event_type: 'WORLD_UPDATED' | 'PARTICIPANT_UPDATED' | string;
+  actor_user_id: string | null;
+  world_day: number | null;
+  world_round: number | null;
+  phase: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
 // --- Realtime Sync ---
-export const subscribeToWorld = (worldId: string, onUpdate: () => void) => {
-  const channelName = `world:${worldId}`;
+export const subscribeToWorld = (worldId: string, onUpdate: (event: WorldRealtimeEvent) => void) => {
+  if (import.meta.env.VITE_ENABLE_WORLD_EVENTS_REALTIME !== 'true') {
+    return null;
+  }
+
+  const channelName = `world-events:${worldId}`;
   const channel = supabase.channel(channelName)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'games', filter: `world_id=eq.${worldId}` },
+      { event: 'INSERT', schema: 'public', table: 'world_events', filter: `world_id=eq.${worldId}` },
       (payload) => {
-        console.log('Realtime update received for world:', worldId, payload);
-        onUpdate();
+        onUpdate(payload.new as WorldRealtimeEvent);
       }
     )
     .subscribe();
@@ -660,6 +760,10 @@ export const subscribeToWorld = (worldId: string, onUpdate: () => void) => {
 };
 
 export const unsubscribeFromWorld = async (worldId: string) => {
-  const channelName = `world:${worldId}`;
+  if (import.meta.env.VITE_ENABLE_WORLD_EVENTS_REALTIME !== 'true') {
+    return;
+  }
+
+  const channelName = `world-events:${worldId}`;
   await supabase.removeChannel(supabase.channel(channelName));
 };

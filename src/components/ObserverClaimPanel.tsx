@@ -69,6 +69,30 @@ export const ObserverClaimPanel: React.FC = () => {
       });
   }, [state.teams, state.players, state.managers, state.world.leagues]);
 
+  const leagueSummaries = useMemo(() => {
+    return (Object.values(state.world.leagues || {}) as LeagueState[])
+      .map(league => {
+        const leagueTeams = (league.standings || [])
+          .map(row => state.teams[row.teamId])
+          .filter((team): team is Team => Boolean(team));
+        const squadCount = leagueTeams.reduce((sum, team) => sum + (team.squad || []).length, 0);
+        const totalRating = leagueTeams.reduce((sum, team) => {
+          return sum + (team.squad || []).reduce((teamSum, playerId) => teamSum + (state.players[playerId]?.totalRating || 0), 0);
+        }, 0);
+        const freeClubs = leagueTeams.filter(team => !isHumanManager(team.managerId, state.managers)).length;
+
+        return {
+          id: league.name,
+          name: league.name,
+          teams: leagueTeams.length,
+          squadCount,
+          averageRating: leagueTeams.length > 0 ? Math.round(totalRating / leagueTeams.length) : 0,
+          freeClubs,
+        };
+      })
+      .sort((a, b) => b.freeClubs - a.freeClubs || b.averageRating - a.averageRating);
+  }, [state.world.leagues, state.teams, state.players, state.managers]);
+
   const handleTeamAction = async (teamId: string, offer?: ClubOffer) => {
     setActingTeamId(teamId);
     try {
@@ -103,9 +127,13 @@ export const ObserverClaimPanel: React.FC = () => {
             <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white sm:text-4xl">
               Mercado de tecnicos
             </h2>
-            <p className="mt-2 max-w-2xl text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Voce esta dentro do mundo, vendo a liga em tempo real. Nada de takeover seco: envie proposta, espere a resposta e assine no timing certo.
-            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {['Liga ao vivo', 'Proposta', 'Resposta amanha', 'Sem takeover seco'].map(label => (
+                <span key={label} className="rounded-full border border-cyan-400/15 bg-cyan-500/8 px-2.5 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-cyan-100/70">
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div className="w-full max-w-sm">
@@ -127,7 +155,7 @@ export const ObserverClaimPanel: React.FC = () => {
             <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Janela atual</p>
             <p className="mt-2 text-lg font-black italic text-white">{joinWindowOpen ? 'Aberta' : 'Fechada'}</p>
             <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
-              {joinWindowOpen ? 'Da para assinar ou mandar proposta agora.' : 'Pedidos novos entram na fila da proxima temporada.'}
+              {joinWindowOpen ? 'Assinar / propor' : 'Fila prox. temporada'}
             </p>
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
@@ -143,7 +171,7 @@ export const ObserverClaimPanel: React.FC = () => {
             <p className="text-[8px] font-black uppercase tracking-[0.24em] text-white/45">Regra</p>
             <p className="mt-2 text-lg font-black italic text-white">Sem entrada instantanea</p>
             <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
-              no minimo a resposta chega no dia seguinte
+              resposta D+1
             </p>
           </div>
         </div>
@@ -228,6 +256,30 @@ export const ObserverClaimPanel: React.FC = () => {
               );
             })}
           </div>
+        </section>
+      )}
+
+      {leagueSummaries.length > 0 && (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {leagueSummaries.map(league => (
+            <div key={league.id} className="rounded-2xl border border-white/10 bg-black/35 p-4">
+              <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">{league.name}</p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <div>
+                  <p className="text-base font-black text-white">{league.squadCount}</p>
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/30">atletas</p>
+                </div>
+                <div>
+                  <p className="text-base font-black text-white">{league.freeClubs}/{league.teams}</p>
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/30">livres</p>
+                </div>
+                <div>
+                  <p className="text-base font-black text-white">{league.averageRating}</p>
+                  <p className="text-[7px] font-black uppercase tracking-widest text-white/30">score medio</p>
+                </div>
+              </div>
+            </div>
+          ))}
         </section>
       )}
 

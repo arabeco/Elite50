@@ -1,10 +1,37 @@
 import React from 'react';
 import { useGame } from '../store/GameContext';
 import { calculateTeamPower, getTeamPowerCap } from '../engine/gameLogic';
-import { LeagueState } from '../types';
+import { LeagueState, MatchResult, TeamLogoMetadata } from '../types';
 import {
     SEASON_DAYS
 } from '../constants/gameConstants';
+
+/**
+ * Shape das partidas expostas para as telas do dashboard.
+ * Difere de `Match` de propósito: já traz nome e escudo dos times resolvidos.
+ * Todo campo de `Match` que a UI consome precisa estar aqui — omitir um campo
+ * faz a feature correspondente morrer em silêncio (foi o que aconteceu com `revealed`).
+ */
+export interface MatchViewModel {
+    id: string;
+    round: number;
+    date: string;
+    time: string;
+    home: string;
+    away: string;
+    homeId: string;
+    awayId: string;
+    homeTeamId: string;
+    awayTeamId: string;
+    homeLogo?: TeamLogoMetadata;
+    awayLogo?: TeamLogoMetadata;
+    homeScore?: number;
+    awayScore?: number;
+    played?: boolean;
+    revealed?: boolean;
+    result?: MatchResult | null;
+    type: string;
+}
 
 export const useDashboardData = () => {
     const { state } = useGame();
@@ -73,16 +100,23 @@ export const useDashboardData = () => {
                 time: matchTime,
                 home: homeTeam?.name || 'Unknown',
                 away: awayTeam?.name || 'Unknown',
+                // homeId/awayId sao os nomes historicos usados pelas telas;
+                // homeTeamId/awayTeamId mantem compatibilidade com o tipo `Match`.
                 homeId: m.homeTeamId,
                 awayId: m.awayTeamId,
+                homeTeamId: m.homeTeamId,
+                awayTeamId: m.awayTeamId,
                 homeLogo: homeTeam?.logo,
                 awayLogo: awayTeam?.logo,
                 homeScore: m.homeScore,
                 awayScore: m.awayScore,
                 played: m.played,
+                // Sem este campo o relatorio cego morre: a Home revela o placar
+                // na hora e o CTA "Revelar relatorio" nunca aparece.
+                revealed: m.revealed,
                 result: m.result,
                 type: 'League'
-            };
+            } satisfies MatchViewModel;
         });
     }, [userTeam, state.world.leagues, state.world.currentRound, state.teams, state.world.currentDate]);
 

@@ -24,7 +24,11 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
-      globals: true
+      globals: true,
+      // Os testes de temporada simulam varios dias do motor de jogo e passam de 5s
+      // (o padrao do vitest). Sem isto a suite fica vermelha por configuracao,
+      // e nao por regressao.
+      testTimeout: 30000
     }
   };
 });

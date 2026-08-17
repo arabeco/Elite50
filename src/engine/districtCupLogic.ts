@@ -1,4 +1,4 @@
-import { GameState, Player, Team, Manager, District, Match, SeasonPhase } from '../types';
+import { GameState, Player, Team, Manager, District, Match, DistrictManagerInvite } from '../types';
 
 const awardDistrictTeamTitle = (team: Team | undefined, season: number) => {
     if (!team) return;
@@ -20,38 +20,192 @@ const awardDistrictTeamTitle = (team: Team | undefined, season: number) => {
 };
 
 /**
- * Selects the 4 strongest managers for District Cup.
- * Managers can coach any district selection; humans receive a real boost,
- * but reputation and career merit still decide the call-up.
+ * Scores managers for the District Cup. Managers from the same origin/active
+ * district get priority, but reputation and career merit still decide the call-up.
  */
-export const selectDistrictCupManagers = (state: GameState): Record<District, string> => {
-    const activeManagers = Object.values(state.managers || {});
-    const sorted = activeManagers
+const scoreDistrictManager = (state: GameState, manager: Manager, district: District) => {
+    const career = manager.career;
+    const activeTeam = career.currentTeamId ? state.teams[career.currentTeamId] : null;
+    const sameOrigin = manager.originDistrict === district;
+    const sameCurrent = manager.district === district || activeTeam?.district === district;
+    const humanBonus = manager.isNPC === false || manager.id === state.userManagerId ? 30 : 0;
+    const districtBonus = sameOrigin ? 28 : sameCurrent ? 16 : 0;
+
+    return (
+        (manager.reputation || 0) +
+        humanBonus +
+        districtBonus +
+        (career.titlesWon || 0) * 8 +
+        (career.totalLeagueTitles || 0) * 6 +
+        (career.totalCupTitles || 0) * 5 +
+        (career.hallOfFameEntries || 0) * 10
+    );
+};
+
+const getDistrictManagerCandidates = (state: GameState, district: District) => (
+    Object.values(state.managers || {})
         .filter(m => m && typeof m.reputation === 'number')
-        .sort((a, b) => {
-            const score = (manager: Manager) => {
-                const career = manager.career || {};
-                const humanBonus = manager.isNPC === false || manager.id === state.userManagerId ? 35 : 0;
-                return (
-                    (manager.reputation || 0) +
-                    humanBonus +
-                    (career.titlesWon || 0) * 8 +
-                    (career.totalLeagueTitles || 0) * 6 +
-                    (career.totalCupTitles || 0) * 5 +
-                    (career.hallOfFameEntries || 0) * 10
-                );
-            };
-            return score(b) - score(a);
-        });
-    const selected = sorted.slice(0, 4);
+        .map(manager => ({
+            manager,
+            score: scoreDistrictManager(state, manager, district)
+        }))
+        .sort((a, b) => b.score - a.score)
+);
 
-    const mapping: Partial<Record<District, string>> = {};
+const isHumanManager = (state: GameState, managerId: string) => {
+    const manager = state.managers[managerId];
+    return manager?.isNPC === false || managerId === state.userManagerId;
+};
+
+export const prepareDistrictCupManagerInvites = (state: GameState): GameState => {
+    const season = state.world.currentSeason || 2050;
+    const cup = state.world.districtCup;
+
+    if (cup.managerInvites?.some(invite => invite.season === season)) {
+        return state;
+    }
+
     const districts: District[] = ['NORTE', 'SUL', 'LESTE', 'OESTE'];
+    cup.managerInvites = cup.managerInvites || [];
+    cup.managerAssignments = cup.managerAssignments || {};
 
-    districts.forEach((d, i) => {
-        mapping[d] = selected[i]?.id || 'ai_manager_dist';
+    const usedManagers = new Set<string>();
+
+    districts.forEach(district => {
+        const candidates = getDistrictManagerCandidates(state, district)
+            .filter(candidate => !usedManagers.has(candidate.manager.id));
+        const selected = candidates[0];
+        if (!selected) return;
+
+        const status: DistrictManagerInvite['status'] = isHumanManager(state, selected.manager.id)
+            ? 'PENDING'
+            : 'AUTO_ACCEPTED';
+
+        const invite: DistrictManagerInvite = {
+            id: `district_invite_${season}_${district}_${selected.manager.id}`,
+            season,
+            district,
+            managerId: selected.manager.id,
+            status,
+            score: selected.score,
+            rank: 1,
+            createdAt: state.world.currentDate,
+            respondedAt: status === 'AUTO_ACCEPTED' ? state.world.currentDate : null,
+            note: status === 'PENDING'
+                ? `A Federacao ${district} te indicou para comandar a selecao na Copa dos Distritos.`
+                : `${selected.manager.name} aceitou automaticamente pela IA.`
+        };
+
+        cup.managerInvites!.push(invite);
+        if (status === 'AUTO_ACCEPTED') {
+            cup.managerAssignments![district] = selected.manager.id;
+            usedManagers.add(selected.manager.id);
+        }
     });
 
+    return state;
+};
+
+export const respondDistrictCupManagerInvite = (state: GameState, inviteId: string, accept: boolean): GameState => {
+    const cup = state.world.districtCup;
+    const invites = cup.managerInvites || [];
+    const invite = invites.find(item => item.id === inviteId && item.status === 'PENDING');
+    if (!invite) return state;
+
+    invite.status = accept ? 'ACCEPTED' : 'REJECTED';
+    invite.respondedAt = state.world.currentDate;
+    invite.note = accept
+        ? `Contrato aceito para comandar a Selecao ${invite.district}.`
+        : `Convite recusado. A federacao ${invite.district} chamou o proximo nome.`;
+
+    cup.managerAssignments = cup.managerAssignments || {};
+
+    if (accept) {
+        cup.managerAssignments[invite.district] = invite.managerId;
+        return state;
+    }
+
+    const assignedManagers = new Set(Object.values(cup.managerAssignments).filter(Boolean) as string[]);
+    invites
+        .filter(item => item.status === 'ACCEPTED' || item.status === 'AUTO_ACCEPTED')
+        .forEach(item => assignedManagers.add(item.managerId));
+
+    const next = getDistrictManagerCandidates(state, invite.district)
+        .find(candidate =>
+            candidate.manager.id !== invite.managerId &&
+            !assignedManagers.has(candidate.manager.id) &&
+            !invites.some(item => item.season === invite.season && item.district === invite.district && item.managerId === candidate.manager.id)
+        );
+
+    if (!next) return state;
+
+    const status: DistrictManagerInvite['status'] = isHumanManager(state, next.manager.id)
+        ? 'PENDING'
+        : 'AUTO_ACCEPTED';
+    const nextInvite: DistrictManagerInvite = {
+        id: `district_invite_${invite.season}_${invite.district}_${next.manager.id}`,
+        season: invite.season,
+        district: invite.district,
+        managerId: next.manager.id,
+        status,
+        score: next.score,
+        rank: invites.filter(item => item.season === invite.season && item.district === invite.district).length + 1,
+        createdAt: state.world.currentDate,
+        respondedAt: status === 'AUTO_ACCEPTED' ? state.world.currentDate : null,
+        note: status === 'PENDING'
+            ? `Voce virou o proximo nome para comandar a Selecao ${invite.district}.`
+            : `${next.manager.name} assumiu depois da recusa.`
+    };
+
+    invites.push(nextInvite);
+    if (status === 'AUTO_ACCEPTED') {
+        cup.managerAssignments[invite.district] = next.manager.id;
+    }
+
+    return state;
+};
+
+export const selectDistrictCupManagers = (state: GameState): Record<District, string> => {
+    prepareDistrictCupManagerInvites(state);
+
+    const mapping: Partial<Record<District, string>> = { ...(state.world.districtCup.managerAssignments || {}) };
+    const invites = state.world.districtCup.managerInvites || [];
+    const districts: District[] = ['NORTE', 'SUL', 'LESTE', 'OESTE'];
+    const usedManagers = new Set(Object.values(mapping).filter(Boolean) as string[]);
+
+    districts.forEach(district => {
+        if (mapping[district]) return;
+
+        invites
+            .filter(invite => invite.district === district && invite.status === 'PENDING')
+            .forEach(invite => {
+                invite.status = 'EXPIRED';
+                invite.respondedAt = state.world.currentDate;
+                invite.note = 'Sem resposta ate a Copa. A federacao chamou outro tecnico.';
+            });
+
+        const accepted = invites.find(invite =>
+            invite.district === district &&
+            (invite.status === 'ACCEPTED' || invite.status === 'AUTO_ACCEPTED') &&
+            !usedManagers.has(invite.managerId)
+        );
+
+        if (accepted) {
+            mapping[district] = accepted.managerId;
+            usedManagers.add(accepted.managerId);
+            return;
+        }
+
+        const fallback = getDistrictManagerCandidates(state, district)
+            .find(candidate => !usedManagers.has(candidate.manager.id));
+
+        if (fallback) {
+            mapping[district] = fallback.manager.id;
+            usedManagers.add(fallback.manager.id);
+        }
+    });
+
+    state.world.districtCup.managerAssignments = mapping;
     return mapping as Record<District, string>;
 };
 

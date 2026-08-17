@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import {
   Briefcase,
   Globe,
@@ -568,13 +568,17 @@ export const NewGameFlow: React.FC = () => {
               <h2 className="text-lg sm:text-2xl xl:text-3xl font-black text-white uppercase tracking-tighter italic">O HERDEIRO</h2>
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-                <p className="text-cyan-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">GESTÃO DE LEGADO</p>
+                <p className="text-cyan-400 text-[8px] sm:text-[9px] xl:text-[10px] font-black uppercase tracking-[0.25em]">GESTÃƒO DE LEGADO</p>
               </div>
             </div>
 
-            <p className="mb-auto text-[10px] leading-relaxed text-slate-400 sm:text-xs xl:text-sm font-medium">
-              Assuma o comando de uma equipe que já está pronta. Você entrará num clube fechado e jogará com o elenco atual dele, sem precisar recrutar ou montar o time.
-            </p>
+            <div className="mb-auto flex flex-wrap gap-2">
+              {['Clube pronto', 'Elenco atual', 'Sem draft', 'Comeco rapido'].map(label => (
+                <span key={label} className="rounded-lg border border-cyan-400/15 bg-cyan-500/8 px-2 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-cyan-100/75">
+                  {label}
+                </span>
+              ))}
+            </div>
 
             <div className="mt-4 border-t border-white/5 pt-4 sm:pt-6 xl:pt-8">
               <div className="flex items-center justify-between">
@@ -621,9 +625,13 @@ export const NewGameFlow: React.FC = () => {
               </div>
             </div>
 
-            <p className="mb-auto text-[10px] leading-relaxed text-slate-400 sm:text-xs xl:text-sm font-medium">
-              Crie uma potência do zero e roube o lugar de um time da liga. Você começará de mãos vazias e montará seu elenco escolhendo atletas no Draft inicial.
-            </p>
+            <div className="mb-auto flex flex-wrap gap-2">
+              {['Clube novo', 'Escudo', 'Draft', 'Score cap'].map(label => (
+                <span key={label} className="rounded-lg border border-amber-400/15 bg-amber-500/8 px-2 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-amber-100/75">
+                  {label}
+                </span>
+              ))}
+            </div>
 
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[7px] font-black uppercase tracking-[0.16em] text-amber-100/70">
               <span className="rounded-lg border border-amber-400/15 bg-amber-500/8 px-2 py-2">Criar escudo</span>
@@ -699,7 +707,7 @@ export const NewGameFlow: React.FC = () => {
               </h2>
               <div className="flex items-center gap-3">
                 <div className="h-[1px] w-8 bg-cyan-500/30" />
-                <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.4em]">Protocolo de Sucessão Ativo</p>
+                <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.4em]">Protocolo de SucessÃ£o Ativo</p>
               </div>
             </div>
           </div>
@@ -783,7 +791,7 @@ export const NewGameFlow: React.FC = () => {
                           <p className="text-[6px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">Status</p>
                           <span className={`text-[7px] sm:text-[9px] font-black uppercase px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full border ${isSelected ? 'bg-cyan-500 text-black border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
                             }`}>
-                            Disponível
+                            DisponÃ­vel
                           </span>
                         </div>
                       </div>
@@ -792,7 +800,7 @@ export const NewGameFlow: React.FC = () => {
                         <h3 className="text-lg sm:text-2xl font-black text-white uppercase tracking-tighter italic group-hover:text-cyan-400 transition-colors truncate">{team.name}</h3>
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <div className="w-1 h-1 rounded-full bg-cyan-500/50" />
-                          <p className="text-[7px] sm:text-[9px] text-slate-400 font-black uppercase tracking-[0.2em] truncate">{team.city} • {team.district}</p>
+                          <p className="text-[7px] sm:text-[9px] text-slate-400 font-black uppercase tracking-[0.2em] truncate">{team.city} â€¢ {team.district}</p>
                         </div>
                       </div>
                     </div>
@@ -809,7 +817,7 @@ export const NewGameFlow: React.FC = () => {
                         </div>
                       </div>
                       <div className="bg-black/40 rounded-lg sm:rounded-2xl p-2 sm:p-4 border border-white/5 group-hover:border-cyan-500/20 transition-all">
-                        <p className="text-[5px] sm:text-[7px] text-slate-500 font-black uppercase tracking-widest mb-1 sm:mb-1.5">Divisão</p>
+                        <p className="text-[5px] sm:text-[7px] text-slate-500 font-black uppercase tracking-widest mb-1 sm:mb-1.5">DivisÃ£o</p>
                         <p className="text-[8px] sm:text-[10px] font-black text-cyan-400 uppercase tracking-tight truncate">{team.league}</p>
                         <div className="mt-1.5 sm:mt-2 flex gap-0.5">
                           {[1, 2, 3, 4, 5].map(i => <div key={i} className={`w-0.5 sm:w-1 h-0.5 sm:h-1 rounded-full ${i <= 3 ? 'bg-cyan-500/50' : 'bg-white/5'}`} />)}
@@ -845,13 +853,13 @@ export const NewGameFlow: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <h3 className="text-lg xl:text-xl font-black text-white uppercase tracking-widest italic">Nenhuma vaga detectada</h3>
-                <p className="text-slate-500 text-[9px] xl:text-[10px] uppercase font-black tracking-[0.3em]">O mercado de treinadores está estagnado no momento.</p>
+                <p className="text-slate-500 text-[9px] xl:text-[10px] uppercase font-black tracking-[0.3em]">O mercado de treinadores estÃ¡ estagnado no momento.</p>
               </div>
               <button
                 onClick={() => setStep('path-selection')}
                 className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[8px] xl:text-[9px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
               >
-                Voltar ao Início
+                Voltar ao InÃ­cio
               </button>
             </div>
           )}
@@ -883,7 +891,7 @@ export const NewGameFlow: React.FC = () => {
               <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${selectedHeirTeamId ? 'bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'bg-slate-700'}`} />
               <div className="space-y-0.5">
                 <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.2em]">
-                  {selectedHeirTeamId ? 'Unidade de Destino Confirmada' : 'Aguardando Seleção de Destino'}
+                  {selectedHeirTeamId ? 'Unidade de Destino Confirmada' : 'Aguardando SeleÃ§Ã£o de Destino'}
                 </p>
                 {selectedHeirTeamId && (
                   <p className="text-cyan-400 text-[7px] xl:text-[8px] font-mono uppercase tracking-widest">
@@ -950,11 +958,11 @@ export const NewGameFlow: React.FC = () => {
 
             <div className="space-y-1">
               <h2 className="text-3xl xl:text-5xl font-black text-white uppercase tracking-tighter italic leading-none">
-                REGISTRO DE <span className="text-amber-400">FUNDAÇÃO</span>
+                REGISTRO DE <span className="text-amber-400">FUNDAÃ‡ÃƒO</span>
               </h2>
               <div className="flex items-center gap-3">
                 <div className="h-[1px] w-8 bg-amber-500/30" />
-                <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.4em]">Protocolo de Expansão Ativo</p>
+                <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.4em]">Protocolo de ExpansÃ£o Ativo</p>
               </div>
             </div>
           </div>
@@ -966,7 +974,7 @@ export const NewGameFlow: React.FC = () => {
             </div>
             <div className="w-[1px] h-10 bg-white/10" />
             <div className="space-y-1">
-              <p className="text-slate-500 text-[8px] font-black uppercase tracking-widest">Orçamento Inicial</p>
+              <p className="text-slate-500 text-[8px] font-black uppercase tracking-widest">OrÃ§amento Inicial</p>
               <p className="text-white font-mono text-xl xl:text-2xl font-black">50.0M</p>
             </div>
           </div>
@@ -1034,7 +1042,7 @@ export const NewGameFlow: React.FC = () => {
 
               <div className="space-y-3 sm:space-y-4 relative z-10">
                 <label className="flex items-center justify-between px-1">
-                  <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Cromatismo Técnico</span>
+                  <span className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-widest">Cromatismo TÃ©cnico</span>
                   <span className="text-[6px] sm:text-[7px] font-mono text-amber-500/30">HEX_SYNERGY</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1078,7 +1086,7 @@ export const NewGameFlow: React.FC = () => {
                       />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[6px] sm:text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">Primária</p>
+                      <p className="text-[6px] sm:text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">PrimÃ¡ria</p>
                       <p className="text-[8px] sm:text-[10px] font-mono text-white uppercase truncate">{founderData.primaryColor}</p>
                     </div>
                   </div>
@@ -1093,7 +1101,7 @@ export const NewGameFlow: React.FC = () => {
                       />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[6px] sm:text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">Secundária</p>
+                      <p className="text-[6px] sm:text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">SecundÃ¡ria</p>
                       <p className="text-[8px] sm:text-[10px] font-mono text-white uppercase truncate">{founderData.secondaryColor}</p>
                     </div>
                   </div>
@@ -1164,12 +1172,12 @@ export const NewGameFlow: React.FC = () => {
 
               <div className="flex items-center gap-3 relative z-10">
                 <div className="w-1 h-5 sm:w-1.5 sm:h-6 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
-                <h3 className="text-[9px] sm:text-[11px] font-black text-white uppercase tracking-[0.3em]">Alvo de Desativação</h3>
+                <h3 className="text-[9px] sm:text-[11px] font-black text-white uppercase tracking-[0.3em]">Alvo de DesativaÃ§Ã£o</h3>
               </div>
 
               <div className="space-y-3 sm:space-y-4 relative z-10">
                 <p className="text-[8px] sm:text-[9px] text-slate-500 font-black uppercase tracking-widest leading-relaxed italic opacity-60">
-                  Toda nova franquia deve ocupar a vaga de uma instituição obsoleta.
+                  Toda nova franquia deve ocupar a vaga de uma instituiÃ§Ã£o obsoleta.
                 </p>
 
                 <div className="relative group">
@@ -1190,7 +1198,7 @@ export const NewGameFlow: React.FC = () => {
                     <option value="" className="bg-[#02040a]">SELECIONE UNIDADE OBSOLETA...</option>
                     {replaceableTeams.map(t => (
                       <option key={t.id} value={t.id} className="bg-[#02040a]">
-                        {t.name} • {t.league} • {t.district}
+                        {t.name} â€¢ {t.league} â€¢ {t.district}
                       </option>
                     ))}
                   </select>
@@ -1222,7 +1230,7 @@ export const NewGameFlow: React.FC = () => {
                   <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-red-500/5 border border-red-500/10 rounded-lg sm:rounded-xl animate-in fade-in slide-in-from-top-2 duration-500">
                     <AlertCircle size={14} className="text-red-500 shrink-0 sm:size-4" />
                     <p className="text-[7px] sm:text-[8px] text-red-400 font-black uppercase tracking-widest leading-tight">
-                      AVISO: {state.teams[founderData.replacedTeamId]?.name} será permanentemente removido do sistema.
+                      AVISO: {state.teams[founderData.replacedTeamId]?.name} serÃ¡ permanentemente removido do sistema.
                     </p>
                   </div>
                 )}
@@ -1292,7 +1300,7 @@ export const NewGameFlow: React.FC = () => {
               {founderData.replacedTeamId && (
                 <div className="inline-flex items-center gap-3 px-5 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.1)]">
                   <Zap size={14} className="text-amber-500" />
-                  <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Protocolo de Expansão Ativo</span>
+                  <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Protocolo de ExpansÃ£o Ativo</span>
                 </div>
               )}
             </div>
@@ -1310,7 +1318,7 @@ export const NewGameFlow: React.FC = () => {
                 </p>
               </div>
               <div className="text-center space-y-1">
-                <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Estádio</p>
+                <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest">EstÃ¡dio</p>
                 <p className="text-[10px] xl:text-[11px] font-black text-white uppercase tracking-tight">LVL 01</p>
               </div>
             </div>
@@ -1323,7 +1331,7 @@ export const NewGameFlow: React.FC = () => {
             <div className={`w-2 h-2 rounded-full animate-pulse transition-all duration-500 ${founderData.name && founderData.replacedTeamId ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.8)]' : 'bg-slate-700'}`} />
             <div className="space-y-0.5">
               <p className="text-slate-500 text-[8px] xl:text-[9px] font-black uppercase tracking-[0.2em]">
-                {founderData.name && founderData.replacedTeamId ? 'Dados de Identidade Sincronizados' : 'Aguardando Validação de Registro'}
+                {founderData.name && founderData.replacedTeamId ? 'Dados de Identidade Sincronizados' : 'Aguardando ValidaÃ§Ã£o de Registro'}
               </p>
               {founderData.name && founderData.replacedTeamId && (
                 <p className="text-amber-400 text-[7px] xl:text-[8px] font-mono uppercase tracking-widest">
@@ -1342,7 +1350,7 @@ export const NewGameFlow: React.FC = () => {
               }`}
           >
             <span className="relative z-10 flex items-center gap-3">
-              Entrar na Gênese
+              Entrar na GÃªnese
               <CheckCircle2 size={18} className="transition-transform group-hover:scale-110" />
             </span>
             {founderData.name && founderData.replacedTeamId && (

@@ -32,7 +32,9 @@ import { useMatchNotifications } from '../hooks/useMatchNotifications';
 import { claimWorldTick, completeWorldDayTick } from '../lib/worldTick';
 import { getNextGameMidnight, getNextRealMidnight } from '../utils/worldSchedule';
 
-type Tab = 'home' | 'team' | 'calendar' | 'world' | 'career';
+// 'draft' e alcancavel pelo atalho do WorldTab (onTabChange('draft')) e renderiza
+// o DraftPanel em tela cheia. Nao tem item na navegacao inferior de proposito.
+type Tab = 'home' | 'team' | 'calendar' | 'world' | 'career' | 'draft';
 type TeamSubTab = 'squad' | 'lineup' | 'tactics' | 'training' | 'draft';
 
 export const Dashboard: React.FC = () => {
@@ -70,7 +72,10 @@ export const Dashboard: React.FC = () => {
     ? 'observer'
     : activeTab === 'team'
       ? `team-${activeTeamTab}` as OnboardingArea
-      : activeTab;
+      // O draft em tela cheia reaproveita a dica da sub-aba de draft.
+      : activeTab === 'draft'
+        ? 'team-draft'
+        : activeTab;
 
   useEffect(() => {
     if (!isDraftOpen && activeTeamTab === 'draft') {
@@ -119,11 +124,7 @@ export const Dashboard: React.FC = () => {
     day: '2-digit',
     month: '2-digit'
   }).replace('.', '')}`;
-  const headerTime = headerReferenceDate.toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-  const headerSeasonDay = state.world.currentDay < 0 ? 0 : (state.world.currentDay || 0) + 1;
+  const headerSeasonDay = state.world.currentDay < 0 ? 0 : (state.world.currentDay || 0);
 
   const { daysPassed, userTeamMatches, upcomingMatches, totalPoints, powerCap } = useDashboardData();
   useMatchNotifications(state, userTeam, upcomingMatches);
@@ -556,7 +557,7 @@ export const Dashboard: React.FC = () => {
       style={{ backgroundImage: `linear-gradient(to bottom, rgba(14, 15, 17, 0.38), rgba(14, 15, 17, 0.9)), url(${bgImage})` }}>
 
       {/* Background Glows */}
-      <div className="absolute top-0 left-1/4 w-[50%] h-[30] bg-[var(--district-norte)]/10 blur-[150px] pointer-events-none animate-pulse" />
+      <div className="absolute top-0 left-1/4 w-[50%] h-[30%] bg-[var(--district-norte)]/10 blur-[150px] pointer-events-none animate-pulse" />
       <div className="absolute bottom-0 right-1/4 w-[50%] h-[30%] bg-[var(--district-oeste)]/10 blur-[150px] pointer-events-none animate-pulse" />
 
       {/* Boxed Floating Glass Header */}
@@ -600,7 +601,7 @@ export const Dashboard: React.FC = () => {
 
           <div className="flex flex-col items-center sm:items-end flex-1 sm:flex-none">
             <div className="text-[8px] sm:text-[11px] font-black italic tabular-nums text-white leading-tight drop-shadow-md uppercase tracking-widest">
-              S{state.world.currentSeason || 1} • Dia {headerSeasonDay} • {headerClock} • {headerTime}
+              S{state.world.currentSeason || 1} - Dia {headerSeasonDay} - {headerClock}
             </div>
             <div className="mt-1 flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1">
               <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Score</span>
@@ -799,7 +800,10 @@ export const Dashboard: React.FC = () => {
             )}
             <tab.icon
               size={activeTab === tab.id ? 20 : 18}
-              className={`relative z-10 transition-all duration-300 sm:size-[${activeTab === tab.id ? 26 : 24}px] ${activeTab === tab.id ? 'drop-shadow-[0_0_12px_rgba(34,211,238,1)] scale-110' : 'group-hover:scale-110'}`}
+              // Tailwind faz varredura estatica do fonte: classe montada em template
+              // string (sm:size-[${...}px]) nunca chega a ser gerada no CSS. Precisa ser
+              // uma alternancia entre duas classes completas.
+              className={`relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'sm:size-[26px] drop-shadow-[0_0_12px_rgba(34,211,238,1)] scale-110' : 'sm:size-[24px] group-hover:scale-110'}`}
             />
             <span className={`text-[6px] sm:text-[9px] font-black tracking-[0.1em] sm:tracking-[0.2em] uppercase relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'opacity-100 translate-y-0' : 'opacity-40 translate-y-0.5 group-hover:opacity-100 group-hover:translate-y-0'}`}>
               {tab.label}
@@ -990,8 +994,8 @@ export const Dashboard: React.FC = () => {
 
               <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
                 {(() => {
-                  const hTeam = state.teams[liveMatch.homeTeamId || liveMatch.homeId];
-                  const aTeam = state.teams[liveMatch.awayTeamId || liveMatch.awayId];
+                  const hTeam = state.teams[liveMatch.homeTeamId];
+                  const aTeam = state.teams[liveMatch.awayTeamId];
 
                   if (!hTeam || !aTeam) return (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 uppercase font-black text-xs tracking-widest gap-4">

@@ -167,6 +167,11 @@ export const WorldSelector: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#050814] text-slate-300 font-sans flex flex-col items-center p-4 sm:p-6 relative overflow-hidden">
+      {isSyncing && (
+        <div className="fixed left-0 right-0 top-0 z-50 h-1 bg-white/10">
+          <div className="h-full w-1/2 animate-pulse rounded-r-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.8)]" />
+        </div>
+      )}
       {/* Background Decor */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-cyan-500/10 blur-[120px] rounded-full" />

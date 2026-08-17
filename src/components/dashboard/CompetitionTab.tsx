@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGame } from '../../store/GameContext';
-import { useDashboardData } from '../../hooks/useDashboardData';
+import { useDashboardData, MatchViewModel } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
 import { useTransfers } from '../../hooks/useTransfers';
 import { useTactics } from '../../hooks/useTactics';
@@ -13,11 +13,8 @@ import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
-import { Player } from '../../types';
-import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } = LucideIcons;
-
-
+import { Match, Player } from '../../types';
+import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save } from 'lucide-react';
 export const CompetitionTab = (props: any) => {
   const { state, setState } = useGame();
   const dashData = useDashboardData();
@@ -44,7 +41,14 @@ export const CompetitionTab = (props: any) => {
         if (match) match.revealed = true;
       });
       // Search in cups
-      const ecMatch = [...(newState.world.eliteCup.bracket.oitavas || []), ...(newState.world.eliteCup.bracket.quartas || []), ...(newState.world.eliteCup.bracket.semis || []), newState.world.eliteCup.bracket.final].find(m => m?.id === matchId);
+      const ecMatch = [
+        ...(newState.world.eliteCup.bracket.round1 || []),
+        ...((newState.world.eliteCup.bracket as any).oitavas || []),
+        ...(newState.world.eliteCup.bracket.quarters || []),
+        ...((newState.world.eliteCup.bracket as any).quartas || []),
+        ...(newState.world.eliteCup.bracket.semis || []),
+        newState.world.eliteCup.bracket.final
+      ].find(m => m?.id === matchId);
       if (ecMatch) ecMatch.revealed = true;
 
       const dcMatch = newState.world.districtCup.matches.find(m => m.id === matchId);
@@ -58,8 +62,66 @@ export const CompetitionTab = (props: any) => {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const isBeforeKickoff = state.world.status === 'LOBBY' && state.world.currentDay < 0;
 
+  const allWorldMatches = React.useMemo(() => {
+    const matches: MatchViewModel[] = [];
+
+    const pushMatch = (match: Match, type: string) => {
+      const homeTeam = state.teams[match.homeTeamId];
+      const awayTeam = state.teams[match.awayTeamId];
+      matches.push({
+        id: match.id,
+        round: match.round,
+        date: (match.date || state.world.currentDate).split('T')[0],
+        time: match.time || '16:00',
+        home: homeTeam?.name || 'Unknown',
+        away: awayTeam?.name || 'Unknown',
+        homeId: match.homeTeamId,
+        awayId: match.awayTeamId,
+        homeTeamId: match.homeTeamId,
+        awayTeamId: match.awayTeamId,
+        homeLogo: homeTeam?.logo,
+        awayLogo: awayTeam?.logo,
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        played: match.played,
+        revealed: match.revealed,
+        result: match.result,
+        type
+      });
+    };
+
+    Object.values(state.world.leagues || {}).forEach((league: any) => {
+      (league.matches || []).forEach((match: Match) => pushMatch(match, league.name || 'Liga'));
+    });
+
+    [
+      ...(state.world.eliteCup?.bracket?.round1 || []),
+      ...(state.world.eliteCup?.bracket?.quarters || []),
+      ...(state.world.eliteCup?.bracket?.semis || []),
+      ...(state.world.eliteCup?.bracket?.final ? [state.world.eliteCup.bracket.final] : [])
+    ].forEach(match => pushMatch(match, 'Copa Elite'));
+
+    [
+      ...(state.world.districtCup?.matches || []),
+      ...(state.world.districtCup?.final ? [state.world.districtCup.final] : [])
+    ].forEach(match => pushMatch(match, 'Copa Distritos'));
+
+    return matches.sort((a, b) => {
+      const dateCompare = `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`);
+      if (dateCompare !== 0) return dateCompare;
+      return a.id.localeCompare(b.id);
+    });
+  }, [state.teams, state.world]);
+
+  const nextScheduledMatch = upcomingMatches[0] || allWorldMatches.find(m => !m.played);
+  const featuredMatch = nextScheduledMatch || [...allWorldMatches].reverse().find(m => m.played) || allWorldMatches[0];
+  const userCampaignMatches = React.useMemo(() => {
+    if (!userTeam) return [];
+    return allWorldMatches.filter(match => match.homeId === userTeam.id || match.awayId === userTeam.id);
+  }, [allWorldMatches, userTeam]);
+
   React.useEffect(() => {
-    const nextMatch = upcomingMatches[0];
+    const nextMatch = nextScheduledMatch;
     if (!nextMatch) return;
 
     const timer = setInterval(() => {
@@ -89,13 +151,13 @@ export const CompetitionTab = (props: any) => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isBeforeKickoff, upcomingMatches, state.world.currentDate]);
+  }, [isBeforeKickoff, nextScheduledMatch, state.world.currentDate]);
 
   const calendarEvents = React.useMemo(() => {
     const events: any[] = [];
 
-    if (userTeamMatches) {
-      userTeamMatches.forEach(m => {
+    if (allWorldMatches.length > 0) {
+      allWorldMatches.forEach(m => {
         const matchDate = new Date(`${m.date}T${m.time}`);
 
         events.push({
@@ -107,7 +169,7 @@ export const CompetitionTab = (props: any) => {
         });
 
         // Generate news for played matches
-        if (m.played) {
+        if (userTeam && m.played && (m.homeId === userTeam.id || m.awayId === userTeam.id)) {
           const isRevealed = m.revealed !== false;
           const isWin = (m.homeId === userTeam?.id && m.homeScore > m.awayScore) ||
             (m.awayId === userTeam?.id && m.awayScore > m.homeScore);
@@ -135,20 +197,20 @@ export const CompetitionTab = (props: any) => {
     }
 
     return events.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [userTeamMatches, userTeam]);
+  }, [allWorldMatches, userTeam]);
 
-  const nextMatch = upcomingMatches[0];
-  if (!nextMatch) return (
+  if (!featuredMatch) return (
     <div className="h-64 flex flex-col items-center justify-center text-slate-500 gap-4">
       <Calendar size={48} className="opacity-20" />
       <span className="text-xs font-black uppercase tracking-widest italic">Nenhuma partida agendada</span>
     </div>
   );
 
-  const homeTeam = state.teams[nextMatch.homeId];
-  const awayTeam = state.teams[nextMatch.awayId];
+  const nextMatch = featuredMatch;
+  const homeTeam = state.teams[featuredMatch.homeId];
+  const awayTeam = state.teams[featuredMatch.awayId];
 
-  const matchDateTime = new Date(`${nextMatch.date}T${nextMatch.time}`);
+  const matchDateTime = new Date(`${featuredMatch.date}T${featuredMatch.time}`);
   const formattedDate = matchDateTime.toLocaleDateString('pt-BR', {
     weekday: 'short',
     day: '2-digit',
@@ -246,6 +308,52 @@ export const CompetitionTab = (props: any) => {
           </div>
         </div>
       </div>
+
+      {userTeam && userCampaignMatches.length > 0 && (
+        <div className="space-y-3 px-1 sm:px-0">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-white">
+              <Trophy size={14} className="text-yellow-300" />
+              Campanha
+            </h3>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/35">{userCampaignMatches.length} jogos</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+            {userCampaignMatches.map(match => {
+              const isHome = match.homeId === userTeam.id;
+              const opponentId = isHome ? match.awayId : match.homeId;
+              const opponent = state.teams[opponentId];
+              const userScore = isHome ? match.homeScore : match.awayScore;
+              const opponentScore = isHome ? match.awayScore : match.homeScore;
+              const result =
+                !match.played ? 'AGD' :
+                  userScore === opponentScore ? 'E' :
+                    (userScore || 0) > (opponentScore || 0) ? 'V' : 'D';
+              return (
+                <button
+                  key={`campaign-${match.id}`}
+                  type="button"
+                  onClick={() => match.played && setSelectedMatchReport(match)}
+                  className={`min-w-[150px] rounded-2xl border p-3 text-left transition ${match.played ? 'border-white/10 bg-black/35 hover:border-cyan-400/35' : 'border-cyan-400/25 bg-cyan-500/10'}`}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-white/35">
+                      {new Date(`${match.date}T${match.time}`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
+                    </span>
+                    <span className={`rounded-md px-1.5 py-0.5 text-[8px] font-black ${result === 'V' ? 'bg-emerald-400/20 text-emerald-200' : result === 'D' ? 'bg-red-400/20 text-red-200' : result === 'E' ? 'bg-yellow-400/20 text-yellow-100' : 'bg-cyan-400/20 text-cyan-100'}`}>
+                      {result}
+                    </span>
+                  </div>
+                  <p className="truncate text-[10px] font-black uppercase italic text-white">{opponent?.name || (isHome ? match.away : match.home)}</p>
+                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/35">
+                    {match.type} {match.played ? `${userScore}-${opponentScore}` : match.time}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Timeline Events Redesign */}
       <div className="space-y-4 sm:space-y-6 px-1 sm:px-0">
@@ -404,8 +512,8 @@ export const CompetitionTab = (props: any) => {
             <div className="pb-8">
               <PostGameReport
                 match={selectedMatchReport}
-                homeTeam={state.teams[selectedMatchReport.homeTeamId || selectedMatchReport.homeId]}
-                awayTeam={state.teams[selectedMatchReport.awayTeamId || selectedMatchReport.awayId]}
+                homeTeam={state.teams[selectedMatchReport.homeTeamId]}
+                awayTeam={state.teams[selectedMatchReport.awayTeamId]}
                 players={state.players}
                 onClose={() => setSelectedMatchReport(null)}
                 onReveal={handleRevealMatch}

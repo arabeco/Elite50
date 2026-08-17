@@ -99,13 +99,19 @@ const renderDashboard = (state: GameState) => render(
 describe('Dashboard click smoke', () => {
   it('lets the player move from Home to Draft, World and back without dead UI', async () => {
     const user = userEvent.setup();
-    renderDashboard(makeDraftWorld());
+    const { container } = renderDashboard(makeDraftWorld());
 
     const nav = screen.getByRole('navigation');
     const openedOnHome = !!screen.queryByText(/Monte seu elenco inicial/i);
 
     if (openedOnHome) {
       await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
+    }
+
+    const teamTabs = container.querySelector('[data-onboarding="team-mode-tabs"]');
+    const draftTab = teamTabs ? within(teamTabs as HTMLElement).queryByRole('button', { name: /Draft/i }) : null;
+    if (draftTab) {
+      await user.click(draftTab);
     }
 
     expect(await screen.findByRole('heading', { name: /DRAFT\s+GENESIS/i })).toBeInTheDocument();

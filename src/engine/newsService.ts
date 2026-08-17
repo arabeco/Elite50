@@ -61,6 +61,29 @@ export const newsHeadlines = {
             teamId: team.id
         });
     },
+    eliteCupWinner: (state: GameState, team: Team) => {
+        addNews(state, 'CAMPEAO DA COPA ELITE', `${team.name} conquista a Copa Elite e fecha o mata-mata no topo do mundo.`, 'CUP', 3, {
+            kind: 'TEAM_PROFILE',
+            season: state.world.currentSeason || 2050,
+            teamId: team.id
+        });
+    },
+    matchHighlight: (state: GameState, homeTeam: Team, awayTeam: Team, homeScore: number, awayScore: number, humanInvolved: boolean) => {
+        const winner = homeScore === awayScore ? null : homeScore > awayScore ? homeTeam : awayTeam;
+        const loser = homeScore === awayScore ? null : homeScore > awayScore ? awayTeam : homeTeam;
+        const margin = Math.abs(homeScore - awayScore);
+        const totalGoals = homeScore + awayScore;
+        const isBlowout = margin >= 3 || totalGoals >= 6;
+        const title = isBlowout ? 'PLACAR PESADO' : humanInvolved ? 'CLUBE HUMANO EM CAMPO' : 'JOGO-CHAVE';
+        const content = winner && loser
+            ? `${winner.name} bate ${loser.name} por ${Math.max(homeScore, awayScore)}-${Math.min(homeScore, awayScore)}.`
+            : `${homeTeam.name} e ${awayTeam.name} ficam no ${homeScore}-${awayScore}.`;
+        addNews(state, title, content, 'MATCH', isBlowout ? 3 : humanInvolved ? 2 : 1, {
+            kind: 'TEAM_PROFILE',
+            season: state.world.currentSeason || 2050,
+            teamId: winner?.id || homeTeam.id
+        });
+    },
     migration: (state: GameState, team: Team, newDist: District) => {
         void newDist;
         const title = 'PRESSAO DE TEMPORADA';

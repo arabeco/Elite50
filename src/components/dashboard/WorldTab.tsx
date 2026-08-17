@@ -13,13 +13,10 @@ import { WorldParticipantsPanel } from '../WorldParticipantsPanel';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
-import { Player, Team, GameNotification, ClubOffer } from '../../types';
+import { Player, Team, GameNotification, ClubOffer, Match } from '../../types';
 import { GENESIS_DRAFT_LAST_DAY } from '../../constants/gameConstants';
 import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
-import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } = LucideIcons;
-
-
+import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } from 'lucide-react';
 export const WorldTab = (props: any) => {
   const { state, setState } = useGame();
   const dashData = useDashboardData();
@@ -33,20 +30,35 @@ export const WorldTab = (props: any) => {
   // Local states for WorldTab
   const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
   const [worldTeamSubTab, setWorldTeamSubTab] = useState<'squad' | 'tactics'>('squad');
-  const [activeWorldTab, setActiveWorldTab] = useState<'news' | 'leagues' | 'market' | 'ranking' | 'teams'>('news');
+  const [activeWorldTab, setActiveWorldTab] = useState<'news' | 'leagues' | 'market' | 'ranking' | 'teams'>('leagues');
   const [activeLeague, setActiveLeague] = useState<string>('norte');
   const [activeCompetition, setActiveCompetition] = useState<'league' | 'elite' | 'district'>('league');
   const [activeLeagueTab, setActiveLeagueTab] = useState<'standings' | 'scorers' | 'all-teams'>('standings');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   React.useEffect(() => {
-    if (activeWorldTab === 'leagues') {
-      const keys = Object.keys(dashData.leaguesData || {});
-      if (keys.length > 0 && !keys.includes(activeLeague)) {
-        setActiveLeague(keys[0]);
-      }
+    if (activeWorldTab !== 'leagues') return;
+
+    const keys = Object.keys(dashData.leaguesData || {});
+    if (keys.length === 0) return;
+
+    const userLeagueKey = userTeam
+      ? keys.find(key => {
+        const league = (dashData.leaguesData as any)?.[key];
+        return (league?.standings || []).some((row: any) => row.teamId === userTeam.id)
+          || league?.id === userTeam.league
+          || key === userTeam.league;
+      })
+      : null;
+    const nextLeague = userLeagueKey || (keys.includes(activeLeague) ? activeLeague : keys[0]);
+
+    if (nextLeague !== activeLeague) {
+      setActiveLeague(nextLeague);
     }
-  }, [activeWorldTab, dashData.leaguesData, activeLeague]);
+    if (activeLeagueTab !== 'standings') {
+      setActiveLeagueTab('standings');
+    }
+  }, [activeWorldTab, dashData.leaguesData, activeLeague, activeLeagueTab, userTeam]);
 
   // Market filters
   const [marketSearch, setMarketSearch] = useState('');
@@ -218,6 +230,34 @@ export const WorldTab = (props: any) => {
     };
   });
 
+  const formatMatchDateLabel = (match?: Pick<Match, 'date' | 'time'> | null) => {
+    if (!match?.date) return 'Data a definir';
+    const date = new Date(`${match.date.split('T')[0]}T${match.time || '16:00'}`);
+    if (Number.isNaN(date.getTime())) return 'Data a definir';
+    return `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()} ${match.time || '16:00'}`;
+  };
+
+  const eliteCupMatches = [
+    ...(state.world.eliteCup?.bracket?.round1 || []),
+    ...(state.world.eliteCup?.bracket?.quarters || []),
+    ...(state.world.eliteCup?.bracket?.semis || []),
+    ...(state.world.eliteCup?.bracket?.final ? [state.world.eliteCup.bracket.final] : [])
+  ];
+  const eliteCupTeamIds = Array.from(new Set([
+    ...(state.world.eliteCup?.teams || []),
+    ...eliteCupMatches.flatMap(match => [match.homeTeamId, match.awayTeamId])
+  ].filter(Boolean)));
+  const eliteNextMatch = eliteCupMatches.find(match => !match.played) || null;
+  const districtCupMatches = [
+    ...(state.world.districtCup?.matches || []),
+    ...(state.world.districtCup?.final ? [state.world.districtCup.final] : [])
+  ];
+  const districtCupTeamIds = Array.from(new Set([
+    ...(state.world.districtCup?.teams || []),
+    ...districtCupMatches.flatMap(match => [match.homeTeamId, match.awayTeamId])
+  ].filter(Boolean)));
+  const districtNextMatch = districtCupMatches.find(match => !match.played) || null;
+
   if (selectedTeamView) {
     const team = state.teams[selectedTeamView];
     if (!team) return null;
@@ -370,8 +410,8 @@ export const WorldTab = (props: any) => {
       {/* Navigation Tabs */}
       <div data-onboarding="world-tabs" className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar py-2 px-1">
         {[
-          { id: 'news', icon: Newspaper, label: 'Notícias', color: 'purple' },
           { id: 'leagues', icon: Trophy, label: 'Ligas', color: 'emerald' },
+          { id: 'news', icon: Newspaper, label: 'Notícias', color: 'purple' },
           { id: 'market', icon: ShoppingCart, label: 'Mercado', color: 'orange' },
           { id: 'ranking', icon: Award, label: 'Ranking', color: 'cyan' },
           { id: 'teams', icon: Users, label: 'Clubes', color: 'fuchsia' },
@@ -510,9 +550,39 @@ export const WorldTab = (props: any) => {
       {activeWorldTab === 'leagues' && (() => {
         const activeLeagueData = leaguesData[activeLeague as keyof typeof leaguesData];
         if (!activeLeagueData) return <div className="text-center text-slate-500 p-10 font-black uppercase tracking-widest text-[10px] italic">Dados da liga indisponíveis.</div>;
+        const userStanding = userTeam
+          ? activeLeagueData.standings?.find((row: any) => row.teamId === userTeam.id)
+          : null;
 
         return (
           <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {userTeam && userStanding && activeCompetition === 'league' && (
+              <section className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-emerald-200">Sua liga agora</p>
+                    <h3 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">
+                      {activeLeagueData.name}
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Pos</p>
+                      <p className="text-lg font-black italic text-white">{userStanding.position}o</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Pts</p>
+                      <p className="text-lg font-black italic text-white">{userStanding.points}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
+                      <p className="text-[7px] font-black uppercase tracking-widest text-white/35">SG</p>
+                      <p className="text-lg font-black italic text-white">{userStanding.goalsFor - userStanding.goalsAgainst}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Seção de Copas com destaque horizontal */}
             <div className="grid grid-cols-2 gap-2 sm:gap-4 pb-2 px-1">
               <div
@@ -552,7 +622,7 @@ export const WorldTab = (props: any) => {
 
             {/* Seletor de Ligas Horizontal Compacto */}
             <div className="grid grid-cols-4 gap-1.5 sm:gap-3 pb-4 px-1">
-              {(Object.keys(leaguesData) as Array<keyof typeof leaguesData>).map((leagueKey) => {
+              {Object.keys(leaguesData).map((leagueKey) => {
                 const league = leaguesData[leagueKey];
                 if (!league) return null;
                 const isActive = activeLeague === leagueKey && activeCompetition === 'league';
@@ -849,6 +919,59 @@ export const WorldTab = (props: any) => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Times</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{eliteCupTeamIds.length || 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Jogos</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{eliteCupMatches.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Pendentes</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{eliteCupMatches.filter(match => !match.played).length}</p>
+                  </div>
+                  <div className="rounded-xl border border-yellow-400/20 bg-yellow-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">{eliteNextMatch ? 'Proximo' : 'Ultimo'}</p>
+                    <p className="mt-1 truncate text-sm font-black italic text-yellow-100">
+                      {formatMatchDateLabel(eliteNextMatch || [...eliteCupMatches].reverse().find(match => match.played))}
+                    </p>
+                  </div>
+                </div>
+
+                {eliteCupTeamIds.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto hide-scrollbar rounded-2xl border border-white/10 bg-black/25 p-2">
+                    {eliteCupTeamIds.map(teamId => {
+                      const team = state.teams[teamId];
+                      if (!team) return null;
+                      return (
+                        <button
+                          key={teamId}
+                          type="button"
+                          onClick={() => setSelectedTeamView(teamId)}
+                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-fuchsia-400/40"
+                        >
+                          <div className="h-6 w-6 shrink-0">
+                            {team.logo ? (
+                              <TeamLogo
+                                primaryColor={team.logo.primary}
+                                secondaryColor={team.logo.secondary}
+                                accentColor={team.logo.accent}
+                                shapeId={team.logo.shapeId}
+                                patternId={team.logo.patternId as any}
+                                symbolId={team.logo.symbolId}
+                                size={22}
+                              />
+                            ) : <Shield size={18} className="text-white/25" />}
+                          </div>
+                          <span className="max-w-[120px] truncate text-[9px] font-black uppercase italic text-white/70">{team.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 overflow-x-auto pb-6 hide-scrollbar">
                   {/* Round 1 */}
                   <div className="space-y-4 min-w-[280px]">
@@ -862,6 +985,7 @@ export const WorldTab = (props: any) => {
                         const aTeam = state.teams[match.awayTeamId];
                         return (
                           <div key={match.id} className="glass-card border-white/5 rounded-2xl p-4 transition-all hover:border-fuchsia-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -929,6 +1053,7 @@ export const WorldTab = (props: any) => {
                         const aTeam = state.teams[match.awayTeamId];
                         return (
                           <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-fuchsia-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-2 sm:mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -996,6 +1121,7 @@ export const WorldTab = (props: any) => {
                         const aTeam = state.teams[match.awayTeamId];
                         return (
                           <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-fuchsia-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-2 sm:mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -1063,6 +1189,7 @@ export const WorldTab = (props: any) => {
                       return (
                         <div className="bg-gradient-to-br from-fuchsia-900/40 to-black border border-yellow-500/50 rounded-xl sm:rounded-[2rem] p-4 sm:p-6 shadow-[0_0_30px_rgba(234,179,8,0.1)] relative overflow-hidden group">
                           <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <p className="relative z-10 mb-3 text-[8px] font-black uppercase tracking-widest text-yellow-100/65">{formatMatchDateLabel(state.world.eliteCup.bracket.final)}</p>
                           <div
                             onClick={() => setSelectedTeamView(state.world.eliteCup.bracket.final!.homeTeamId)}
                             className={`flex justify-between items-center mb-4 sm:mb-6 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all ${state.world.eliteCup.bracket.final.homeScore > state.world.eliteCup.bracket.final.awayScore ? 'text-yellow-400 font-bold' : 'text-white'}`}
@@ -1137,6 +1264,77 @@ export const WorldTab = (props: any) => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Selecoes</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{districtCupTeamIds.length || 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Jogos</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{districtCupMatches.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Pendentes</p>
+                    <p className="mt-1 text-xl font-black italic text-white">{districtCupMatches.filter(match => !match.played).length}</p>
+                  </div>
+                  <div className="rounded-xl border border-yellow-400/20 bg-yellow-500/10 p-3">
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/35">{districtNextMatch ? 'Proximo' : 'Ultimo'}</p>
+                    <p className="mt-1 truncate text-sm font-black italic text-yellow-100">
+                      {formatMatchDateLabel(districtNextMatch || [...districtCupMatches].reverse().find(match => match.played))}
+                    </p>
+                  </div>
+                </div>
+
+                {districtCupTeamIds.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto hide-scrollbar rounded-2xl border border-white/10 bg-black/25 p-2">
+                    {districtCupTeamIds.map(teamId => {
+                      const team = state.teams[teamId];
+                      return (
+                        <button
+                          key={teamId}
+                          type="button"
+                          onClick={() => team && setSelectedTeamView(teamId)}
+                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-cyan-400/40"
+                        >
+                          <Globe size={18} className="shrink-0 text-cyan-200/70" />
+                          <span className="max-w-[120px] truncate text-[9px] font-black uppercase italic text-white/70">{team?.name || teamId}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {((state.world.districtCup.managerInvites?.length || 0) > 0 || state.world.districtCup.round >= 1) && (
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {(['NORTE', 'SUL', 'LESTE', 'OESTE'] as const).map(district => {
+                      const assignmentId = state.world.districtCup.managerAssignments?.[district];
+                      const assignment = assignmentId ? state.managers[assignmentId] : null;
+                      const latestInvite = (state.world.districtCup.managerInvites || [])
+                        .filter(invite => invite.district === district)
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+                      return (
+                        <div key={district} className="rounded-2xl border border-white/10 bg-black/35 p-4">
+                          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Selecao {district}</p>
+                          <p className="mt-2 truncate text-sm font-black uppercase italic text-white">
+                            {assignment?.name || (latestInvite ? state.managers[latestInvite.managerId]?.name : 'A definir')}
+                          </p>
+                          <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/35">
+                            {assignment
+                              ? 'Tecnico confirmado'
+                              : latestInvite?.status === 'PENDING'
+                                ? 'Convite pendente'
+                                : latestInvite?.status === 'REJECTED'
+                                  ? 'Convite recusado'
+                                  : latestInvite?.status === 'EXPIRED'
+                                    ? 'Sem resposta'
+                                    : 'Ranking em aberto'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {state.world.districtCup.round >= 1 && (
                   <div className="bg-black/40 backdrop-blur-md border border-cyan-500/30 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(34,211,238,0.15)]">
                     <div className="overflow-x-auto">
@@ -1200,6 +1398,39 @@ export const WorldTab = (props: any) => {
                   </div>
                 )}
 
+                {state.world.districtCup.matches.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {state.world.districtCup.matches.map(match => {
+                      const home = state.teams[match.homeTeamId];
+                      const away = state.teams[match.awayTeamId];
+                      return (
+                        <div key={match.id} className="rounded-2xl border border-cyan-400/15 bg-black/35 p-3">
+                          <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-cyan-100/60">{formatMatchDateLabel(match)}</p>
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => home && setSelectedTeamView(match.homeTeamId)}
+                              className="min-w-0 flex-1 truncate text-left text-[10px] font-black uppercase italic text-white/75 hover:text-cyan-200"
+                            >
+                              {home?.name || match.homeTeamId}
+                            </button>
+                            <span className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-black italic text-white">
+                              {match.played ? `${match.homeScore}-${match.awayScore}` : 'VS'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => away && setSelectedTeamView(match.awayTeamId)}
+                              className="min-w-0 flex-1 truncate text-right text-[10px] font-black uppercase italic text-white/75 hover:text-cyan-200"
+                            >
+                              {away?.name || match.awayTeamId}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {(state.world.districtCup.final || state.world.districtCup.winnerId) && (
                   <div className="flex flex-col items-center py-6 sm:py-10 gap-4 sm:gap-8">
                     <h4 className="text-sm sm:text-lg font-black text-yellow-400 uppercase tracking-widest border-b border-yellow-500/30 pb-2">Grande Final</h4>
@@ -1214,8 +1445,8 @@ export const WorldTab = (props: any) => {
                           <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                           <div
-                            onClick={() => setSelectedTeamView(home.id)}
-                            className={`flex flex-col items-center gap-3 sm:gap-4 ${winnerId === home.id ? 'scale-110 transition-transform' : 'opacity-80'} relative z-10 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all`}
+                            onClick={() => home && setSelectedTeamView(home.id)}
+                            className={`flex flex-col items-center gap-3 sm:gap-4 ${winnerId === home?.id ? 'scale-110 transition-transform' : 'opacity-80'} relative z-10 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all`}
                           >
                             <div className={`w-16 h-16 sm:w-24 sm:h-24 rounded-full flex items-center justify-center border-4 ${winnerId === home.id ? 'border-yellow-400 bg-yellow-400/20 shadow-[0_0_20px_rgba(234,179,8,0.4)]' : 'border-white/5 bg-white/5'}`}>
                               {home?.logo ? (
@@ -1229,13 +1460,14 @@ export const WorldTab = (props: any) => {
                                   size={window.innerWidth < 640 ? 40 : 64}
                                 />
                               ) : (
-                                <Globe size={window.innerWidth < 640 ? 32 : 48} className={winnerId === home.id ? 'text-yellow-400' : 'text-slate-500'} />
+                              <Globe size={window.innerWidth < 640 ? 32 : 48} className={winnerId === home?.id ? 'text-yellow-400' : 'text-slate-500'} />
                               )}
                             </div>
-                            <span className={`font-black text-xs sm:text-xl uppercase italic tracking-tight ${winnerId === home.id ? 'text-yellow-400 neon-text-amber' : 'text-white'}`}>{home.name}</span>
+                            <span className={`font-black text-xs sm:text-xl uppercase italic tracking-tight ${winnerId === home?.id ? 'text-yellow-400 neon-text-amber' : 'text-white'}`}>{home?.name || match.homeTeamId}</span>
                           </div>
 
                           <div className="flex flex-col items-center gap-1 sm:gap-3 relative z-10">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-yellow-100/60">{formatMatchDateLabel(match)}</p>
                             <div className="text-4xl sm:text-7xl font-black text-white tracking-tighter flex gap-4 sm:gap-8 italic drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                               <span>{match.homeScore}</span>
                               <span className="text-white/10">:</span>
@@ -1247,8 +1479,8 @@ export const WorldTab = (props: any) => {
                           </div>
 
                           <div
-                            onClick={() => setSelectedTeamView(away.id)}
-                            className={`flex flex-col items-center gap-3 sm:gap-4 ${winnerId === away.id ? 'scale-110 transition-transform' : 'opacity-80'} relative z-10 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all`}
+                            onClick={() => away && setSelectedTeamView(away.id)}
+                            className={`flex flex-col items-center gap-3 sm:gap-4 ${winnerId === away?.id ? 'scale-110 transition-transform' : 'opacity-80'} relative z-10 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all`}
                           >
                             <div className={`w-16 h-16 sm:w-24 sm:h-24 rounded-full flex items-center justify-center border-4 ${winnerId === away.id ? 'border-yellow-400 bg-yellow-400/20 shadow-[0_0_20px_rgba(234,179,8,0.4)]' : 'border-white/5 bg-white/5'}`}>
                               {away?.logo ? (
@@ -1262,10 +1494,10 @@ export const WorldTab = (props: any) => {
                                   size={window.innerWidth < 640 ? 40 : 64}
                                 />
                               ) : (
-                                <Globe size={window.innerWidth < 640 ? 32 : 48} className={winnerId === away.id ? 'text-yellow-400' : 'text-slate-500'} />
+                              <Globe size={window.innerWidth < 640 ? 32 : 48} className={winnerId === away?.id ? 'text-yellow-400' : 'text-slate-500'} />
                               )}
                             </div>
-                            <span className={`font-black text-xs sm:text-xl uppercase italic tracking-tight ${winnerId === away.id ? 'text-yellow-400 neon-text-amber' : 'text-white'}`}>{away.name}</span>
+                            <span className={`font-black text-xs sm:text-xl uppercase italic tracking-tight ${winnerId === away?.id ? 'text-yellow-400 neon-text-amber' : 'text-white'}`}>{away?.name || match.awayTeamId}</span>
                           </div>
                         </div>
                       );
@@ -1435,6 +1667,38 @@ export const WorldTab = (props: any) => {
                 )}
               </div>
             </div>
+
+            {pendingTransferProposals.length > 0 && (
+              <section className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Clock size={15} className="text-amber-200" />
+                    <h3 className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-100">Propostas enviadas</h3>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-amber-100/55">proxima virada</span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {pendingTransferProposals.slice(0, 4).map(proposal => {
+                    const player = state.players[proposal.playerId];
+                    if (!player) return null;
+                    return (
+                      <button
+                        key={proposal.id}
+                        type="button"
+                        onClick={() => setSelectedPlayer(player)}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-left transition hover:border-amber-300/30 hover:bg-black/40"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[10px] font-black uppercase tracking-wide text-white">{player.nickname}</span>
+                          <span className="block text-[8px] font-bold uppercase tracking-widest text-white/40">{player.role} / {player.totalRating} score</span>
+                        </span>
+                        <span className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-amber-100">Pendente</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY && (
               <div className="glass-card-neon border-cyan-500/30 p-4 rounded-2xl flex items-center justify-between bg-cyan-500/5 group hover:bg-cyan-500/10 transition-all cursor-pointer mb-6"

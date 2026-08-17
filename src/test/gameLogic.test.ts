@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict, canTeamGainMatchProgression, getDraftInterestReport } from '../engine/gameLogic';
+import { calculateTeamPower, advanceGameDay, startNewSeason, resolveDraftConflict, canTeamGainMatchProgression, getDraftInterestReport, simulateAndRecordMatch } from '../engine/gameLogic';
 import { generateInitialState } from '../engine/generator';
 import { Team, Player, GameState } from '../types';
 
@@ -233,6 +233,30 @@ describe('gameLogic', () => {
         expect(canTeamGainMatchProgression(state, 't_31')).toBe(true);
         expect(canTeamGainMatchProgression(state, 't_32')).toBe(false);
         expect(canTeamGainMatchProgression(state, 't_1')).toBe(true);
+    });
+
+    it('persists an automatic lineup before simulating a team with empty starters', () => {
+        const state = generateInitialState();
+        const homeTeam = state.teams.t_1;
+        const awayTeam = state.teams.t_2;
+        homeTeam.lineup = {};
+        awayTeam.lineup = {};
+
+        simulateAndRecordMatch(state, {
+            id: 'lineup_auto_match',
+            round: 1,
+            homeTeamId: homeTeam.id,
+            awayTeamId: awayTeam.id,
+            date: state.world.currentDate,
+            played: false,
+        } as any, null);
+
+        expect(Object.values(homeTeam.lineup || {}).filter(Boolean)).toHaveLength(11);
+        expect(Object.values(awayTeam.lineup || {}).filter(Boolean)).toHaveLength(11);
+        expect(homeTeam.lineup.GOL).toBeTruthy();
+        expect(Object.keys(homeTeam.lineup).filter(slot => slot.startsWith('ZAG'))).toHaveLength(4);
+        expect(Object.keys(homeTeam.lineup).filter(slot => slot.startsWith('MEI'))).toHaveLength(3);
+        expect(Object.keys(homeTeam.lineup).filter(slot => slot.startsWith('ATA'))).toHaveLength(3);
     });
 
     it('promotes queued club applications when the offseason window opens', () => {

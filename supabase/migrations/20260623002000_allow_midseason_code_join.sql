@@ -1,6 +1,5 @@
--- Harden legacy JSON world joins.
--- The app still uses public.games as the multiplayer source of truth, so code joins
--- must reject worlds whose lobby/draft window is already closed.
+-- Allow code joins after kickoff when the world permits midseason takeover.
+-- The new participant enters as an observer, then can claim/request a free NPC club.
 
 create or replace function public.join_world_by_code(p_join_code text)
 returns text

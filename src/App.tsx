@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { GameProvider, useGame } from './store/GameContext';
 import { Dashboard } from './components/Dashboard';
@@ -13,6 +13,13 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/ToastContainer';
 import { supabase } from './lib/supabase';
 import { isCapacitorNativeRuntime, isNativeAuthCallbackUrl, parseNativeAuthCallback } from './lib/nativeAuth';
+
+// Ferramenta interna de preview do motor 2D. Era importada estaticamente, entao ela
+// e todo o match2DPlayEngine viajavam no bundle inicial de todo jogador, apesar de so
+// serem alcancaveis pela rota /match2d-preview.
+const Match2DPreview = lazy(() =>
+  import('./dev/Match2DPreview').then(module => ({ default: module.Match2DPreview }))
+);
 
 function AppContent() {
   const { isAuthenticated, worldId } = useGame();
@@ -104,6 +111,16 @@ function AppContent() {
 }
 
 export default function App() {
+  if (window.location.pathname === '/match2d-preview') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          <Match2DPreview />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <BrowserRouter>

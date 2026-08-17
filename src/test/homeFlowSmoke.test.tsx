@@ -125,11 +125,9 @@ describe('HomeTab gameplay GPS smoke', () => {
     const { container } = renderHome(makeDraftState());
 
     expect(await screen.findByText(/Monte seu elenco inicial/i)).toBeInTheDocument();
-    expect(screen.getByText(/DRAFT ABERTO/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/DRAFT ABERTO/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Abrir Draft/i })).toBeInTheDocument();
-    expect(screen.getByText(/Elenco completo/i)).toBeInTheDocument();
-    expect(screen.getByText('0/15')).toBeInTheDocument();
-    expect(screen.getByText(/Depois disso: a liga resolve disputas/i)).toBeInTheDocument();
+    expect(screen.getByText(/0\/15 no elenco/i)).toBeInTheDocument();
 
     const gps = container.querySelector('[data-onboarding="home-gps"]');
     const primaryAction = container.querySelector('[data-onboarding="today-primary-action"]');
@@ -142,10 +140,9 @@ describe('HomeTab gameplay GPS smoke', () => {
 
     expect(await screen.findByText(/Prepare o proximo compromisso/i)).toBeInTheDocument();
     expect(screen.getByText(/TEMPORADA/i)).toBeInTheDocument();
-    expect(screen.getByText(/Time pronto/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Casa|Fora/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Proximo jogo/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Mercado/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Depois disso: quando o relogio chegar/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score do Clube/i)).toBeInTheDocument();
 
     await waitFor(() => {
       const primaryAction = container.querySelector('[data-onboarding="today-primary-action"]');

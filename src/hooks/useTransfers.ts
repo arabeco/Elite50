@@ -1,14 +1,13 @@
 ﻿import { useGame, useGameDispatch } from '../store/GameContext';
 import { Player, GameNotification } from '../types';
 import { supabase } from '../lib/supabase';
-import { advanceGameDay, submitProposals, cancelDraftProposal, getDraftInterestReport } from '../engine/gameLogic';
+import { submitProposals, cancelDraftProposal, getDraftInterestReport } from '../engine/gameLogic';
 import { GENESIS_DRAFT_LAST_DAY, SQUAD_SIZE_MAX } from '../constants/gameConstants';
-import { calculateTradeAcceptanceChance } from '../engine/economyLogic';
 import { addNews } from '../engine/newsService';
 import { releasePlayerBootToInventory } from '../utils/store';
 
 export const useTransfers = (userTeamId: string | null, totalPoints: number, powerCap: number) => {
-    const { state, setState, isOnline } = useGame();
+    const { state, setState, saveGame, isOnline } = useGame();
     const { addToast, requestConfirm } = useGameDispatch();
 
     const handleMakeProposal = async (player: Player) => {
@@ -119,12 +118,14 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                         date: state.world.currentDate
                     };
 
-                    setState(prev => ({
-                        ...prev,
-                        transferProposals: [newProposal, ...(prev.transferProposals || [])]
-                    }));
+                    const nextState = {
+                        ...state,
+                        transferProposals: [newProposal, ...(state.transferProposals || [])]
+                    };
 
-                    addToast(`${player.nickname} entrou na sua fila. A resposta vem na proxima virada.`, 'success');
+                    setState(nextState);
+                    await saveGame(nextState);
+                    addToast(`Proposta enviada para ${player.nickname}. Resposta na proxima virada.`, 'success');
                 } catch (error) {
                     console.error('Erro na transferÃªncia:', error);
                     addToast('Erro ao processar transferÃªncia.', 'error');
@@ -217,16 +218,10 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     return newState;
                 });
 
-                if (isOnline) {
-                    const { data } = await supabase.auth.getUser();
-                    // Optional: update transfer history or player status in DB
-                    await supabase.from('notifications').insert({
-                        user_id: data.user?.id,
-                        title: newNotification.title,
-                        message: newNotification.message,
-                        type: newNotification.type
-                    });
-                }
+                // Aqui existia um insert em `public.notifications`, tabela que nao existe
+                // em nenhuma migration. O retorno nunca era verificado, entao toda dispensa
+                // disparava um POST que falhava em silencio. As notificacoes do jogador ja
+                // sao persistidas na coluna `notifications` de `public.games`, via saveGame.
 
                 addToast(`${player.nickname} foi dispensado do elenco.`, 'success');
             } catch (error) {
@@ -252,6 +247,17 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
 
         if (!targetTeamId) {
             addToast('O jogador solicitado nÃ£o pertence a nenhum time!', 'error');
+            return;
+        }
+
+        const alreadyPending = (state.tradeOffers || []).some(offer =>
+            offer.status === 'PENDING' &&
+            offer.fromTeamId === userTeam.id &&
+            offer.toTeamId === targetTeamId &&
+            offer.requestedPlayerId === requestedPlayerId
+        );
+        if (alreadyPending) {
+            addToast(`${requestedPlayer.nickname} ja tem uma troca pendente. A resposta vem na proxima virada.`, 'warning');
             return;
         }
 
@@ -307,58 +313,14 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     date: state.world.currentDate
                 };
 
-                setState(prev => ({
-                    ...prev,
-                    tradeOffers: [newOffer, ...(prev.tradeOffers || [])]
-                }));
+                const nextState = {
+                    ...state,
+                    tradeOffers: [newOffer, ...(state.tradeOffers || [])]
+                };
 
-                // Simple AI logic for trade response
-                const acceptanceChance = calculateTradeAcceptanceChance(offeredPlayer, requestedPlayer);
-
-                if (Math.random() < acceptanceChance) {
-                    addToast(`O ${state.teams[targetTeamId].name} aceitou a proposta! A troca foi efetuada.`, 'success');
-                    setState(prev => {
-                        const newState = releasePlayerBootToInventory({ ...prev }, offeredPlayerId);
-                        const myTeam = newState.teams[userTeam.id];
-                        const aiTeam = newState.teams[targetTeamId];
-
-                        myTeam.squad = myTeam.squad.filter(id => id !== offeredPlayerId);
-                        myTeam.squad.push(requestedPlayerId);
-                        aiTeam.squad = aiTeam.squad.filter(id => id !== requestedPlayerId);
-                        aiTeam.squad.push(offeredPlayerId);
-
-                        newState.players[requestedPlayerId].contract.teamId = userTeam.id;
-                        newState.players[offeredPlayerId].contract.teamId = targetTeamId;
-                        addNews(
-                            newState,
-                            'TROCA CONFIRMADA',
-                            `${userTeam.name} recebeu ${requestedPlayer.nickname}; ${state.teams[targetTeamId].name} ficou com ${offeredPlayer.nickname}.`,
-                            'TRANSFER',
-                            2,
-                            {
-                                kind: 'PLAYER_PROFILE',
-                                season: newState.world.currentSeason || 2050,
-                                playerId: requestedPlayer.id,
-                                teamId: userTeam.id
-                            }
-                        );
-
-                        if (newState.tradeOffers && newState.tradeOffers.length > 0) {
-                            newState.tradeOffers[0].status = 'ACCEPTED';
-                        }
-
-                        return newState;
-                    });
-                } else {
-                    addToast(`O ${state.teams[targetTeamId].name} recusou a troca.`, 'error');
-                    setState(prev => {
-                        const newState = { ...prev };
-                        if (newState.tradeOffers && newState.tradeOffers.length > 0) {
-                            newState.tradeOffers[0].status = 'DECLINED';
-                        }
-                        return newState;
-                    });
-                }
+                setState(nextState);
+                await saveGame(nextState);
+                addToast(`Troca enviada ao ${state.teams[targetTeamId].name}. A resposta vem na proxima virada.`, 'success');
             }
         }
     };

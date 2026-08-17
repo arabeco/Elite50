@@ -2,9 +2,10 @@ import React, { createContext, useContext, useReducer, useEffect, ReactNode, use
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
 import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
-import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, listSavedWorlds, loadGameState as loadLocalGameState, loadStoredWorldEnvelope, saveGameState as saveLocalGameState } from '../engine/persistence';
+import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, getSavedWorldSummary, listSavedWorlds, loadGameState as loadLocalGameState, saveGameState as saveLocalGameState } from '../engine/persistence';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 import { advanceGameDay, isJoinWindowOpen } from '../engine/gameLogic';
+import { respondDistrictCupManagerInvite } from '../engine/districtCupLogic';
 import { addNews } from '../engine/newsService';
 import { loadManagerProfileMeta, loadMetaStoreSnapshot } from '../lib/metaStore';
 import { buildWorldDayTickKey, claimWorldTick, commitWorldTickState, completeWorldDayTick } from '../lib/worldTick';
@@ -12,6 +13,20 @@ import { getStoreState } from '../utils/store';
 import { STORE_ITEMS_BY_ID } from '../constants/storeCatalog';
 import { applyManagerProfileMeta } from '../utils/managerProfile';
 import { getNextGameMidnight, isKickoffDue } from '../utils/worldSchedule';
+import { getMarketFeedback } from '../utils/marketFeedback';
+
+/**
+ * Janela de agrupamento do autosave. Ver comentario extenso no efeito de auto-save:
+ * cada save do criador custa (participantes online) x ~1,5 MB de egress.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 15000;
+
+/**
+ * Intervalo minimo entre duas recargas completas disparadas por realtime.
+ * Um WORLD_UPDATED faz o cliente baixar o mundo inteiro; sem este piso, uma rajada
+ * de saves do criador vira uma rajada de downloads de ~1,5 MB em cada participante.
+ */
+const REALTIME_RELOAD_MIN_INTERVAL_MS = 20000;
 
 interface GameStateValue {
   state: GameState;
@@ -49,6 +64,7 @@ interface GameDispatchValue {
   claimTeam: (teamId: string, managerName?: string) => Promise<void>;
   submitClubApplication: (teamId: string, managerName?: string) => Promise<void>;
   respondToClubOffer: (offerId: string, accept: boolean, managerName?: string) => Promise<void>;
+  respondToDistrictCupInvite: (inviteId: string, accept: boolean) => Promise<void>;
   resignFromTeam: () => Promise<void>;
   setIsAuthenticated: (val: boolean) => void;
   setWorldId: (id: string | null) => void;
@@ -122,6 +138,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   } | null>(null);
   const latestStateRef = useRef(state);
   const clockTickInFlightRef = useRef(false);
+  const hasAutoRestoredWorldRef = useRef(false);
+  const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRealtimeReloadAtRef = useRef(0);
+  const marketSnapshotRef = useRef<GameState | null>(null);
 
   const setState = useCallback((payload: GameState | ((prev: GameState) => GameState)) => {
     dispatch({ type: 'SET_STATE', payload });
@@ -264,6 +284,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  useEffect(() => {
+    const previous = marketSnapshotRef.current;
+    if (previous) {
+      getMarketFeedback(previous, state).forEach(feedback => addToast(feedback.message, feedback.type));
+    }
+    marketSnapshotRef.current = state;
+  }, [addToast, state]);
+
   const resolveConfirm = useCallback((confirmed: boolean) => {
     confirmResolverRef.current?.(confirmed);
     confirmResolverRef.current = null;
@@ -373,17 +401,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setWorlds(listSavedWorlds());
     setIsSyncing(true);
     try {
-      console.log('GM: Persistindo estado no Supabase...', {
-        world_id: targetWorldId,
-        currentDate: stateToSave.world.currentDate,
-        matchesCount: Object.values(stateToSave.world.leagues).reduce((acc, l: any) => acc + (l.matches?.length || 0), 0)
-      });
+      // Nao logar aqui: alem do ruido, a mensagem antiga percorria todas as ligas
+      // com um reduce so para montar o texto, a cada save.
       await saveGameState(stateToSave, targetWorldId);
       saveLocalGameState(stateToSave, targetWorldId, userId || 'local', {
         isLocalOnly: false
       });
       setWorlds(listSavedWorlds());
-      console.log('Game saved successfully');
       setIsOnline(true);
     } catch (error) {
       console.error('Failed to save game', error);
@@ -703,6 +727,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addToast(`Contrato assinado com ${team.name}.`, 'success');
   }, [addToast, buildUserManager, saveGame, setState, state, userId, worldId]);
 
+  const respondToDistrictCupInvite = useCallback(async (inviteId: string, accept: boolean) => {
+    const nextState = respondDistrictCupManagerInvite({ ...state }, inviteId, accept);
+    const invite = nextState.world.districtCup.managerInvites?.find(item => item.id === inviteId);
+
+    setState(nextState);
+    await saveGame(nextState);
+
+    addToast(
+      accept
+        ? `Voce aceitou comandar a Selecao ${invite?.district || ''}.`
+        : `Convite da Selecao ${invite?.district || ''} recusado.`,
+      accept ? 'success' : 'info'
+    );
+  }, [addToast, saveGame, setState, state]);
+
   const resignFromTeam = useCallback(async () => {
     if (!worldId) {
       addToast('Entre em um mundo antes de sair do clube', 'warning');
@@ -735,15 +774,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setIsSyncing(true);
     try {
+      const localSummary = getSavedWorldSummary(idToLoad);
+      const remoteSummary = worlds.find(world => world.id === idToLoad);
+      const localUpdatedAt = localSummary ? new Date(localSummary.updatedAt).getTime() : 0;
+      const remoteUpdatedAt = remoteSummary ? new Date(remoteSummary.updatedAt).getTime() : 0;
+
       const loadedState = await loadGameState(idToLoad);
-      const localEnvelope = loadStoredWorldEnvelope(idToLoad);
-      const remoteWorldSummary = worlds.find(world => world.id === idToLoad) || null;
-      const shouldPreferLocalCache = !!(
-        localEnvelope &&
-        (!remoteWorldSummary ||
-          new Date(localEnvelope.updatedAt).getTime() > new Date(remoteWorldSummary.updatedAt).getTime())
-      );
-      const preferredState = shouldPreferLocalCache ? localEnvelope?.state || null : loadedState;
+      const preferredState = loadedState;
+
+      if (localSummary && remoteSummary && localUpdatedAt > remoteUpdatedAt && applyLocalHydration(idToLoad)) {
+        setIsOnline(true);
+        addToast('Cache local mais recente restaurado.', 'info');
+        return;
+      }
 
       if (preferredState) {
         // Deep comparison to avoid unnecessary state updates and potential world regeneration
@@ -827,17 +870,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           const hydratedState = await hydrateStoreFromMeta(preferredState);
+          const currentSnapshot = latestStateRef.current;
+          marketSnapshotRef.current = currentSnapshot.worldId === idToLoad
+            ? currentSnapshot
+            : (loadLocalGameState(idToLoad) || currentSnapshot);
           setIsInitialLoad(true);
           setState(hydratedState);
           setWorldId(idToLoad);
           console.log('Game loaded successfully');
           setIsOnline(true);
-          addToast(
-            shouldPreferLocalCache
-              ? 'Cache local mais recente restaurado'
-              : 'Mundo carregado com sucesso',
-            shouldPreferLocalCache ? 'info' : 'success'
-          );
+          addToast('Mundo carregado com relogio do servidor', 'success');
         } else if (applyLocalHydration(idToLoad)) {
           addToast('Mundo carregado do cache local', 'info');
         } else {
@@ -858,19 +900,34 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [worldId, worlds, setState, addToast, state.world.currentDate, state.world.status, state.teams, state.players, applyLocalHydration, hydrateStoreFromMeta]);
 
-  // Auto-save logic
+  useEffect(() => {
+    if (worldId || isSyncing || worlds.length === 0 || hasAutoRestoredWorldRef.current) return;
+
+    const lastWorldId = getLastSavedWorldId();
+    const preferredWorld = (lastWorldId && worlds.find(world => world.id === lastWorldId)) || worlds[0];
+    if (!preferredWorld?.id) return;
+
+    hasAutoRestoredWorldRef.current = true;
+    loadGame(preferredWorld.id);
+  }, [worldId, isSyncing, worlds, loadGame]);
+
+  // Auto-save (debounce).
+  //
+  // CUSTO DE EGRESS: cada save do criador que altera world_state/teams_data/players_data
+  // dispara o trigger emit_world_event_after_game_change, que insere um WORLD_UPDATED em
+  // public.world_events. Todo participante online reage a esse evento recarregando o mundo
+  // inteiro (~1,5 MB). Ou seja: 1 save do criador = N participantes x 1,5 MB de egress.
+  //
+  // Por isso a janela e larga de proposito. Ela agrupa varias alteracoes seguidas
+  // (treino, tatica, escalacao) em um unico save/evento. Nao reduza sem medir.
+  // A perda em caso de crash e coberta pelo cache local (saveLocalGameState, sincrono)
+  // e pelo flush em pagehide/visibilitychange logo abaixo.
   useEffect(() => {
     if (isInitialLoad || !worldId) return;
 
-    // We only want to auto-save when "static" state changes (lineup, tactics, etc.)
-    // OR periodically if the clock is running.
-    // To avoid resetting the timer on every clock tick (every second), 
-    // we use a deep comparison or just a separate periodic timer.
-
     const timer = setTimeout(() => {
-      console.log('GameContext: Auto-save triggered by state change...');
       saveGame();
-    }, 5000); // Reduced to 5s for better responsiveness during testing
+    }, AUTOSAVE_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
   }, [
@@ -887,16 +944,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     saveGame
   ]);
 
-  // Separate periodic save for world state (currentDate, leagues/matches)
-  useEffect(() => {
-    if (isInitialLoad || !worldId || isPaused) return;
-
-    const periodicTimer = setInterval(() => {
-      saveGame();
-    }, 60000); // Save every minute while playing
-
-    return () => clearInterval(periodicTimer);
-  }, [worldId, isInitialLoad, isPaused, saveGame]);
+  // NOTA: aqui existia um setInterval de 60s que re-salvava o estado inteiro mesmo
+  // sem nenhuma mudanca — ~1,5 MB de players_data regravados por minuto, e um evento
+  // realtime a cada vez que algo tivesse mudado. Alem disso ele dependia de `saveGame`,
+  // que e recriado a cada mudanca de estado, entao o intervalo se reiniciava sem parar
+  // e frequentemente nunca chegava a disparar. O debounce acima ja cobre o caso real.
 
   useEffect(() => {
     if (isInitialLoad || !worldId) return;
@@ -933,52 +985,72 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .sort()
         .join('|');
 
-    const channel = subscribeToWorld(worldId, async () => {
-      try {
-        const loaded = await loadGameState(worldId);
-        if (!loaded) return;
+    const channel = subscribeToWorld(worldId, (event) => {
+      const current = latestStateRef.current;
+      const shouldRefresh =
+        event.event_type === 'WORLD_UPDATED'
+        || (event.event_type === 'PARTICIPANT_UPDATED' && current.isCreator);
 
-        const previousParticipants = state.participants || [];
-        const previousSignature = participantSignature(previousParticipants);
-        const nextSignature = participantSignature(loaded.participants || []);
-        const participantsChanged = previousSignature !== nextSignature;
-        const previousByUser = new Map(previousParticipants.map(participant => [participant.userId, participant]));
-        const newestParticipant = (loaded.participants || []).find(participant => !previousByUser.has(participant.userId));
-        const changedParticipant = newestParticipant || (loaded.participants || []).find(participant => {
-          const previous = previousByUser.get(participant.userId);
-          return previous && (previous.teamId !== participant.teamId || previous.managerId !== participant.managerId);
-        });
+      if (!shouldRefresh || event.actor_user_id === userId) return;
 
-        if (participantsChanged && state.isCreator) {
-          const team = changedParticipant?.teamId ? loaded.teams[changedParticipant.teamId] : null;
-          const manager = changedParticipant?.managerId ? loaded.managers[changedParticipant.managerId] : null;
-          const humanCount = (loaded.participants || []).filter(participant => participant.teamId).length;
-          const title = team ? 'Jogador entrou no mundo' : 'Observador entrou no mundo';
-          const message = `${manager?.name || 'Novo jogador'} entrou${team ? ` com ${team.name}` : ' como observador'}. Humanos no mundo: ${humanCount}.`;
-          loaded.notifications = [
-            {
-              id: `participant_${changedParticipant?.userId || Date.now()}_${Date.now()}`,
-              date: loaded.world.currentDate,
-              title,
-              message,
-              type: 'info' as const,
-              read: false
-            },
-            ...(loaded.notifications || []),
-          ].slice(0, 80);
-          addToast(
-            message,
-            'info'
-          );
-        }
-
-        if (!state.isCreator || participantsChanged) {
-          console.log('GameContext: Realtime world update received, refreshing local state.');
-          setState(loaded);
-        }
-      } catch (e) {
-        console.error('Realtime sync error:', e);
+      if (realtimeReloadTimerRef.current) {
+        clearTimeout(realtimeReloadTimerRef.current);
       }
+
+      // Agrupa rajadas: eventos que chegam enquanto o timer esta pendente sao
+      // absorvidos (o clearTimeout acima descarta o agendamento anterior), e o piso
+      // abaixo garante no maximo uma recarga completa por REALTIME_RELOAD_MIN_INTERVAL_MS.
+      // Sem isso, um criador jogando ativamente faz cada participante baixar ~1,5 MB
+      // a cada acao dele.
+      const sinceLastReload = Date.now() - lastRealtimeReloadAtRef.current;
+      const reloadDelay = Math.max(1500, REALTIME_RELOAD_MIN_INTERVAL_MS - sinceLastReload);
+
+      realtimeReloadTimerRef.current = setTimeout(async () => {
+        try {
+          lastRealtimeReloadAtRef.current = Date.now();
+          const beforeRefresh = latestStateRef.current;
+          const loaded = await loadGameState(worldId);
+          if (!loaded) return;
+
+          const previousParticipants = beforeRefresh.participants || [];
+          const previousSignature = participantSignature(previousParticipants);
+          const nextSignature = participantSignature(loaded.participants || []);
+          const participantsChanged = previousSignature !== nextSignature;
+          const previousByUser = new Map(previousParticipants.map(participant => [participant.userId, participant]));
+          const newestParticipant = (loaded.participants || []).find(participant => !previousByUser.has(participant.userId));
+          const changedParticipant = newestParticipant || (loaded.participants || []).find(participant => {
+            const previous = previousByUser.get(participant.userId);
+            return previous && (previous.teamId !== participant.teamId || previous.managerId !== participant.managerId);
+          });
+
+          if (participantsChanged && beforeRefresh.isCreator) {
+            const team = changedParticipant?.teamId ? loaded.teams[changedParticipant.teamId] : null;
+            const manager = changedParticipant?.managerId ? loaded.managers[changedParticipant.managerId] : null;
+            const humanCount = (loaded.participants || []).filter(participant => participant.teamId).length;
+            const title = team ? 'Jogador entrou no mundo' : 'Observador entrou no mundo';
+            const message = `${manager?.name || 'Novo jogador'} entrou${team ? ` com ${team.name}` : ' como observador'}. Humanos no mundo: ${humanCount}.`;
+            loaded.notifications = [
+              {
+                id: `participant_${changedParticipant?.userId || Date.now()}_${Date.now()}`,
+                date: loaded.world.currentDate,
+                title,
+                message,
+                type: 'info' as const,
+                read: false
+              },
+              ...(loaded.notifications || []),
+            ].slice(0, 80);
+            addToast(message, 'info');
+          }
+
+          if (!beforeRefresh.isCreator || participantsChanged || event.event_type === 'WORLD_UPDATED') {
+            console.log('GameContext: World event received, refreshing local state.');
+            setState(loaded);
+          }
+        } catch (e) {
+          console.error('Realtime sync error:', e);
+        }
+      }, reloadDelay);
     });
 
     const buildDateKey = (date: Date) =>
@@ -1077,16 +1149,30 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
-    // --- Main Clock (1s interval) ---
+    if (isAuthenticated) {
+      return () => {
+        if (realtimeReloadTimerRef.current) {
+          clearTimeout(realtimeReloadTimerRef.current);
+          realtimeReloadTimerRef.current = null;
+        }
+        if (channel) supabase.removeChannel(channel);
+      };
+    }
+
+    // --- Local/dev fallback clock (remote worlds use the server clock runner) ---
     const interval = setInterval(() => {
       processDueClockTick();
     }, 1000);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (realtimeReloadTimerRef.current) {
+        clearTimeout(realtimeReloadTimerRef.current);
+        realtimeReloadTimerRef.current = null;
+      }
+      if (channel) supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [addToast, isPaused, isInitialLoad, worldId, setState, getAcceleratedGameDate, saveGame, state.isCreator, state.participants]);
+  }, [addToast, isPaused, isInitialLoad, worldId, setState, getAcceleratedGameDate, isAuthenticated, userId]);
 
   const togglePause = useCallback(() => setIsPaused(prev => !prev), []);
 
@@ -1146,9 +1232,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     claimTeam,
     submitClubApplication,
     respondToClubOffer,
+    respondToDistrictCupInvite,
     resignFromTeam,
     setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, requestConfirm, togglePause
-  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, submitClubApplication, respondToClubOffer, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, requestConfirm, togglePause]);
+  }), [setState, saveGame, loadGame, joinGame, joinGameByCode, claimTeam, submitClubApplication, respondToClubOffer, respondToDistrictCupInvite, resignFromTeam, setIsAuthenticated, setWorldId, logout, leaveWorld, deleteWorld, refreshWorlds, addToast, removeToast, requestConfirm, togglePause]);
 
   return (
     <GameDispatchContext.Provider value={dispatchValue}>

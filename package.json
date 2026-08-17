@@ -21,7 +21,6 @@
     "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "^8.3.4",
     "@capacitor/local-notifications": "^8.2.0",
-    "@google/genai": "^1.29.0",
     "@supabase/supabase-js": "^2.97.0",
     "lucide-react": "^0.546.0",
     "mobile-drag-drop": "^3.0.0-rc.0",

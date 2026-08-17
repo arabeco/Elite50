@@ -33,8 +33,46 @@ import { cancelScheduledMatchNotification, requestMatchNotificationPermission } 
 import { deleteCurrentAccount, loadMetaStoreSnapshot, purchaseCatalogItemWithBalance, syncManagerProfileMeta, updateProfileDisplaySlots, verifyGooglePlayPurchase, type MetaStoreSnapshot } from '../../lib/metaStore';
 import { canUseDevBillingPreview, formatBrl, getBillingReadinessCopy, getCheckoutChannelLabel, getNativeProductId, startNativeProductPurchase } from '../../lib/billing';
 import { buildManagerProfilePayload } from '../../utils/managerProfile';
-import * as LucideIcons from 'lucide-react';
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy, Coins, Trash2 } = LucideIcons;
+import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Play, Copy, Coins, Trash2 } from 'lucide-react';
+const CurrencyBadge = ({ kind, value, compact = false }: { kind: 'GOLD' | 'FRAGMENT'; value: number | string; compact?: boolean }) => {
+  const isGold = kind === 'GOLD';
+  return (
+    <span
+      title={isGold ? 'Ouro' : 'Fragmentos'}
+      aria-label={`${value} ${isGold ? 'ouro' : 'fragmentos'}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-black ${
+        compact ? 'text-[8px]' : 'text-[10px]'
+      } ${
+        isGold
+          ? 'border-amber-300/35 bg-amber-400/12 text-amber-100'
+          : 'border-cyan-300/35 bg-cyan-400/12 text-cyan-100'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} shrink-0`} aria-hidden="true">
+        {isGold ? (
+          <>
+            <circle cx="12" cy="12" r="9" fill="#fbbf24" opacity="0.95" />
+            <circle cx="12" cy="12" r="5.5" fill="#fff7ad" opacity="0.5" />
+            <path d="M8 12h8M12 8v8" stroke="#7c2d12" strokeWidth="1.8" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M12 2.5 21 9l-9 12.5L3 9 12 2.5Z" fill="#67e8f9" />
+            <path d="M7 9h10M12 2.5 9 9l3 12.5L15 9 12 2.5Z" fill="#0891b2" opacity="0.45" />
+            <path d="M3 9h18" stroke="#ecfeff" strokeWidth="1.2" opacity="0.8" />
+          </>
+        )}
+      </svg>
+      <span className="leading-none">{value}</span>
+    </span>
+  );
+};
+
+const StoreKeyword = ({ children }: { children: React.ReactNode }) => (
+  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-white/55">
+    {children}
+  </span>
+);
 
 
 export const CareerTab = (props: any) => {
@@ -242,7 +280,7 @@ export const CareerTab = (props: any) => {
 
     setMatchNotificationsEnabled(true);
     persistMatchNotificationsEnabled(true);
-    addToast('Alertas de jogo ligados. Aviso 2h antes da partida.', 'success');
+    addToast('Alertas de jogo ligados. Avisos 2h e 15min antes da partida.', 'success');
   };
 
   const handleDeleteAccount = async () => {
@@ -919,22 +957,39 @@ export const CareerTab = (props: any) => {
                             : 'Perfil'}
                   </h3>
                 </div>
-                <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">
-                  {careerSection === 'store'
-                    ? 'Compre estilo para clube e jogadores sem tocar no balanceamento.'
-                    : careerSection === 'inventory'
-                      ? 'Veja tudo que ja foi comprado e o que esta pronto para equipar.'
-                      : careerSection === 'circuit'
-                        ? 'Campanha global do app que corre por fora das temporadas dos mundos.'
-                        : careerSection === 'settings'
-                          ? 'Preferencias simples e suporte ficam aqui, fora do fluxo principal.'
-                          : 'Honra, colecao e identidade do manager atravessando mundos.'}
-                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {careerSection === 'store' ? (
+                    <>
+                      <StoreKeyword>Loja</StoreKeyword>
+                      <StoreKeyword>Visual</StoreKeyword>
+                      <StoreKeyword>Sem power</StoreKeyword>
+                    </>
+                  ) : careerSection === 'inventory' ? (
+                    <>
+                      <StoreKeyword>Comprados</StoreKeyword>
+                      <StoreKeyword>Equipar</StoreKeyword>
+                    </>
+                  ) : careerSection === 'circuit' ? (
+                    <>
+                      <StoreKeyword>Global</StoreKeyword>
+                      <StoreKeyword>90 dias</StoreKeyword>
+                    </>
+                  ) : careerSection === 'settings' ? (
+                    <>
+                      <StoreKeyword>Preferencias</StoreKeyword>
+                      <StoreKeyword>Suporte</StoreKeyword>
+                    </>
+                  ) : (
+                    <>
+                      <StoreKeyword>Honra</StoreKeyword>
+                      <StoreKeyword>Colecao</StoreKeyword>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[7px] font-black uppercase tracking-[0.25em] text-amber-200">Ouro</p>
-                <p className="text-lg font-black italic text-white">{viewGoldBalance}</p>
-                <p className="text-[7px] font-black uppercase tracking-[0.25em] text-cyan-200">{viewFragmentBalance} frag</p>
+              <div className="flex flex-col items-end gap-1.5">
+                <CurrencyBadge kind="GOLD" value={viewGoldBalance} />
+                <CurrencyBadge kind="FRAGMENT" value={viewFragmentBalance} />
                 {careerSection === 'store' && (
                   <button
                     type="button"
@@ -954,9 +1009,11 @@ export const CareerTab = (props: any) => {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[8px] font-black uppercase tracking-[0.25em] text-amber-200">Ouro da loja</p>
-                      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white">
-                        Dinheiro real compra ouro. Ouro compra skins, logos e chuteiras. Poder bruto nao entra na loja.
-                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <StoreKeyword>Cosmetico</StoreKeyword>
+                        <StoreKeyword>Sem power</StoreKeyword>
+                        <StoreKeyword>Skins</StoreKeyword>
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -972,9 +1029,11 @@ export const CareerTab = (props: any) => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">{APP_CIRCUIT.name}</p>
-                      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white">
-                        Complete 3 temporadas em 90 dias para fechar a skin de veterano.
-                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <StoreKeyword>3 temporadas</StoreKeyword>
+                        <StoreKeyword>90 dias</StoreKeyword>
+                        <StoreKeyword>Skin final</StoreKeyword>
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-black italic text-white">{viewCircuit.seasonRunsCompleted}/{viewCircuit.targetSeasonRuns}</p>
@@ -996,7 +1055,7 @@ export const CareerTab = (props: any) => {
                       <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/40">{section.title}</p>
                       <p className="text-[7px] font-black uppercase tracking-widest text-white/20">{section.items.length} itens</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {section.items.map(item => {
                         const owned = isOwnedInView(item.id);
                         const canEquip = owned && (
@@ -1005,40 +1064,76 @@ export const CareerTab = (props: any) => {
                           ((item.category === 'KIT' || item.category === 'LOGO') && !!userTeam)
                         );
                         const isEquipped = equippedManagerItemIds.has(item.id);
+                        const itemUseLabel = item.category === 'BOOT'
+                          ? 'Jogador'
+                          : item.category === 'KIT' || item.category === 'LOGO'
+                            ? 'Clube'
+                            : 'Manager';
+                        const actionLabel = !owned
+                          ? 'Comprar'
+                          : isEquipped
+                            ? 'Em uso'
+                            : canEquip
+                              ? 'Equipar'
+                              : item.category === 'BOOT'
+                                ? 'Equipar no atleta'
+                                : 'Ver';
                         return (
                           <button
                             key={item.id}
                             type="button"
-                            className={`group flex aspect-square min-w-0 flex-col items-center justify-center rounded-xl border p-1.5 text-center transition hover:bg-white/[0.06] ${
+                            className={`group min-w-0 rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06] ${
                               owned
                                 ? 'border-cyan-400/25 bg-cyan-500/10'
                                 : 'border-white/10 bg-black/35'
                             }`}
                             onClick={() => setSelectedStoreItem(item)}
                           >
-                            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45 sm:h-14 sm:w-14">
-                              <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1" />
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45">
+                                <img src={item.imagePath} alt={item.name} className="h-full w-full object-contain p-1.5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[10px] font-black uppercase tracking-wide text-white">{item.name}</p>
+                                    <p className="mt-0.5 truncate text-[7px] font-black uppercase tracking-widest text-white/35">
+                                      {item.collectionLabel || itemUseLabel}
+                                    </p>
+                                  </div>
+                                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[6px] font-black uppercase tracking-widest ${
+                                    isEquipped
+                                      ? 'border-amber-300/35 bg-amber-400/15 text-amber-100'
+                                      : owned
+                                        ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
+                                        : 'border-white/10 bg-white/[0.03] text-white/45'
+                                  }`}>
+                                    {isEquipped ? 'Equipado' : owned ? 'Seu' : item.rarity}
+                                  </span>
+                                </div>
+                                <div className="mt-2 flex items-center justify-between gap-2">
+                                  {owned ? (
+                                    <span className="rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-cyan-100">
+                                      Comprado
+                                    </span>
+                                  ) : (
+                                    <CurrencyBadge kind={item.currency} value={item.price} compact />
+                                  )}
+                                  <span className={`rounded-lg px-2 py-1 text-[7px] font-black uppercase tracking-widest ${
+                                    owned
+                                      ? 'bg-cyan-400/15 text-cyan-100'
+                                      : 'bg-amber-400/15 text-amber-100'
+                                  }`}>
+                                    {actionLabel}
+                                  </span>
+                                </div>
+                                {item.effectLabel && (
+                                  <p className="mt-2 line-clamp-1 text-[7px] font-black uppercase tracking-widest text-cyan-200/80">
+                                    {item.effectLabel}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <p className="mt-1 w-full truncate text-[7px] font-black uppercase tracking-wide text-white">{item.name}</p>
-                            <p className="text-[6px] font-black uppercase tracking-widest text-white/35">
-                              {item.price} {item.currency === 'GOLD' ? 'ouro' : 'frag'}
-                            </p>
-                            <div className="mt-0.5 flex min-h-[0.9rem] items-center justify-center">
-                              <span className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase tracking-widest ${
-                                isEquipped
-                                  ? 'border-amber-300/35 bg-amber-400/15 text-amber-100'
-                                  : owned
-                                  ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
-                                  : 'border-white/10 bg-white/[0.03] text-white/35'
-                              }`}>
-                                {isEquipped ? 'Exibido' : owned ? 'Seu' : item.rarity}
-                              </span>
-                            </div>
-                            {canEquip && (
-                              <span className="mt-0.5 block text-[6px] font-black uppercase tracking-widest text-cyan-200">
-                                {section.usage}
-                              </span>
-                            )}
                           </button>
                         );
                       })}
@@ -1074,9 +1169,12 @@ export const CareerTab = (props: any) => {
                         <h3 className="mt-3 text-2xl font-black uppercase italic tracking-tight text-white">
                           {APP_CIRCUIT.name}
                         </h3>
-                        <p className="mt-2 max-w-[28rem] text-[11px] font-bold leading-relaxed text-white/75">
-                          A temporada do mundo continua sendo a do seu clube. O circuito corre por fora por 90 dias e transforma sua jornada em uma campanha premium com trilha, oraculo e trofeu social.
-                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <StoreKeyword>90 dias</StoreKeyword>
+                          <StoreKeyword>Premium</StoreKeyword>
+                          <StoreKeyword>Trofeu social</StoreKeyword>
+                          <StoreKeyword>Oraculo</StoreKeyword>
+                        </div>
                       </div>
                       <div className="hidden h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-black/45 shadow-inner sm:flex">
                         <img src={APP_CIRCUIT.passIconPath} alt="" className="h-full w-full object-contain p-2" />
@@ -1170,28 +1268,32 @@ export const CareerTab = (props: any) => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[8px] font-black uppercase tracking-[0.25em] text-emerald-200">Recompensas por temporada</p>
-                      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/40">
-                        A loja anda com o jogo: cada fechamento de temporada alimenta ouro e fragmentos.
-                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <StoreKeyword>Fechamento</StoreKeyword>
+                        <StoreKeyword>Temporada</StoreKeyword>
+                        <StoreKeyword>Recompensa</StoreKeyword>
+                      </div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right">
                       <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Ciclo normal</p>
-                      <p className="mt-1 text-lg font-black italic text-white">60+ ouro</p>
+                      <div className="mt-1 flex justify-end">
+                        <CurrencyBadge kind="GOLD" value="60+" />
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/25">
                     <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-white/5 bg-white/[0.04] px-4 py-3 text-[8px] font-black uppercase tracking-[0.24em] text-white/35">
                       <span>Marco</span>
-                      <span>Ouro</span>
-                      <span>Frag</span>
+                      <span className="text-right"><CurrencyBadge kind="GOLD" value="" compact /></span>
+                      <span className="text-right"><CurrencyBadge kind="FRAGMENT" value="" compact /></span>
                     </div>
                     <div className="divide-y divide-white/[0.04]">
                       {seasonRewardRows.map(row => (
                         <div key={row.label} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3">
                           <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{row.label}</span>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-amber-200">{row.gold > 0 ? `+${row.gold}` : '--'}</span>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-cyan-200">{row.fragments > 0 ? `+${row.fragments}` : '--'}</span>
+                          <span>{row.gold > 0 ? <CurrencyBadge kind="GOLD" value={`+${row.gold}`} compact /> : '--'}</span>
+                          <span>{row.fragments > 0 ? <CurrencyBadge kind="FRAGMENT" value={`+${row.fragments}`} compact /> : '--'}</span>
                         </div>
                       ))}
                     </div>
@@ -1749,29 +1851,34 @@ export const CareerTab = (props: any) => {
                     {selectedStoreItem.collectionLabel}
                   </p>
                 )}
-                <p className={`mt-2 text-[8px] font-black uppercase tracking-widest ${rarityStyle.accent}`}>
-                  {selectedStoreItem.rarity} - {selectedStoreItem.price} {selectedStoreItem.currency === 'GOLD' ? 'ouro' : 'fragmentos'}
-                </p>
+                <div className="mt-2 flex items-center justify-center gap-2">
+                  <span className={`rounded-full border px-2.5 py-1 text-[7px] font-black uppercase tracking-[0.24em] ${rarityStyle.badge}`}>
+                    {selectedStoreItem.rarity}
+                  </span>
+                  <CurrencyBadge kind={selectedStoreItem.currency} value={selectedStoreItem.price} compact />
+                </div>
               </div>
             </div>
 
             <div className="p-5 space-y-4">
               <div className={`rounded-xl border ${rarityStyle.border} bg-white/[0.03] p-3`}>
-                <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Descricao</p>
-                <p className="mt-2 text-[11px] font-bold leading-relaxed text-white/80">{selectedStoreItem.description}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <StoreKeyword>{selectedStoreItem.category}</StoreKeyword>
+                  <StoreKeyword>{selectedStoreItem.rarity}</StoreKeyword>
+                  {selectedStoreItem.collectionLabel && <StoreKeyword>{selectedStoreItem.collectionLabel}</StoreKeyword>}
+                </div>
               </div>
 
               {selectedStoreItem.effectLabel && (
                 <div className={`rounded-xl border ${rarityStyle.border} bg-white/[0.03] p-3`}>
-                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Assinatura</p>
-                  <p className={`mt-2 text-[10px] font-black uppercase tracking-[0.2em] ${rarityStyle.accent}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${rarityStyle.accent}`}>
                     {selectedStoreItem.effectLabel}
                   </p>
-                  {selectedStoreItem.effectDescription && (
-                    <p className="mt-2 text-[10px] font-bold leading-relaxed text-white/75">
-                      {selectedStoreItem.effectDescription}
-                    </p>
-                  )}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <StoreKeyword>{selectedStoreItem.bootBonus ? 'Micro bonus' : 'Visual'}</StoreKeyword>
+                    <StoreKeyword>{selectedStoreItem.bootBonus?.progressionGainPct ? '+Evolucao' : 'Estilo'}</StoreKeyword>
+                    <StoreKeyword>{selectedStoreItem.bootBonus?.progressionLossMitigationPct ? 'Estabilidade' : 'Sem score'}</StoreKeyword>
+                  </div>
                 </div>
               )}
 
@@ -1842,7 +1949,11 @@ export const CareerTab = (props: any) => {
               </div>
               <p className="mt-4 text-[8px] font-black uppercase tracking-[0.3em] text-amber-200">{getCheckoutChannelLabel()}</p>
               <h3 className="mt-2 text-2xl font-black uppercase italic tracking-tight text-white">{selectedGoldPack.displayName}</h3>
-              <p className="mt-2 text-[11px] font-bold leading-relaxed text-white/72">{selectedGoldPack.description}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <StoreKeyword>{selectedGoldPack.goldAmount ? 'Ouro' : 'Passe'}</StoreKeyword>
+                <StoreKeyword>{formatBrl(selectedGoldPack.brlPrice)}</StoreKeyword>
+                <StoreKeyword>{getCheckoutChannelLabel()}</StoreKeyword>
+              </div>
             </div>
 
             <div className="space-y-4 p-5">
@@ -1865,27 +1976,25 @@ export const CareerTab = (props: any) => {
                         <Coins size={16} className="text-amber-100" />
                       )}
                     </div>
-                    <p className="mt-2 text-sm font-black italic text-white">{pack.goldAmount ?? pack.amountLabel}</p>
-                    <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-amber-200">
-                      {pack.goldAmount ? 'ouro' : 'passe'}
-                    </p>
+                    <div className="mt-2">
+                      {pack.goldAmount ? (
+                        <CurrencyBadge kind="GOLD" value={pack.goldAmount} compact />
+                      ) : (
+                        <span className="rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-fuchsia-100">Passe</span>
+                      )}
+                    </div>
                     <p className="mt-2 text-[8px] font-black uppercase tracking-widest text-white/45">{formatBrl(pack.brlPrice)}</p>
                   </button>
                 ))}
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/35">Regra do produto</p>
-                <p className="mt-2 text-[11px] font-bold leading-relaxed text-white/75">
-                  {getBillingReadinessCopy(selectedGoldPack)} Chuteiras com bonus continuam microscopicas, ligadas a evolucao leve, nunca a vitoria garantida.
-                </p>
-              </div>
-
               <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3">
-                <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100">Separacao limpa</p>
-                <p className="mt-2 text-[11px] font-bold leading-relaxed text-cyan-50/80">
-                  A loja real vende ouro. A loja interna vende cosmeticos. Isso evita vender poder direto e deixa Google Play/App Store mais simples.
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <StoreKeyword>Cosmetico</StoreKeyword>
+                  <StoreKeyword>Sem vitoria comprada</StoreKeyword>
+                  <StoreKeyword>Google Play</StoreKeyword>
+                  <StoreKeyword>{getBillingReadinessCopy(selectedGoldPack).includes('Dev') ? 'Dev' : 'Pronto'}</StoreKeyword>
+                </div>
               </div>
 
               <div className="flex gap-2">

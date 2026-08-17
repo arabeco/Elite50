@@ -12,10 +12,8 @@ import { TeamLogo } from '../TeamLogo';
 import { LineupBuilder } from '../LineupBuilder';
 import { LiveReport, PostGameReport } from '../MatchReports';
 import { getMatchStatus } from '../../utils/matchUtils';
-import * as LucideIcons from 'lucide-react';
+import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, BookOpen } from 'lucide-react';
 import { PlayStyle } from '../../types';
-
-const { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, BookOpen } = LucideIcons;
 
 const PLAYSTYLES: PlayStyle[] = ['Blitzkrieg', 'Tiki-Taka', 'Retranca Armada', 'Motor Lento', 'Equilibrado', 'Gegenpressing', 'Catenaccio', 'Vertical'];
 const LEARNABLE_LEGACY_TRAITS = ['Clutch', 'Protagonista', 'Catalisador', 'Passe Ouro', 'Finaliz Ouro', 'Defesa Ouro'];
@@ -98,6 +96,32 @@ export const TrainingTab = (props: any) => {
           </h2>
         </div>
       </header>
+
+      <section className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-[1rem] border border-cyan-500/20 bg-cyan-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-cyan-300">Estilo</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white">
+            {currentStyle || 'Livre'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
+            {currentStyle ? 'Melhora execucao coletiva' : 'Escolha uma identidade'}
+          </div>
+        </div>
+        <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-emerald-300">Evolucao</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white truncate">
+            {evoPlayer?.nickname || 'Vazio'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">Acelera ganho bom</div>
+        </div>
+        <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-3 py-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-amber-300">Estavel</div>
+          <div className="mt-1 text-sm sm:text-base font-black uppercase italic tracking-tight text-white truncate">
+            {stabPlayer?.nickname || 'Vazio'}
+          </div>
+          <div className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">Reduz queda ruim</div>
+        </div>
+      </section>
 
       {/* Treino de Estilo */}
       <section className="relative group overflow-hidden rounded-[1.2rem] sm:rounded-[2rem] glass-card-neon p-4 sm:p-6 transition-all hover:scale-[1.01] sm:hover:scale-[1.02] duration-500 shadow-2xl">

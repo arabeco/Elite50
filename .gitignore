@@ -27,3 +27,12 @@ tsc_out*.txt
 tsc_output*.txt
 universe_state.json
 vitest-report.json
+
+# Local video references for Match 2D research
+CMtraining/
+
+# Scratch de sessoes de debug/preview (chrome profiles, dumps do vite, engine bundle local)
+.tmp-*
+supabase/.temp/
+playstore-upload/
+playstore-screenshots/

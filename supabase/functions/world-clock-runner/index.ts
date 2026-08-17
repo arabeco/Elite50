@@ -17,6 +17,8 @@ type GameRecord = {
   players_data: Record<string, any>;
   managers_data: Record<string, any>;
   notifications: any[] | null;
+  transfer_proposals: any[] | null;
+  trade_offers: any[] | null;
   last_headline: any;
   updated_at: string;
 };
@@ -81,8 +83,56 @@ const buildState = (record: GameRecord) => ({
   userTeamId: (record as any).user_team_id || null,
   userManagerId: (record as any).user_manager_id || null,
   notifications: record.notifications || [],
+  transferProposals: record.transfer_proposals || [],
+  tradeOffers: record.trade_offers || [],
   lastHeadline: record.last_headline || {},
 });
+
+const uniqueById = (items: any[]) => Array.from(
+  new Map(items.filter(item => item?.id).map(item => [item.id, item])).values()
+);
+
+const buildMarketResultNotifications = (record: GameRecord, state: any) => {
+  const notifications: any[] = [];
+  const currentTransfers = new Map((state.transferProposals || []).map((proposal: any) => [proposal.id, proposal]));
+  const currentTrades = new Map((state.tradeOffers || []).map((offer: any) => [offer.id, offer]));
+
+  (record.transfer_proposals || []).forEach((previous: any) => {
+    const current: any = currentTransfers.get(previous.id);
+    if (previous.status !== 'PENDING' || !current || current.status === 'PENDING') return;
+    const player = state.players[current.playerId];
+    const team = state.teams[current.toTeamId];
+    notifications.push({
+      id: `market_result_${current.id}_${current.status}`,
+      date: state.world.currentDate,
+      title: current.status === 'ACCEPTED' ? 'Contratacao concluida' : 'Proposta recusada',
+      message: current.status === 'ACCEPTED'
+        ? `${player?.nickname || 'O atleta'} assinou com o ${team?.name || 'seu clube'}.`
+        : `${player?.nickname || 'O atleta'} nao aceitou a proposta do ${team?.name || 'seu clube'}.`,
+      type: 'transfer',
+      read: false,
+    });
+  });
+
+  (record.trade_offers || []).forEach((previous: any) => {
+    const current: any = currentTrades.get(previous.id);
+    if (previous.status !== 'PENDING' || !current || current.status === 'PENDING') return;
+    const requested = state.players[current.requestedPlayerId];
+    const target = state.teams[current.toTeamId];
+    notifications.push({
+      id: `trade_result_${current.id}_${current.status}`,
+      date: state.world.currentDate,
+      title: current.status === 'ACCEPTED' ? 'Troca confirmada' : 'Troca recusada',
+      message: current.status === 'ACCEPTED'
+        ? `${requested?.nickname || 'O atleta'} agora esta no seu elenco.`
+        : `${target?.name || 'O clube'} recusou a troca por ${requested?.nickname || 'o atleta'}.`,
+      type: 'transfer',
+      read: false,
+    });
+  });
+
+  return notifications;
+};
 
 const applyParticipantFoundedClubs = (baseWorld: any, mergedTeams: Record<string, any>, participantRecords: GameRecord[]) => {
   const mergedWorld = {
@@ -167,6 +217,8 @@ const buildMergedState = (masterRecord: GameRecord, worldRecords: GameRecord[]) 
     isObserver: !record.user_team_id,
     updatedAt: record.updated_at,
   }));
+  state.transferProposals = uniqueById(worldRecords.flatMap(record => record.transfer_proposals || []));
+  state.tradeOffers = uniqueById(worldRecords.flatMap(record => record.trade_offers || []));
 
   return state;
 };
@@ -232,21 +284,31 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const now = new Date();
 
-    const { data, error } = await supabase
-      .from('games')
-      .select('*')
-      .order('updated_at', { ascending: true });
+    const { data: dueWorldRows, error: dueWorldError } = await supabase
+      .rpc('get_due_legacy_world_ids', { p_now: now.toISOString() });
 
-    if (error) throw error;
+    if (dueWorldError) throw dueWorldError;
 
     const results: any[] = [];
     const worlds: any[] = [];
 
-    const allRecords = (data || []) as GameRecord[];
-    const creatorRecords = allRecords.filter((record: any) => record.is_creator === true);
+    const dueWorldIds = Array.from(new Set(
+      (dueWorldRows || []).map((row: any) => String(row.world_id)).filter(Boolean)
+    ));
 
-    for (const record of creatorRecords) {
-      const worldRecords = allRecords.filter(worldRecord => worldRecord.world_id === record.world_id);
+    for (const dueWorldId of dueWorldIds) {
+      const { data: worldData, error: worldDataError } = await supabase
+        .from('games')
+        .select('*')
+        .eq('world_id', dueWorldId)
+        .order('updated_at', { ascending: true });
+
+      if (worldDataError) throw worldDataError;
+
+      const worldRecords = (worldData || []) as GameRecord[];
+      const record = worldRecords.find((worldRecord: any) => worldRecord.is_creator === true);
+      if (!record) continue;
+
       let state = buildMergedState(record, worldRecords);
       const kickoff = openScheduledKickoff(state, now);
       state = kickoff.state;
@@ -280,6 +342,11 @@ Deno.serve(async (req) => {
 
       state.world.serverClockLastTickAt = now.toISOString();
 
+      const creatorTeamId = (record as any).user_team_id || null;
+      const creatorNotifications = (state.notifications || []).filter((notification: any) =>
+        !notification.targetTeamId || notification.targetTeamId === creatorTeamId
+      );
+
       const { error: updateError } = await supabase
         .from('games')
         .update({
@@ -287,7 +354,9 @@ Deno.serve(async (req) => {
           teams_data: state.teams,
           players_data: state.players,
           managers_data: state.managers,
-          notifications: state.notifications,
+          notifications: creatorNotifications,
+          transfer_proposals: (state.transferProposals || []).filter((proposal: any) => proposal.toTeamId === creatorTeamId),
+          trade_offers: (state.tradeOffers || []).filter((offer: any) => offer.fromTeamId === creatorTeamId || offer.toTeamId === creatorTeamId),
           last_headline: state.lastHeadline || {},
           updated_at: now.toISOString(),
         })
@@ -296,6 +365,28 @@ Deno.serve(async (req) => {
         .eq('is_creator', true);
 
       if (updateError) throw updateError;
+
+      for (const participantRecord of worldRecords) {
+        if (participantRecord.user_id === record.user_id) continue;
+        const participantTeamId = (participantRecord as any).user_team_id || null;
+        const resultNotifications = buildMarketResultNotifications(participantRecord, state);
+        const nextNotifications = uniqueById([
+          ...resultNotifications,
+          ...(participantRecord.notifications || []),
+        ]).slice(0, 80);
+
+        const { error: participantUpdateError } = await supabase
+          .from('games')
+          .update({
+            notifications: nextNotifications,
+            transfer_proposals: (state.transferProposals || []).filter((proposal: any) => proposal.toTeamId === participantTeamId),
+            trade_offers: (state.tradeOffers || []).filter((offer: any) => offer.fromTeamId === participantTeamId || offer.toTeamId === participantTeamId),
+          })
+          .eq('user_id', participantRecord.user_id)
+          .eq('world_id', participantRecord.world_id);
+
+        if (participantUpdateError) throw participantUpdateError;
+      }
 
       results.push({
         worldId: record.world_id,
