@@ -301,6 +301,23 @@ export const joinWorldByCode = async (joinCode: string): Promise<GameState | nul
   return state;
 };
 
+/**
+ * Colunas de `games` sem `world_state`.
+ *
+ * MOTIVO (medido em producao, 2026-08-18): cada linha de PARTICIPANTE carrega uma
+ * copia integral do world_state do criador — 1.543 kB de JSON por linha, e o merge
+ * abaixo nunca usa nenhuma delas: so `masterRecord.world_state` importa.
+ *
+ * No mundo Nois, `select('*')` baixava 8,1 MB, dos quais 3,1 MB eram duplicata
+ * inutil. E o pg_stat_statements mostrou esse SELECT com 23.605 chamadas — de longe
+ * a maior fonte de egress do projeto. Buscamos as linhas sem o blob e o world_state
+ * do mestre em uma segunda consulta.
+ */
+const WORLD_ROW_COLUMNS_WITHOUT_WORLD_STATE =
+  'user_id, world_id, is_creator, is_public, updated_at, user_team_id, user_manager_id, ' +
+  'teams_data, players_data, managers_data, notifications, transfer_proposals, ' +
+  'trade_offers, last_headline, training_data';
+
 export const loadGameState = async (worldId: string = 'default'): Promise<GameState | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -309,9 +326,9 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   // We sort by updated_at ASC so later records (newer) can overwrite older ones in the loop
   const { data: allWorldRecords, error: worldError } = await supabase
     .from('games')
-    .select('*')
+    .select(WORLD_ROW_COLUMNS_WITHOUT_WORLD_STATE)
     .eq('world_id', worldId)
-    .order('updated_at', { ascending: true });
+    .order('updated_at', { ascending: true }) as { data: any[] | null; error: any };
 
   if (worldError || !allWorldRecords || allWorldRecords.length === 0) {
     console.error('Error fetching world records:', worldError);
@@ -323,6 +340,22 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
   const userRecord = allWorldRecords.find(r => r.user_id === user.id);
 
   if (!userRecord) return null;
+
+  // 3. Um unico world_state: o do mestre. E o unico que o merge consome.
+  const { data: masterWorldRow, error: masterWorldError } = await supabase
+    .from('games')
+    .select('world_state')
+    .eq('world_id', worldId)
+    .eq('user_id', masterRecord.user_id)
+    .limit(1)
+    .maybeSingle();
+
+  if (masterWorldError || !masterWorldRow) {
+    console.error('Error fetching master world state:', masterWorldError);
+    return null;
+  }
+
+  masterRecord.world_state = masterWorldRow.world_state;
 
   const isCreator = masterRecord.user_id === user.id || userRecord.is_creator === true;
   const participants = allWorldRecords.map(record => ({

@@ -48,6 +48,12 @@ vi.mock('@supabase/supabase-js', () => ({
           return this;
         },
         order: vi.fn(async () => ({ data: applyFilters(), error: null })),
+        // loadGameState agora busca as linhas sem world_state e pega o blob do
+        // mestre numa segunda consulta (.limit(1).maybeSingle()).
+        limit() {
+          return this;
+        },
+        maybeSingle: vi.fn(async () => ({ data: applyFilters()[0] || null, error: null })),
         upsert: vi.fn(async (payload: any) => {
           mockDb.upserts.push(payload);
           const index = mockDb.records.findIndex(record =>
