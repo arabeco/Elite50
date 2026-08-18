@@ -7,8 +7,8 @@ Escopo: egress Supabase, segurança, código morto, incoerências, UI, checagens
 
 ## Status da implementação
 
-Branch `fix/egress-e-auditoria`, commit `aff77d9`. `tsc` em 0 erros, 75 testes verdes,
-build 2.284 kB (era 2.571 kB).
+Branch `fix/egress-e-auditoria`. `npm run lint` limpo, 92 testes verdes,
+build 2.285 kB (era 2.571 kB).
 
 **Corrigido no código:**
 
@@ -18,6 +18,7 @@ build 2.284 kB (era 2.571 kB).
 | `setInterval` de 60s removido | §1.2-D |
 | Debounce de autosave 5s → 15s | §1.2-D |
 | Piso de 20s entre recargas por realtime | §1.2-B |
+| Poda do play-by-play de partidas antigas | §0.1 |
 | `revealed` restaurado + `MatchViewModel` + teste de regressão | §4.2 |
 | 38 erros de `tsc` → 0 | §6 |
 | Zagueiro exibido como "ATA" no card | §6 |
@@ -25,19 +26,37 @@ build 2.284 kB (era 2.571 kB).
 | Arquivos órfãos e dependência `@google/genai` | §5.2 |
 | `h-[30]` e classe Tailwind dinâmica | §7.1 |
 | Timeout da suíte de testes | §6 |
-| 4 migrations untracked versionadas | §5.4 |
+| Migrations untracked versionadas + RLS real documentada | §5.4, §0.1 |
+| `engine.mjs` passa a ser gerado (`npm run build:engine`) | §5.3 |
+| Escritas de mundo por participante via RPC | §0.2 |
 
-**Continua pendente — precisa de decisão ou acesso ao Supabase:**
+**Aplicado em produção (2026-08-18):**
 
-1. **Versionar as policies reais de `public.games`** e as funções `is_world_participant` /
-   `is_public_world` (§0.1). O repo descreve um schema que não existe mais.
-2. **Cortar o crescimento de `world_state`** — é a maior fonte de egress (§0.1). Podar
-   eventos de partida e notícias antigas, ou tirar `leagues.matches` do blob.
-3. Verificar em produção que os seletores `world_state->>campo` retornam o esperado
-   (não deu para testar com o projeto em `402`).
-4. Itens estruturais: tirar `players_data` do JSONB monolítico (§1.3 item 6), remover
-   `worldTick`/`worldRepository` mortos (§5.3), safe-area mobile (§7.2), acessibilidade
-   dos botões de ícone (§7.3), memoização do `WorldTab` e do relógio do `HomeTab` (§7.4).
+| Mudança | Estado |
+|---|---|
+| Cron do runner: 1.440 → 5 execuções/dia | ✅ jobid 2, `5 3,4,9,15,21 * * *` |
+| `lock_world_master` | ✅ criada |
+| `respond_district_cup_invite` | ✅ criada |
+| `submit_club_application` | ✅ criada |
+
+**Continua pendente:**
+
+1. **Subir o app com o build novo.** As RPCs existem mas ninguém as chama até o
+   cliente novo ir ao ar.
+2. **Testar o fluxo de ponta a ponta** quando a cota resetar (24 Ago): segunda
+   conta, receber convite de seleção, aceitar, recarregar e confirmar que persistiu.
+3. **Verificar os seletores `world_state->>campo`** na tela de seleção de mundos —
+   não deu para testar com o projeto em `402`.
+4. **Limpeza retroativa** do `world_state` do mundo Nois (SQL de poda em §8) e da
+   linha de participante com 1,67 MB de `players_data` duplicado (§0.1).
+5. `respondToClubOffer` ainda descarta o `status = 'SIGNED'` para participante —
+   é o terceiro fluxo, não coberto pelas duas RPCs.
+6. Decidir o destino da Copa dos Distritos: hoje `DISTRICT_CUP_ROUNDS = 0` e ela
+   roda como showcase de um dia, deixando código morto em `processMatchDay`.
+7. Itens estruturais: tirar `players_data` do JSONB monolítico (§1.3 item 6),
+   remover `worldTick`/`worldRepository` mortos (§5.3), safe-area mobile (§7.2),
+   acessibilidade dos botões de ícone (§7.3), memoização do `WorldTab` e do
+   relógio do `HomeTab` (§7.4).
 
 ---
 
