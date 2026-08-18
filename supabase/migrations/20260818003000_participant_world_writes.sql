@@ -129,8 +129,11 @@ begin
     end if;
   end if;
 
+  -- O ::text e obrigatorio: literais soltos chegam como tipo `unknown` e
+  -- to_jsonb() e polimorfica, entao sem o cast o Postgres recusa com
+  -- "could not determine polymorphic type".
   v_invites := jsonb_set(v_invites, array[v_idx::text, 'status'],
-                         to_jsonb(case when p_accept then 'ACCEPTED' else 'REJECTED' end));
+                         to_jsonb((case when p_accept then 'ACCEPTED' else 'REJECTED' end)::text));
   v_invites := jsonb_set(v_invites, array[v_idx::text, 'respondedAt'], to_jsonb(v_now));
   v_invites := jsonb_set(v_invites, array[v_idx::text, 'note'],
                          to_jsonb(case when p_accept
@@ -162,7 +165,7 @@ begin
   return jsonb_build_object(
     'ok', true,
     'district', v_district,
-    'status', case when p_accept then 'ACCEPTED' else 'REJECTED' end
+    'status', (case when p_accept then 'ACCEPTED' else 'REJECTED' end)::text
   );
 end;
 $fn$;
