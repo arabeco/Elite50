@@ -1,3 +1,7 @@
+// GERADO POR scripts/build-world-engine.mjs — NAO EDITE A MAO.
+// Fonte: src/engine/*. Depois de mexer no motor, rode: npm run build:engine
+
+
 // src/constants/gameConstants.ts
 var MAX_TEAM_POWER_TIER_1 = 12e3;
 var MAX_TEAM_POWER_TIER_3 = 8e3;
@@ -2805,6 +2809,57 @@ var simulateNativeMatch2D = (baseMatch, homeTeam, awayTeam, players, seed = base
   return { match, highlights: buildNativeMatch2DPlays(match, homeTeam, awayTeam, players) };
 };
 
+// src/engine/pruneMatchEvents.ts
+var MATCH_EVENT_RETENTION_ROUNDS = 2;
+var ELITE_CUP_ROUND_OFFSET = SEASON_ROUNDS;
+var DISTRICT_CUP_ROUND_OFFSET = SEASON_ROUNDS + ELITE_CUP_ROUNDS;
+var shouldKeepEvents = (match, currentRound, keepRounds, roundOffset) => {
+  if (match.revealed === false) return true;
+  if (!match.played) return true;
+  const globalRound = roundOffset + (match.round ?? 0);
+  return currentRound - globalRound < keepRounds;
+};
+var pruneMatch = (match, currentRound, keepRounds, roundOffset) => {
+  if (!match?.result?.events?.length) return 0;
+  if (shouldKeepEvents(match, currentRound, keepRounds, roundOffset)) return 0;
+  const freed = match.result.events.length;
+  match.result.events = [];
+  return freed;
+};
+var eliteCupMatches = (world) => {
+  const bracket = world?.eliteCup?.bracket || {};
+  return [
+    ...bracket.round1 || [],
+    ...bracket.oitavas || [],
+    ...bracket.quarters || [],
+    ...bracket.quartas || [],
+    ...bracket.semis || [],
+    ...bracket.final ? [bracket.final] : []
+  ].filter(Boolean);
+};
+var districtCupMatches = (world) => [
+  ...world?.districtCup?.matches || [],
+  ...world?.districtCup?.final ? [world.districtCup.final] : []
+].filter(Boolean);
+var pruneOldMatchEvents = (state, keepRounds = MATCH_EVENT_RETENTION_ROUNDS) => {
+  const world = state?.world;
+  if (!world) return 0;
+  const currentRound = world.currentRound ?? 0;
+  let freed = 0;
+  Object.values(world.leagues || {}).forEach((league) => {
+    (league?.matches || []).forEach((match) => {
+      freed += pruneMatch(match, currentRound, keepRounds, 0);
+    });
+  });
+  eliteCupMatches(world).forEach((match) => {
+    freed += pruneMatch(match, currentRound, keepRounds, ELITE_CUP_ROUND_OFFSET);
+  });
+  districtCupMatches(world).forEach((match) => {
+    freed += pruneMatch(match, currentRound, keepRounds, DISTRICT_CUP_ROUND_OFFSET);
+  });
+  return freed;
+};
+
 // src/engine/gameLogic.ts
 var getSeasonDayNumber = (dateStr, seasonStartRealStr, worldDay) => {
   if (worldDay !== void 0) return worldDay;
@@ -4643,59 +4698,6 @@ var autoCompleteDraft = (state) => {
     };
   }
 };
-// src/engine/pruneMatchEvents.ts
-// match.round das copas usa escala propria (1..4); world.currentRound e global.
-// Sem estes offsets, a final da Copa Elite seria podada no dia em que foi jogada.
-var MATCH_EVENT_RETENTION_ROUNDS = 2;
-var ELITE_CUP_ROUND_OFFSET = SEASON_ROUNDS;
-var DISTRICT_CUP_ROUND_OFFSET = SEASON_ROUNDS + ELITE_CUP_ROUNDS;
-var shouldKeepEvents = (match, currentRound, keepRounds, roundOffset) => {
-  if (match.revealed === false) return true;
-  if (!match.played) return true;
-  const globalRound = roundOffset + (match.round ?? 0);
-  return currentRound - globalRound < keepRounds;
-};
-var pruneMatch = (match, currentRound, keepRounds, roundOffset) => {
-  if (!match?.result?.events?.length) return 0;
-  if (shouldKeepEvents(match, currentRound, keepRounds, roundOffset)) return 0;
-  const freed = match.result.events.length;
-  match.result.events = [];
-  return freed;
-};
-var eliteCupMatches = (world) => {
-  const bracket = world?.eliteCup?.bracket || {};
-  return [
-    ...bracket.round1 || [],
-    ...bracket.oitavas || [],
-    ...bracket.quarters || [],
-    ...bracket.quartas || [],
-    ...bracket.semis || [],
-    ...bracket.final ? [bracket.final] : []
-  ].filter(Boolean);
-};
-var districtCupMatches = (world) => [
-  ...world?.districtCup?.matches || [],
-  ...world?.districtCup?.final ? [world.districtCup.final] : []
-].filter(Boolean);
-var pruneOldMatchEvents = (state, keepRounds = MATCH_EVENT_RETENTION_ROUNDS) => {
-  const world = state?.world;
-  if (!world) return 0;
-  const currentRound = world.currentRound ?? 0;
-  let freed = 0;
-  Object.values(world.leagues || {}).forEach((league) => {
-    (league?.matches || []).forEach((match) => {
-      freed += pruneMatch(match, currentRound, keepRounds, 0);
-    });
-  });
-  eliteCupMatches(world).forEach((match) => {
-    freed += pruneMatch(match, currentRound, keepRounds, ELITE_CUP_ROUND_OFFSET);
-  });
-  districtCupMatches(world).forEach((match) => {
-    freed += pruneMatch(match, currentRound, keepRounds, DISTRICT_CUP_ROUND_OFFSET);
-  });
-  return freed;
-};
-
 var advanceGameDay = (prevState, skipDateIncrement = false) => {
   if (prevState.world.currentDay === -1) {
     return prevState;
