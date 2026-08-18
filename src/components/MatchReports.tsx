@@ -70,16 +70,21 @@ const LegacyLiveReport: React.FC<LiveReportProps> = ({
   const result = match.result;
   if (!result) return null;
 
+  // O play-by-play de partidas antigas e podado do world_state para conter o
+  // crescimento do JSONB (ver pruneOldMatchEvents). Placar, scorers, ratings e
+  // stats continuam; so a timeline minuto a minuto some.
+  const resultEvents = result.events || [];
+
   // Filter events that have happened up to currentSecond
-  const visibleEvents = [...result.events]
+  const visibleEvents = [...resultEvents]
     .filter(e => e.realTimeSecond <= currentSecond)
     .sort((a, b) => b.realTimeSecond - a.realTimeSecond);
 
-  const currentHomeScore = result.events
+  const currentHomeScore = resultEvents
     .filter(e => e.type === 'GOAL' && e.teamId === homeTeam.id && e.realTimeSecond <= currentSecond)
     .length;
 
-  const currentAwayScore = result.events
+  const currentAwayScore = resultEvents
     .filter(e => e.type === 'GOAL' && e.teamId === awayTeam.id && e.realTimeSecond <= currentSecond)
     .length;
 
@@ -423,7 +428,8 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
     .map(([id, rating]) => ({ player: players[id], rating: rating as number }));
 
   // Sort events for timeline (newest first)
-  const sortedEvents = [...result.events].sort((a, b) => b.realTimeSecond - a.realTimeSecond);
+  // Pode vir vazio em partidas antigas cujo play-by-play ja foi podado.
+  const sortedEvents = [...(result.events || [])].sort((a, b) => b.realTimeSecond - a.realTimeSecond);
   const tacticalReading = getTacticalReading(result, homeTeam, awayTeam);
 
   return (

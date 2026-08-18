@@ -31,6 +31,7 @@ import { getManagerDraftInfluence } from '../utils/managerStats';
 import { recordManagerTacticalMemory } from '../utils/managerTacticalMemory';
 import { buildAutoLineup, countLineupPlayers } from '../utils/lineup';
 import { simulateNativeMatch2D } from './match2DPlayEngine';
+import { pruneOldMatchEvents } from './pruneMatchEvents';
 
 // --- Helpers ---
 
@@ -2454,6 +2455,11 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
   if (state.world.isInitialSeed) {
     state.world.isInitialSeed = false;
   }
+
+  // Poda o play-by-play de partidas antigas ja reveladas. Sem isso, `world.leagues`
+  // cresce ~11 KB por partida e o world_state chega a 1,6 MB numa temporada — que
+  // e o que trafega em toda leitura do mundo. Placar, scorers e ratings ficam.
+  pruneOldMatchEvents(state);
 
   return state;
 };

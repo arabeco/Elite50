@@ -4643,6 +4643,49 @@ var autoCompleteDraft = (state) => {
     };
   }
 };
+// src/engine/pruneMatchEvents.ts
+var MATCH_EVENT_RETENTION_ROUNDS = 2;
+var shouldKeepEvents = (match, currentRound, keepRounds) => {
+  if (match.revealed === false) return true;
+  if (!match.played) return true;
+  return currentRound - (match.round ?? 0) < keepRounds;
+};
+var pruneMatch = (match, currentRound, keepRounds) => {
+  if (!match?.result?.events?.length) return 0;
+  if (shouldKeepEvents(match, currentRound, keepRounds)) return 0;
+  const freed = match.result.events.length;
+  match.result.events = [];
+  return freed;
+};
+var collectCupMatches = (world) => {
+  const bracket = world?.eliteCup?.bracket || {};
+  return [
+    ...bracket.round1 || [],
+    ...bracket.oitavas || [],
+    ...bracket.quarters || [],
+    ...bracket.quartas || [],
+    ...bracket.semis || [],
+    ...bracket.final ? [bracket.final] : [],
+    ...world?.districtCup?.matches || [],
+    ...world?.districtCup?.final ? [world.districtCup.final] : []
+  ].filter(Boolean);
+};
+var pruneOldMatchEvents = (state, keepRounds = MATCH_EVENT_RETENTION_ROUNDS) => {
+  const world = state?.world;
+  if (!world) return 0;
+  const currentRound = world.currentRound ?? 0;
+  let freed = 0;
+  Object.values(world.leagues || {}).forEach((league) => {
+    (league?.matches || []).forEach((match) => {
+      freed += pruneMatch(match, currentRound, keepRounds);
+    });
+  });
+  collectCupMatches(world).forEach((match) => {
+    freed += pruneMatch(match, currentRound, keepRounds);
+  });
+  return freed;
+};
+
 var advanceGameDay = (prevState, skipDateIncrement = false) => {
   if (prevState.world.currentDay === -1) {
     return prevState;
@@ -4704,6 +4747,7 @@ var advanceGameDay = (prevState, skipDateIncrement = false) => {
   if (state.world.isInitialSeed) {
     state.world.isInitialSeed = false;
   }
+  pruneOldMatchEvents(state);
   return state;
 };
 var startNewSeason = (state) => {
