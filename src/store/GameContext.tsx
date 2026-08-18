@@ -14,6 +14,7 @@ import { STORE_ITEMS_BY_ID } from '../constants/storeCatalog';
 import { applyManagerProfileMeta } from '../utils/managerProfile';
 import { getNextGameMidnight, isKickoffDue } from '../utils/worldSchedule';
 import { getMarketFeedback } from '../utils/marketFeedback';
+import { respondDistrictCupInviteRemote, submitClubApplicationRemote } from '../lib/worldWrites';
 
 /**
  * Janela de agrupamento do autosave. Ver comentario extenso no efeito de auto-save:
@@ -566,6 +567,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     );
 
+    // Mesma restricao do convite de selecao: clubOffers mora no world_state, que o
+    // participante nao consegue gravar via saveGame. Sem a RPC, a candidatura sumia.
+    if (!state.isCreator) {
+      const remote = await submitClubApplicationRemote({
+        worldId,
+        teamId,
+        managerName: managerLabel,
+        status: joinOpen ? 'PENDING' : 'WAITING_NEXT_SEASON',
+        availableOnDay: joinOpen ? (state.world.currentDay || 0) + 1 : -1,
+        note: joinOpen
+          ? 'Pedido enviado. Resposta prevista para o proximo dia.'
+          : 'Voce entrou na fila da proxima temporada.',
+      });
+      if (remote.kind === 'erro') {
+        addToast(remote.message, 'error');
+        return;
+      }
+    }
+
     setState(nextState);
     await saveGame(nextState);
     addToast(
@@ -728,10 +748,23 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [addToast, buildUserManager, saveGame, setState, state, userId, worldId]);
 
   const respondToDistrictCupInvite = useCallback(async (inviteId: string, accept: boolean) => {
+    // Participante nao consegue escrever world_state pelo saveGame: saveGameState
+    // troca o world_state pelo do criador. Sem a RPC abaixo, a resposta some no
+    // save e o convite expira no dia da Copa como "sem resposta".
+    if (worldId && !state.isCreator) {
+      const remote = await respondDistrictCupInviteRemote(worldId, inviteId, accept);
+      if (remote.kind === 'erro') {
+        addToast(remote.message, 'error');
+        return;
+      }
+    }
+
     const nextState = respondDistrictCupManagerInvite({ ...state }, inviteId, accept);
     const invite = nextState.world.districtCup.managerInvites?.find(item => item.id === inviteId);
 
     setState(nextState);
+    // O criador escreve o mundo direto; o participante ja persistiu via RPC e aqui
+    // so precisa do save local/das colunas proprias.
     await saveGame(nextState);
 
     addToast(
@@ -740,7 +773,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         : `Convite da Selecao ${invite?.district || ''} recusado.`,
       accept ? 'success' : 'info'
     );
-  }, [addToast, saveGame, setState, state]);
+  }, [addToast, saveGame, setState, state, worldId]);
 
   const resignFromTeam = useCallback(async () => {
     if (!worldId) {
