@@ -1,3 +1,11 @@
+-- SUPERSEDIDA por 20260818001000_document_live_games_rls.sql.
+--
+-- A policy aberta abaixo (USING (true)) NAO existe mais em producao: foi substituida
+-- por policies por participante/mundo publico criadas direto no banco. Este arquivo
+-- fica no historico apenas para manter a sequencia de migrations reproduzivel — em um
+-- rebuild do zero, a migration de 2026-08-18 derruba esta policy logo em seguida.
+-- Nao use este arquivo como referencia do estado atual da RLS.
+
 
 -- Enable public read for games to allow finding other worlds
 -- This policy allows any authenticated user to SELECT any game row.
