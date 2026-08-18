@@ -14,7 +14,7 @@ import { STORE_ITEMS_BY_ID } from '../constants/storeCatalog';
 import { applyManagerProfileMeta } from '../utils/managerProfile';
 import { getNextGameMidnight, isKickoffDue } from '../utils/worldSchedule';
 import { getMarketFeedback } from '../utils/marketFeedback';
-import { respondDistrictCupInviteRemote, submitClubApplicationRemote } from '../lib/worldWrites';
+import { respondClubOfferRemote, respondDistrictCupInviteRemote, submitClubApplicationRemote } from '../lib/worldWrites';
 
 /**
  * Janela de agrupamento do autosave. Ver comentario extenso no efeito de auto-save:
@@ -613,6 +613,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!targetOffer) return;
 
     if (!accept) {
+      // clubOffers vive no world_state: participante precisa da RPC, senao a recusa
+      // e descartada no save e a proposta reaparece.
+      if (!state.isCreator) {
+        const remote = await respondClubOfferRemote(worldId, offerId, false);
+        if (remote.kind === 'erro') {
+          addToast(remote.message, 'error');
+          return;
+        }
+      }
+
       targetOffer.status = 'REJECTED';
       targetOffer.respondedAt = nextState.world.currentDate;
       targetOffer.note = 'Voce recusou a proposta.';
@@ -664,6 +674,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await saveGame(nextState);
       addToast('O clube ficou indisponivel.', 'warning');
       return;
+    }
+
+    // Persiste o status da proposta antes de trocar o comando localmente. Se a RPC
+    // recusar (outra assinatura, dia ainda nao liberado), nada e alterado.
+    if (!state.isCreator) {
+      const remote = await respondClubOfferRemote(worldId, offerId, true);
+      if (remote.kind === 'erro') {
+        addToast(remote.message, 'error');
+        return;
+      }
     }
 
     const managerId = nextState.userManagerId || userId;

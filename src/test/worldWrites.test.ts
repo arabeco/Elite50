@@ -110,3 +110,43 @@ describe('submitClubApplicationRemote', () => {
     }
   });
 });
+
+describe('respondClubOfferRemote', () => {
+  it('envia os parametros que a RPC espera', async () => {
+    const { respondClubOfferRemote } = await import('../lib/worldWrites');
+    rpcMock.mockResolvedValue({ data: { ok: true, status: 'SIGNED' }, error: null });
+
+    const r = await respondClubOfferRemote('world_1', 'offer_1', true);
+
+    expect(rpcMock).toHaveBeenCalledWith('respond_club_offer', {
+      p_world_id: 'world_1',
+      p_offer_id: 'offer_1',
+      p_accept: true,
+    });
+    expect(r.kind).toBe('ok');
+    if (r.kind === 'ok') expect(r.data.status).toBe('SIGNED');
+  });
+
+  it('traduz SIGNING_NOT_RELEASED_YET', async () => {
+    const { respondClubOfferRemote } = await import('../lib/worldWrites');
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'P0001: SIGNING_NOT_RELEASED_YET' } });
+
+    const r = await respondClubOfferRemote('world_1', 'offer_1', true);
+
+    expect(r.kind).toBe('erro');
+    if (r.kind === 'erro') {
+      expect(r.code).toBe('SIGNING_NOT_RELEASED_YET');
+      expect(r.message).toBe('Assinatura liberada so no proximo dia.');
+    }
+  });
+
+  it('traduz OFFER_NOT_SIGNABLE', async () => {
+    const { respondClubOfferRemote } = await import('../lib/worldWrites');
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'OFFER_NOT_SIGNABLE' } });
+
+    const r = await respondClubOfferRemote('world_1', 'offer_1', true);
+
+    expect(r.kind).toBe('erro');
+    if (r.kind === 'erro') expect(r.message).toBe('Essa proposta ainda nao pode ser assinada.');
+  });
+});

@@ -40,6 +40,11 @@ const KNOWN_CODES = [
   'MANAGER_ALREADY_ASSIGNED',
   'APPLICATION_ALREADY_OPEN',
   'INVALID_STATUS',
+  'OFFER_NOT_FOUND',
+  'OFFER_NOT_YOURS',
+  'OFFER_NOT_SIGNABLE',
+  'OFFER_NOT_OPEN',
+  'SIGNING_NOT_RELEASED_YET',
 ];
 
 const extractCode = (error: any): string => {
@@ -57,6 +62,11 @@ export const MENSAGEM_POR_CODIGO: Record<string, string> = {
   NOT_A_PARTICIPANT: 'Voce nao esta neste mundo.',
   WORLD_NOT_FOUND: 'Mundo nao encontrado.',
   NOT_AUTHENTICATED: 'Sessao expirada. Entre novamente.',
+  OFFER_NOT_FOUND: 'Proposta nao encontrada.',
+  OFFER_NOT_YOURS: 'Essa proposta nao e sua.',
+  OFFER_NOT_SIGNABLE: 'Essa proposta ainda nao pode ser assinada.',
+  OFFER_NOT_OPEN: 'Essa proposta ja foi respondida.',
+  SIGNING_NOT_RELEASED_YET: 'Assinatura liberada so no proximo dia.',
 };
 
 export type DistrictInviteResponse = {
@@ -112,4 +122,28 @@ export const submitClubApplicationRemote = async (params: {
   }
 
   return { kind: 'ok', data: data as ClubApplicationResponse };
+};
+
+export type ClubOfferResponse = {
+  ok: boolean;
+  status: 'SIGNED' | 'REJECTED';
+};
+
+export const respondClubOfferRemote = async (
+  worldId: string,
+  offerId: string,
+  accept: boolean
+): Promise<WorldWriteResult<ClubOfferResponse>> => {
+  const { data, error } = await supabase.rpc('respond_club_offer', {
+    p_world_id: worldId,
+    p_offer_id: offerId,
+    p_accept: accept,
+  });
+
+  if (error) {
+    const code = extractCode(error);
+    return { kind: 'erro', code, message: MENSAGEM_POR_CODIGO[code] || 'Nao foi possivel responder a proposta.' };
+  }
+
+  return { kind: 'ok', data: data as ClubOfferResponse };
 };
