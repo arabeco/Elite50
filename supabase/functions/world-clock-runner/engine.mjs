@@ -4644,20 +4644,25 @@ var autoCompleteDraft = (state) => {
   }
 };
 // src/engine/pruneMatchEvents.ts
+// match.round das copas usa escala propria (1..4); world.currentRound e global.
+// Sem estes offsets, a final da Copa Elite seria podada no dia em que foi jogada.
 var MATCH_EVENT_RETENTION_ROUNDS = 2;
-var shouldKeepEvents = (match, currentRound, keepRounds) => {
+var ELITE_CUP_ROUND_OFFSET = SEASON_ROUNDS;
+var DISTRICT_CUP_ROUND_OFFSET = SEASON_ROUNDS + ELITE_CUP_ROUNDS;
+var shouldKeepEvents = (match, currentRound, keepRounds, roundOffset) => {
   if (match.revealed === false) return true;
   if (!match.played) return true;
-  return currentRound - (match.round ?? 0) < keepRounds;
+  const globalRound = roundOffset + (match.round ?? 0);
+  return currentRound - globalRound < keepRounds;
 };
-var pruneMatch = (match, currentRound, keepRounds) => {
+var pruneMatch = (match, currentRound, keepRounds, roundOffset) => {
   if (!match?.result?.events?.length) return 0;
-  if (shouldKeepEvents(match, currentRound, keepRounds)) return 0;
+  if (shouldKeepEvents(match, currentRound, keepRounds, roundOffset)) return 0;
   const freed = match.result.events.length;
   match.result.events = [];
   return freed;
 };
-var collectCupMatches = (world) => {
+var eliteCupMatches = (world) => {
   const bracket = world?.eliteCup?.bracket || {};
   return [
     ...bracket.round1 || [],
@@ -4665,11 +4670,13 @@ var collectCupMatches = (world) => {
     ...bracket.quarters || [],
     ...bracket.quartas || [],
     ...bracket.semis || [],
-    ...bracket.final ? [bracket.final] : [],
-    ...world?.districtCup?.matches || [],
-    ...world?.districtCup?.final ? [world.districtCup.final] : []
+    ...bracket.final ? [bracket.final] : []
   ].filter(Boolean);
 };
+var districtCupMatches = (world) => [
+  ...world?.districtCup?.matches || [],
+  ...world?.districtCup?.final ? [world.districtCup.final] : []
+].filter(Boolean);
 var pruneOldMatchEvents = (state, keepRounds = MATCH_EVENT_RETENTION_ROUNDS) => {
   const world = state?.world;
   if (!world) return 0;
@@ -4677,11 +4684,14 @@ var pruneOldMatchEvents = (state, keepRounds = MATCH_EVENT_RETENTION_ROUNDS) => 
   let freed = 0;
   Object.values(world.leagues || {}).forEach((league) => {
     (league?.matches || []).forEach((match) => {
-      freed += pruneMatch(match, currentRound, keepRounds);
+      freed += pruneMatch(match, currentRound, keepRounds, 0);
     });
   });
-  collectCupMatches(world).forEach((match) => {
-    freed += pruneMatch(match, currentRound, keepRounds);
+  eliteCupMatches(world).forEach((match) => {
+    freed += pruneMatch(match, currentRound, keepRounds, ELITE_CUP_ROUND_OFFSET);
+  });
+  districtCupMatches(world).forEach((match) => {
+    freed += pruneMatch(match, currentRound, keepRounds, DISTRICT_CUP_ROUND_OFFSET);
   });
   return freed;
 };

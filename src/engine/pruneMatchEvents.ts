@@ -1,4 +1,5 @@
 import { GameState, Match } from '../types';
+import { ELITE_CUP_ROUNDS, SEASON_ROUNDS } from '../constants/gameConstants';
 
 /**
  * Quantas rodadas de play-by-play manter no world_state.
@@ -13,37 +14,68 @@ import { GameState, Match } from '../types';
  */
 export const MATCH_EVENT_RETENTION_ROUNDS = 2;
 
-const shouldKeepEvents = (match: Match, currentRound: number, keepRounds: number) => {
+/**
+ * ATENCAO: `match.round` NAO esta na mesma escala em todas as competicoes.
+ *
+ * - Liga:        round 1..SEASON_ROUNDS, ja na escala global.
+ * - Copa Elite:  `eliteRound = round - SEASON_ROUNDS`, ou seja 1..4.
+ * - Copa Distritos: `districtRound = round - (SEASON_ROUNDS + ELITE_CUP_ROUNDS)`, 1..4.
+ *
+ * Mas `world.currentRound` e sempre a rodada GLOBAL (1..TOTAL_ROUNDS). Comparar
+ * `currentRound - match.round` direto em uma partida de copa da uma diferenca
+ * inflada: a final da Copa Elite (round 4) com currentRound 11 pareceria ter 7
+ * rodadas de idade e seria podada no exato dia em que foi jogada.
+ *
+ * Por isso cada grupo de partidas e podado com o offset da sua competicao.
+ */
+const ELITE_CUP_ROUND_OFFSET = SEASON_ROUNDS;
+const DISTRICT_CUP_ROUND_OFFSET = SEASON_ROUNDS + ELITE_CUP_ROUNDS;
+
+const shouldKeepEvents = (
+  match: Match,
+  currentRound: number,
+  keepRounds: number,
+  roundOffset: number
+) => {
   // Nunca poda o que o jogador ainda nao abriu: `revealed === false` e um relatorio
   // cego pendente, e a timeline e justamente o conteudo dele.
   if (match.revealed === false) return true;
   if (!match.played) return true;
-  return (currentRound - (match.round ?? 0)) < keepRounds;
+
+  const globalRound = roundOffset + (match.round ?? 0);
+  return (currentRound - globalRound) < keepRounds;
 };
 
-const pruneMatch = (match: Match, currentRound: number, keepRounds: number) => {
+const pruneMatch = (
+  match: Match,
+  currentRound: number,
+  keepRounds: number,
+  roundOffset: number
+) => {
   if (!match?.result?.events?.length) return 0;
-  if (shouldKeepEvents(match, currentRound, keepRounds)) return 0;
+  if (shouldKeepEvents(match, currentRound, keepRounds, roundOffset)) return 0;
 
   const freed = match.result.events.length;
   match.result.events = [];
   return freed;
 };
 
-const collectCupMatches = (world: any): Match[] => {
+const eliteCupMatches = (world: any): Match[] => {
   const bracket = world?.eliteCup?.bracket || {};
-  const cupMatches = [
+  return [
     ...(bracket.round1 || []),
     ...(bracket.oitavas || []),
     ...(bracket.quarters || []),
     ...(bracket.quartas || []),
     ...(bracket.semis || []),
     ...(bracket.final ? [bracket.final] : []),
-    ...(world?.districtCup?.matches || []),
-    ...(world?.districtCup?.final ? [world.districtCup.final] : []),
-  ];
-  return cupMatches.filter(Boolean) as Match[];
+  ].filter(Boolean) as Match[];
 };
+
+const districtCupMatches = (world: any): Match[] => [
+  ...(world?.districtCup?.matches || []),
+  ...(world?.districtCup?.final ? [world.districtCup.final] : []),
+].filter(Boolean) as Match[];
 
 /**
  * Esvazia `result.events` de partidas ja jogadas, ja reveladas e mais antigas que
@@ -63,12 +95,16 @@ export const pruneOldMatchEvents = (
 
   Object.values(world.leagues || {}).forEach((league: any) => {
     (league?.matches || []).forEach((match: Match) => {
-      freed += pruneMatch(match, currentRound, keepRounds);
+      freed += pruneMatch(match, currentRound, keepRounds, 0);
     });
   });
 
-  collectCupMatches(world).forEach(match => {
-    freed += pruneMatch(match, currentRound, keepRounds);
+  eliteCupMatches(world).forEach(match => {
+    freed += pruneMatch(match, currentRound, keepRounds, ELITE_CUP_ROUND_OFFSET);
+  });
+
+  districtCupMatches(world).forEach(match => {
+    freed += pruneMatch(match, currentRound, keepRounds, DISTRICT_CUP_ROUND_OFFSET);
   });
 
   return freed;

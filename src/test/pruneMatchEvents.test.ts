@@ -80,17 +80,42 @@ describe('pruneOldMatchEvents', () => {
     expect(pruneOldMatchEvents(state, 2)).toBe(0);
   });
 
-  it('tambem poda os mata-matas', () => {
-    const state = makeState([], 20);
-    (state.world as any).eliteCup = {
-      bracket: {
-        round1: [makeMatch({ id: 'ec_1', round: 8 })],
-        final: makeMatch({ id: 'ec_final', round: 11 }),
-      },
-    };
-    (state.world as any).districtCup = { matches: [makeMatch({ id: 'dc_1', round: 9 })] };
+  it('nao poda a copa que esta acontecendo agora (escalas de round diferentes)', () => {
+    // REGRESSAO: match.round das copas usa escala propria (1..4), enquanto
+    // world.currentRound e global (1..11). Comparar direto fazia a final da Copa
+    // Elite (round 4) parecer ter 11-4=7 rodadas de idade e ser podada no mesmo
+    // dia em que foi jogada.
+    const finalElite = makeMatch({ id: 'ec_final', round: 4 });   // global 7+4 = 11
+    const semiElite = makeMatch({ id: 'ec_semi', round: 3 });     // global 7+3 = 10
+    const state = makeState([], 11);
+    (state.world as any).eliteCup = { bracket: { semis: [semiElite], final: finalElite } };
 
-    expect(pruneOldMatchEvents(state, 2)).toBe(6);
+    expect(pruneOldMatchEvents(state, 2)).toBe(0);
+    expect(finalElite.result!.events).toHaveLength(2);
+    expect(semiElite.result!.events).toHaveLength(2);
+  });
+
+  it('poda copa antiga so quando ela fica fora da janela, ja na escala global', () => {
+    // Oitavas da Copa Elite: round 1 -> global 8. Com currentRound 11 sao 3
+    // rodadas de idade, entao sai. A final (global 11) continua.
+    const oitavas = makeMatch({ id: 'ec_r1', round: 1 });
+    const finalElite = makeMatch({ id: 'ec_final', round: 4 });
+    const state = makeState([], 11);
+    (state.world as any).eliteCup = { bracket: { round1: [oitavas], final: finalElite } };
+
+    expect(pruneOldMatchEvents(state, 2)).toBe(2);
+    expect(oitavas.result!.events).toEqual([]);
+    expect(finalElite.result!.events).toHaveLength(2);
+  });
+
+  it('aplica o offset da Copa dos Distritos', () => {
+    // districtRound 1 -> global 11+1 = 12. Com currentRound 12, e a rodada atual.
+    const dc = makeMatch({ id: 'dc_1', round: 1 });
+    const state = makeState([], 12);
+    (state.world as any).districtCup = { matches: [dc] };
+
+    expect(pruneOldMatchEvents(state, 2)).toBe(0);
+    expect(dc.result!.events).toHaveLength(2);
   });
 
   it('preserva os events da janela em que o Live Replay abre sozinho', () => {
