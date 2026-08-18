@@ -26,14 +26,13 @@ build 2.284 kB (era 2.571 kB).
 | `h-[30]` e classe Tailwind dinâmica | §7.1 |
 | Timeout da suíte de testes | §6 |
 | 4 migrations untracked versionadas | §5.4 |
-| Migration de RLS criada (**não aplicada**) | §2 |
 
 **Continua pendente — precisa de decisão ou acesso ao Supabase:**
 
-1. **Aplicar `20260713001000_persist_market_requests.sql`** (§4.1). Enquanto as colunas
-   não existirem, todo save falha. Rode a checagem 8.1 primeiro.
-2. **Aplicar `20260817001000_restrict_games_select.sql`** (§2) — **teste em staging antes**,
-   é a mudança de maior risco de regressão do lote.
+1. **Versionar as policies reais de `public.games`** e as funções `is_world_participant` /
+   `is_public_world` (§0.1). O repo descreve um schema que não existe mais.
+2. **Cortar o crescimento de `world_state`** — é a maior fonte de egress (§0.1). Podar
+   eventos de partida e notícias antigas, ou tirar `leagues.matches` do blob.
 3. Verificar em produção que os seletores `world_state->>campo` retornam o esperado
    (não deu para testar com o projeto em `402`).
 4. Itens estruturais: tirar `players_data` do JSONB monolítico (§1.3 item 6), remover
@@ -52,14 +51,102 @@ decisões de arquitetura que se multiplicam entre si:
 3. **Cada save do criador dispara um evento realtime que faz *todos* os participantes
    rebaixarem o mundo inteiro.**
 
-Somando isso a uma policy de RLS aberta (`USING (true)`), qualquer conta autenticada pode
-baixar o banco inteiro. Isso é, ao mesmo tempo, o maior risco de egress e um furo de privacidade.
+> **Leia o §0.1 antes deste sumário.** As checagens no banco real derrubaram os achados
+> de RLS (§2) e de saves quebrados (§4.1), e mostraram que o peso está em `world_state`,
+> não em `players_data`.
 
-Além do egress, a auditoria encontrou **dois bugs funcionais silenciosos** (um deles pode estar
-impedindo 100% dos saves agora) e 38 erros de compilação de tipos que hoje passam batido porque
-o build do Vite não roda `tsc`.
+Além do egress, a auditoria encontrou **um bug funcional silencioso** (o relatório cego,
+§4.2) e 38 erros de compilação de tipos que passavam batido porque o build do Vite não
+roda `tsc`.
 
-**Prioridade sugerida:** §4 (bloqueadores) → §2 (RLS) → §1 (egress) → §5–7 (dívida técnica/UI).
+**Prioridade sugerida:** §1 (egress) → §5–7 (dívida técnica/UI).
+
+---
+
+## 0.1 Correções após execução das checagens (2026-08-18)
+
+Os resultados reais do banco derrubaram dois achados desta auditoria. Registro aqui
+porque o relatório original está errado nesses dois pontos.
+
+### ❌ §4.1 não se confirma — os saves NÃO estão falhando
+
+`transfer_proposals` e `trade_offers` existem em `public.games`. A migration
+`20260713001000` já tinha sido aplicada, apesar de o `PENDENCIAS_EGRESS_SUPABASE.md`
+listá-la como pendente e de o arquivo estar untracked no git. Documentação
+desatualizada, não bug.
+
+### ❌ §2 não se confirma — a RLS de produção já está fechada
+
+A policy aberta `USING (true)` **não existe mais no banco**. Produção tem:
+
+| policy | qual |
+|---|---|
+| `games_select_own` | `auth.uid() = user_id` |
+| `games_select_world_participants` | `is_world_participant(world_id)` |
+| `games_select_public_world_participants` | `is_public_world(world_id)` |
+| `games_select_public` | `is_public = true` |
+
+O que existe de verdade é **drift entre repo e produção**: o arquivo
+`20260225_enable_multiplayer.sql` ainda descreve a policy aberta, e as policies reais
+(mais duas funções, `is_world_participant` e `is_public_world`) nunca foram versionadas.
+
+A migration `20260817001000_restrict_games_select.sql` que eu havia criado **foi
+removida**. Ela adicionaria uma quarta policy permissiva — como policies de SELECT são
+combinadas com OR, ela não restringiria nada. Aplicá-la seria, na melhor hipótese,
+redundância.
+
+Pendência real: exportar as policies e funções de produção para uma migration, para
+que o repo pare de mentir sobre o schema.
+
+### ⚠️ Correção importante de dimensionamento: `world_state` é o vilão, não `players_data`
+
+Minha medição em §1.1 usou um mundo **recém-gerado**. Em produção, no mundo Nois, com
+40 dias de temporada rodados:
+
+| coluna | soma nas 3 linhas | o que eu disse em §1.1 |
+|---|---|---|
+| `world_state` | **1.527 kB** | 19,7 KB |
+| `players_data` | 688 kB | 1.483 KB |
+| `teams_data` | 21 kB | 46 KB |
+
+O `world_state` cresceu ~26× ao longo da temporada (resultados de partida, eventos,
+notícias, histórico acumulados em `world.leagues`) e **passou o `players_data`**.
+
+Isso inverte a prioridade do §1.3 e torna a correção dos seletores JSON
+(§1.2-C, já aplicada) muito mais valiosa do que eu estimei: `listUserWorlds` e
+`listPublicWorlds` não estavam baixando ~20 KB por mundo, e sim da ordem de **500 kB
+por mundo** — provavelmente a maior fonte isolada de egress do projeto.
+
+Além disso, `world_state` duplicado nas linhas de participante soma **1.000 kB** de
+desperdício puro (§1.2-A, §8.4), agora com peso muito maior do que eu havia atribuído.
+
+Nota de medição: `pg_column_size()` devolve o tamanho **comprimido** (TOAST). O que
+trafega é o JSON em texto, maior que esses números.
+
+### 🔴 Achado novo: a cota inteira foi queimada em ~6 dias
+
+Cruzando `net._http_response` com `updated_at` das linhas do mundo Nois:
+
+- ciclo anterior resetou em **24 Jul**;
+- o `world-clock-runner` voltou a rodar e avançou o mundo do dia 18 para o **dia 40**
+  (22 dias de jogo) entre 24 e 30 Jul;
+- em **30 Jul** o `updated_at` do criador congela e o projeto volta a receber `402`.
+
+Ou seja: **a cota mensal inteira foi consumida em cerca de seis dias**, com o mundo
+praticamente sem jogadores ativos. Esperar o reset de 24 Ago, sozinho, não resolve —
+sem as correções o ciclo novo queima igual.
+
+### Estado atual do mundo Nois: participantes 22 dias atrás do criador
+
+| linha | fase | dia | `updated_at` |
+|---|---|---|---|
+| criador | OFFSEASON | 40 | 2026-07-30 |
+| participante 1 | ELITE_CUP | 18 | 2026-07-10 |
+| participante 2 | ELITE_CUP | 18 | 2026-07-10 |
+
+O merge em `loadGameState` usa `world_state` apenas do mestre e só deixa o participante
+sobrescrever `players_data` quando ele é mais novo que o mestre — não é o caso aqui.
+Então a defasagem deve se resolver sozinha na primeira carga após o desbloqueio.
 
 ---
 
