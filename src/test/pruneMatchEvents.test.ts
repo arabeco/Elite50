@@ -92,4 +92,23 @@ describe('pruneOldMatchEvents', () => {
 
     expect(pruneOldMatchEvents(state, 2)).toBe(6);
   });
+
+  it('preserva os events da janela em que o Live Replay abre sozinho', () => {
+    // O Dashboard abre o replay ao vivo de partidas jogadas ha menos de 2 dias
+    // de jogo (Dashboard.tsx, "Detect newly played matches to show Live Replay").
+    // Com MATCH_INTERVAL_DAYS = 2, duas rodadas equivalem a ~4 dias de jogo, entao
+    // a janela de retencao e o DOBRO da janela do replay. Se este teste quebrar,
+    // o jogador vai abrir o app e assistir a uma partida sem narracao nenhuma.
+    const rodadaAtual = 7;
+    const dentroDoReplay = [
+      makeMatch({ id: 'r7', round: 7 }),
+      makeMatch({ id: 'r6', round: 6 }),
+    ];
+    const state = makeState(dentroDoReplay, rodadaAtual);
+
+    expect(pruneOldMatchEvents(state, 2)).toBe(0);
+    dentroDoReplay.forEach(match => {
+      expect(match.result!.events).toHaveLength(2);
+    });
+  });
 });
