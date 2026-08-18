@@ -30,28 +30,43 @@ build 2.285 kB (era 2.571 kB).
 | `engine.mjs` passa a ser gerado (`npm run build:engine`) | §5.3 |
 | Escritas de mundo por participante via RPC | §0.2 |
 
-**Aplicado em produção (2026-08-18):**
+**Aplicado em produção (2026-08-18) — backend concluído:**
 
 | Mudança | Estado |
 |---|---|
-| Cron do runner: 1.440 → 5 execuções/dia | ✅ jobid 2, `5 3,4,9,15,21 * * *` |
-| `lock_world_master` | ✅ criada |
-| `respond_district_cup_invite` | ✅ criada |
-| `submit_club_application` | ✅ criada |
+| Cron do runner: 1.440 → 5 execuções/dia | ✅ `5 3,4,9,15,21 * * *`, ativo |
+| `lock_world_master` (+ ACL fechada) | ✅ só `postgres` e `service_role` |
+| `respond_district_cup_invite` | ✅ |
+| `submit_club_application` | ✅ |
+| `respond_club_offer` | ✅ |
+| `prune_world_match_events` / `prune_match_events_array` | ✅ |
+| Poda retroativa do `world_state` | ✅ 1.644 kB → **245 kB** (−85%) |
+| Limpeza das linhas de participante | ✅ observador 911 kB → 2 bytes |
+| RLS sem policy aberta, `games` fora do realtime | ✅ verificado |
+
+Payload de uma carga de mundo (`loadGameState`), mundo Nois:
+
+| momento | payload |
+|---|---|
+| início da auditoria | **8,1 MB** |
+| após poda + limpeza | 2,5 MB |
+| com o app novo (sem `world_state` de participante) | **~2,0 MB** |
+
+**−75% na consulta que somava 23.605 chamadas** — a maior fonte de egress do projeto,
+identificada via `pg_stat_statements`.
+
+Nota: as 21 partidas que ainda têm `events` são relatórios cegos pendentes, preservados
+de propósito. Confirmado com `deveria_ter_podado = 0`.
 
 **Continua pendente:**
 
-1. **Subir o app com o build novo.** As RPCs existem mas ninguém as chama até o
-   cliente novo ir ao ar.
+1. **Subir o app com o build novo.** Único item bloqueante: as RPCs existem mas
+   ninguém as chama, e as reduções de egress do cliente não estão no ar.
 2. **Testar o fluxo de ponta a ponta** quando a cota resetar (24 Ago): segunda
    conta, receber convite de seleção, aceitar, recarregar e confirmar que persistiu.
 3. **Verificar os seletores `world_state->>campo`** na tela de seleção de mundos —
    não deu para testar com o projeto em `402`.
-4. **Limpeza retroativa** do `world_state` do mundo Nois (SQL de poda em §8) e da
-   linha de participante com 1,67 MB de `players_data` duplicado (§0.1).
-5. `respondToClubOffer` ainda descarta o `status = 'SIGNED'` para participante —
-   é o terceiro fluxo, não coberto pelas duas RPCs.
-6. Decidir o destino da Copa dos Distritos: hoje `DISTRICT_CUP_ROUNDS = 0` e ela
+4. Decidir o destino da Copa dos Distritos: hoje `DISTRICT_CUP_ROUNDS = 0` e ela
    roda como showcase de um dia, deixando código morto em `processMatchDay`.
 7. Itens estruturais: tirar `players_data` do JSONB monolítico (§1.3 item 6),
    remover `worldTick`/`worldRepository` mortos (§5.3), safe-area mobile (§7.2),
