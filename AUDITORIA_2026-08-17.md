@@ -148,6 +148,44 @@ O merge em `loadGameState` usa `world_state` apenas do mestre e só deixa o part
 sobrescrever `players_data` quando ele é mais novo que o mestre — não é o caso aqui.
 Então a defasagem deve se resolver sozinha na primeira carga após o desbloqueio.
 
+
+### 🔴 Bug que a poda introduziu (e ja foi corrigido)
+
+`match.round` nao esta na mesma escala em todas as competicoes:
+
+| competicao | escala de `match.round` |
+|---|---|
+| Liga | 1..`SEASON_ROUNDS` — ja global |
+| Copa Elite | `round - SEASON_ROUNDS` → **1..4** |
+| Copa dos Distritos | `round - (SEASON_ROUNDS + ELITE_CUP_ROUNDS)` → **1..4** |
+
+Mas `world.currentRound` e sempre a rodada **global** (1..`TOTAL_ROUNDS`). A primeira
+versao da poda comparava `currentRound - match.round` direto, entao a final da Copa
+Elite (`round: 4`) com `currentRound = 11` parecia ter 7 rodadas de idade e era
+podada **no mesmo dia em que foi jogada**. Na pratica, toda a narracao da Copa Elite
+e da Copa dos Distritos sumiria assim que o dia virasse.
+
+A guarda de relatorio cego so protegia partidas do proprio jogador ainda nao abertas —
+qualquer partida de copa ja revelada perdia o play-by-play na hora.
+
+Corrigido aplicando o offset de cada competicao antes de comparar. Tres testes cobrem
+o caso e foram verificados falhando com os offsets zerados.
+
+### O ao vivo nunca dependeu do cron
+
+Vale registrar porque nao e obvio: o Live Replay e **inteiramente cliente**.
+`Dashboard.tsx:404` detecta partidas jogadas ha menos de 2 dias de jogo e anima
+`result.events` filtrando por `realTimeSecond <= currentSecond`, ao longo de
+`MATCH_REAL_TIME_SECONDS = 120` (2 minutos reais). As notificacoes de 2h e 15min sao
+locais (`@capacitor/local-notifications`).
+
+E o mundo **ja** avancava so uma vez por dia antes da mudanca do cron: `getDueDays`
+compara indices de dia civil em `America/Sao_Paulo`, entao 1439 das 1440 execucoes
+diarias encontravam zero dias devidos e retornavam sem escrever.
+
+A janela de retencao da poda (2 rodadas ≈ 4 dias de jogo, com `MATCH_INTERVAL_DAYS = 2`)
+e o dobro da janela do Live Replay (2 dias de jogo). Ha um teste travando essa margem.
+
 ---
 
 ## 1. Egress — causa raiz
