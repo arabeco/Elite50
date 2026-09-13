@@ -22,6 +22,7 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const autoFilledTeamRef = React.useRef<string | null>(null);
 
   const isLocked = useMemo(() => {
     if (!nextMatch) return false;
@@ -188,6 +189,14 @@ export const LineupBuilder: React.FC<LineupBuilderProps> = ({ team, allPlayers, 
     setSelectedSlotId(null);
     addToast(`Escalacao automatica montada com ${filledCount}/11 titulares.`, filledCount >= 11 ? 'success' : 'warning');
   };
+
+  React.useEffect(() => {
+    const lineupCount = Object.values(team.lineup || {}).filter(Boolean).length;
+    if (isLocked || lineupCount > 0 || team.squad.length < 11 || autoFilledTeamRef.current === team.id) return;
+
+    autoFilledTeamRef.current = team.id;
+    handleAutoFillLineup();
+  }, [isLocked, team.id, team.lineup, team.squad]);
 
   return (
     <div className="flex flex-col gap-3 sm:gap-6 animate-in fade-in duration-500 h-full min-h-[500px] sm:min-h-[700px]">

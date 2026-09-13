@@ -14,7 +14,8 @@
     "lint": "tsc --noEmit && node scripts/build-world-engine.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:engine": "node scripts/build-world-engine.mjs"
+    "build:engine": "node scripts/build-world-engine.mjs",
+    "catalog": "tsx scripts/build-catalog.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",

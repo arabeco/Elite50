@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGame } from '../store/GameContext';
 import { calculateTeamPower, getTeamPowerCap } from '../engine/gameLogic';
-import { LeagueState, MatchResult, TeamLogoMetadata } from '../types';
+import { LeagueState, MatchResult, MatchStatus, TeamLogoMetadata } from '../types';
 import {
     SEASON_DAYS
 } from '../constants/gameConstants';
@@ -28,6 +28,7 @@ export interface MatchViewModel {
     homeScore?: number;
     awayScore?: number;
     played?: boolean;
+    status?: MatchStatus;
     revealed?: boolean;
     result?: MatchResult | null;
     type: string;
@@ -111,6 +112,7 @@ export const useDashboardData = () => {
                 homeScore: m.homeScore,
                 awayScore: m.awayScore,
                 played: m.played,
+                status: m.status,
                 // Sem este campo o relatorio cego morre: a Home revela o placar
                 // na hora e o CTA "Revelar relatorio" nunca aparece.
                 revealed: m.revealed,
@@ -133,22 +135,30 @@ export const useDashboardData = () => {
 
         const processLeague = (league: LeagueState) => {
             const sortedStandings = [...league.standings].sort((a, b) => {
-                if (b.points !== a.points) return b.points - a.points;
-                const gdA = a.goalsFor - a.goalsAgainst;
-                const gdB = b.goalsFor - b.goalsAgainst;
+                const pointsA = Number.isFinite(a.points) ? a.points : 0;
+                const pointsB = Number.isFinite(b.points) ? b.points : 0;
+                if (pointsB !== pointsA) return pointsB - pointsA;
+                const gdA = (Number.isFinite(a.goalsFor) ? a.goalsFor : 0) - (Number.isFinite(a.goalsAgainst) ? a.goalsAgainst : 0);
+                const gdB = (Number.isFinite(b.goalsFor) ? b.goalsFor : 0) - (Number.isFinite(b.goalsAgainst) ? b.goalsAgainst : 0);
                 return gdB - gdA;
             });
 
-            const formattedStandings = sortedStandings.map((stats, index) => ({
-                position: index + 1,
-                teamId: stats.teamId,
-                team: state.teams[stats.teamId]?.name || 'Unknown',
-                logo: state.teams[stats.teamId]?.logo,
-                played: stats.played,
-                points: stats.points,
-                gd: stats.goalsFor - stats.goalsAgainst,
-                id: stats.teamId
-            }));
+            const formattedStandings = sortedStandings.map((stats, index) => {
+                const goalsFor = Number.isFinite(stats.goalsFor) ? stats.goalsFor : 0;
+                const goalsAgainst = Number.isFinite(stats.goalsAgainst) ? stats.goalsAgainst : 0;
+                return {
+                    position: index + 1,
+                    teamId: stats.teamId,
+                    team: state.teams[stats.teamId]?.name || 'Unknown',
+                    logo: state.teams[stats.teamId]?.logo,
+                    played: Number.isFinite(stats.played) ? stats.played : 0,
+                    points: Number.isFinite(stats.points) ? stats.points : 0,
+                    goalsFor,
+                    goalsAgainst,
+                    gd: goalsFor - goalsAgainst,
+                    id: stats.teamId
+                };
+            });
 
             const leaguePlayers: { playerId: string; name: string; team: string; teamId: string; goals: number; rank: number }[] = [];
             league.standings.forEach(teamStats => {

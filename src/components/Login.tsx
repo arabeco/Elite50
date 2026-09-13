@@ -180,13 +180,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden font-sans">
+    <div className="min-h-screen w-full bg-[#101114] flex items-center justify-center p-4 relative overflow-hidden font-sans">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-cyan-500/10 blur-[120px] rounded-full animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-fuchsia-500/10 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-mineral-500/10 blur-[120px] rounded-full animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-mineral-500/10 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
         <div className="absolute top-[20%] right-[10%] w-[20%] h-[20%] bg-blue-500/10 blur-[100px] rounded-full animate-pulse" style={{ animationDelay: '1s' }} />
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyan-500/[0.02] to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-mineral-500/[0.02] to-transparent" />
       </div>
 
       <motion.div
@@ -202,39 +202,39 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             initial={{ scale: 0.8, rotate: -10 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-            className="mb-6 h-20 w-20 rounded-2xl border border-white/20 bg-black/40 object-contain p-2 shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+            className="mb-6 h-20 w-20 rounded-2xl border border-white/20 bg-black/40 object-contain p-2 shadow-none"
           />
           <h1 className="text-5xl font-black text-white tracking-tighter uppercase italic flex flex-col items-center">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-400">Elite</span>
-            <span className="text-2xl mt-[-8px] tracking-[0.3em] text-cyan-500 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">2050</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-mineral-400">Elite</span>
+            <span className="text-2xl mt-[-8px] tracking-[0.3em] text-mineral-500 shadow-none">2050</span>
           </h1>
           <div className="mt-4 flex gap-4">
             <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-md">
-              <Globe size={10} className="text-cyan-400" />
+              <Globe size={10} className="text-mineral-400" />
               <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Global Network</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-md">
-              <Cpu size={10} className="text-fuchsia-400" />
+              <Cpu size={10} className="text-mineral-400" />
               <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Quantum Engine</span>
             </div>
           </div>
         </div>
 
         <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative overflow-hidden group">
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/5 blur-[80px] group-hover:bg-cyan-500/10 transition-all duration-700" />
+          <div className="absolute -top-24 -right-24 w-48 h-48 bg-mineral-500/5 blur-[80px] group-hover:bg-mineral-500/10 transition-all duration-700" />
 
           <div className="relative z-10 mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/[0.03] p-1 border border-white/10">
             <button
               type="button"
               onClick={() => setMode('sign-in')}
-              className={`rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'sign-in' ? 'bg-cyan-500 text-black' : 'text-slate-500 hover:text-white'}`}
+              className={`rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'sign-in' ? 'bg-mineral-500 text-black' : 'text-slate-500 hover:text-white'}`}
             >
               Entrar
             </button>
             <button
               type="button"
               onClick={() => setMode('sign-up')}
-              className={`rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'sign-up' ? 'bg-cyan-500 text-black' : 'text-slate-500 hover:text-white'}`}
+              className={`rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'sign-up' ? 'bg-mineral-500 text-black' : 'text-slate-500 hover:text-white'}`}
             >
               Criar conta
             </button>
@@ -245,10 +245,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className={`mb-6 p-4 rounded-2xl border flex items-start gap-3 ${error ? 'bg-red-500/10 border-red-500/20' : 'bg-cyan-500/10 border-cyan-500/20'}`}
+                className={`mb-6 p-4 rounded-2xl border flex items-start gap-3 ${error ? 'bg-red-500/10 border-red-500/20' : 'bg-mineral-500/10 border-mineral-500/20'}`}
               >
-                <AlertCircle className={`${error ? 'text-red-400' : 'text-cyan-400'} shrink-0 mt-0.5`} size={18} />
-                <p className={`text-[10px] leading-relaxed font-black uppercase tracking-wider ${error ? 'text-red-200/80' : 'text-cyan-100/80'}`}>
+                <AlertCircle className={`${error ? 'text-red-400' : 'text-mineral-400'} shrink-0 mt-0.5`} size={18} />
+                <p className={`text-[10px] leading-relaxed font-black uppercase tracking-wider ${error ? 'text-red-200/80' : 'text-mineral-100/80'}`}>
                   {error || notice}
                 </p>
               </motion.div>
@@ -258,9 +258,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               type="button"
               onClick={handleGoogleLogin}
               disabled={isLoading}
-              className="w-full bg-white/[0.04] border border-white/10 hover:border-cyan-500/40 text-white font-black py-4 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+              className="w-full bg-white/[0.04] border border-white/10 hover:border-mineral-500/40 text-white font-black py-4 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-3"
             >
-              <Chrome size={18} className="text-cyan-400" />
+              <Chrome size={18} className="text-mineral-400" />
               <span className="uppercase tracking-[0.2em] text-xs">Entrar com Google</span>
             </button>
 
@@ -275,14 +275,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 E-mail
               </label>
               <div className="relative group/input">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-cyan-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-mineral-400 transition-colors">
                   <Mail size={18} />
                 </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.05] transition-all font-mono"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-mineral-500/50 focus:bg-white/[0.05] transition-all font-mono"
                   placeholder="voce@email.com"
                   required
                 />
@@ -292,7 +292,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Senha</label>
               <div className="relative group/input">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-fuchsia-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-mineral-400 transition-colors">
                   <Lock size={18} />
                 </div>
                 <input
@@ -300,7 +300,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   minLength={6}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-fuchsia-500/50 focus:bg-white/[0.05] transition-all"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-mineral-500/50 focus:bg-white/[0.05] transition-all"
                   placeholder="minimo 6 caracteres"
                   required
                 />
@@ -310,7 +310,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] transition-all active:scale-[0.98] flex items-center justify-center gap-3 group/btn overflow-hidden relative"
+              className="w-full bg-gradient-to-r from-mineral-600 to-blue-600 hover:from-mineral-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-none hover:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-3 group/btn overflow-hidden relative"
             >
               {isLoading ? (
                 <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -331,7 +331,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={handlePasswordReset}
-                className="text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-cyan-400 transition-colors"
+                className="text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-mineral-400 transition-colors"
               >
                 Recuperar senha
               </button>
@@ -339,7 +339,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => setNotice('Use e-mail/senha ou Google. Seu progresso fica salvo no Supabase.')}
-                className="text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-cyan-400 transition-colors"
+                className="text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-mineral-400 transition-colors"
               >
                 Suporte
               </button>
@@ -353,7 +353,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 href={LEGAL_LINKS.privacy}
                 target="_blank"
                 rel="noreferrer"
-                className="transition-colors hover:text-cyan-300"
+                className="transition-colors hover:text-mineral-300"
               >
                 Privacidade
               </a>
@@ -362,7 +362,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 href={LEGAL_LINKS.terms}
                 target="_blank"
                 rel="noreferrer"
-                className="transition-colors hover:text-cyan-300"
+                className="transition-colors hover:text-mineral-300"
               >
                 Termos
               </a>

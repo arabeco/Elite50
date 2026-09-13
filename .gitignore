@@ -36,3 +36,6 @@ CMtraining/
 supabase/.temp/
 playstore-upload/
 playstore-screenshots/
+
+# Atalhos do Windows que caem na raiz sem querer
+*.lnk

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, ReactNode, use
 import { GameState } from '../types';
 import { generateInitialState, getGameDate2050 } from '../engine/generator';
 import { saveGameState, loadGameState, listUserWorlds, listPublicWorlds, supabase, deleteWorld as deleteWorldFromSupabase, joinSharedWorld, joinWorldByCode as joinWorldByCodeFromSupabase, subscribeToWorld, claimTeamInWorld, resignFromTeamInWorld } from '../lib/supabase';
-import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, getSavedWorldSummary, listSavedWorlds, loadGameState as loadLocalGameState, saveGameState as saveLocalGameState } from '../engine/persistence';
+import { deleteSavedState as deleteLocalWorldState, getLastSavedWorldId, listSavedWorlds, loadGameState as loadLocalGameState, saveGameState as saveLocalGameState } from '../engine/persistence';
 import { DEFAULT_TIME_SPEED } from '../constants/gameConstants';
 import { advanceGameDay, isJoinWindowOpen } from '../engine/gameLogic';
 import { respondDistrictCupManagerInvite } from '../engine/districtCupLogic';
@@ -139,7 +139,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   } | null>(null);
   const latestStateRef = useRef(state);
   const clockTickInFlightRef = useRef(false);
-  const hasAutoRestoredWorldRef = useRef(false);
+  const remoteWritesBlockedRef = useRef(false);
+  const initializedSessionUserRef = useRef<string | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeReloadAtRef = useRef(0);
   const marketSnapshotRef = useRef<GameState | null>(null);
@@ -156,6 +157,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const cachedState = loadLocalGameState(targetWorldId);
     if (!cachedState) return false;
 
+    remoteWritesBlockedRef.current = true;
     const resolvedWorldId = targetWorldId || cachedState.worldId || getLastSavedWorldId();
     setIsInitialLoad(true);
     setState(cachedState);
@@ -246,8 +248,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(hasSession || hasDevAuth);
       setUserId(session?.user.id || (hasDevAuth ? 'dev_smoke_user' : null));
       if (hasSession) {
+        if (initializedSessionUserRef.current !== session.user.id) {
+          initializedSessionUserRef.current = session.user.id;
+          setWorldId(null);
+          dispatch({ type: 'RESET_STATE' });
+        }
         refreshWorlds(true);
       } else {
+        initializedSessionUserRef.current = null;
         const cachedWorlds = listSavedWorlds();
         setWorlds(cachedWorlds);
         applyLocalHydration();
@@ -260,8 +268,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(hasSession || hasDevAuth);
       setUserId(session?.user.id || (hasDevAuth ? 'dev_smoke_user' : null));
       if (hasSession) {
+        if (initializedSessionUserRef.current !== session.user.id) {
+          initializedSessionUserRef.current = session.user.id;
+          setWorldId(null);
+          dispatch({ type: 'RESET_STATE' });
+        }
         refreshWorlds(true);
       } else {
+        initializedSessionUserRef.current = null;
         setWorldId(null);
         setWorlds(listSavedWorlds());
         if (!applyLocalHydration()) {
@@ -400,6 +414,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isLocalOnly: true
     });
     setWorlds(listSavedWorlds());
+    if (remoteWritesBlockedRef.current) return;
+
     setIsSyncing(true);
     try {
       // Nao logar aqui: alem do ruido, a mensagem antiga percorria todas as ligas
@@ -414,7 +430,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Failed to save game', error);
       setWorlds(listSavedWorlds());
       setIsOnline(false);
-      addToast('Erro ao salvar progresso', 'error');
+      const message = String((error as any)?.message || '').toUpperCase();
+      if (message.includes('STALE_WORLD_REVISION') || message.includes('ROLLBACK_REJECTED')) {
+        remoteWritesBlockedRef.current = true;
+        addToast('O mundo avancou em outro aparelho. Recarregue para sincronizar.', 'warning');
+      } else {
+        addToast('Erro ao salvar progresso', 'error');
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -426,6 +448,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const joinedState = await joinSharedWorld(targetWorldId);
       if (joinedState) {
         const hydratedState = await hydrateStoreFromMeta(joinedState);
+        remoteWritesBlockedRef.current = false;
         setIsInitialLoad(true);
         setState(hydratedState);
         setWorldId(targetWorldId);
@@ -446,6 +469,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const joinedState = await joinWorldByCodeFromSupabase(joinCode);
       if (joinedState?.worldId) {
         const hydratedState = await hydrateStoreFromMeta(joinedState);
+        remoteWritesBlockedRef.current = false;
         setIsInitialLoad(true);
         setState(hydratedState);
         setWorldId(joinedState.worldId);
@@ -483,8 +507,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: any) {
       console.error('Failed to claim team', error);
       const message = error?.message === 'TEAM_ALREADY_CLAIMED'
-        ? 'Esse clube ja foi assumido por outro humano'
-        : 'Erro ao assumir clube';
+        ? 'Esse clube acabou de ser escolhido'
+        : error?.message === 'JOIN_WINDOW_CLOSED'
+          ? 'A janela para assumir clubes esta fechada'
+          : error?.message === 'TEAM_NOT_AVAILABLE'
+            ? 'Esse clube nao esta mais disponivel'
+            : 'Erro ao assumir clube';
       addToast(message, 'error');
     } finally {
       setIsSyncing(false);
@@ -827,19 +855,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setIsSyncing(true);
     try {
-      const localSummary = getSavedWorldSummary(idToLoad);
-      const remoteSummary = worlds.find(world => world.id === idToLoad);
-      const localUpdatedAt = localSummary ? new Date(localSummary.updatedAt).getTime() : 0;
-      const remoteUpdatedAt = remoteSummary ? new Date(remoteSummary.updatedAt).getTime() : 0;
-
       const loadedState = await loadGameState(idToLoad);
       const preferredState = loadedState;
-
-      if (localSummary && remoteSummary && localUpdatedAt > remoteUpdatedAt && applyLocalHydration(idToLoad)) {
-        setIsOnline(true);
-        addToast('Cache local mais recente restaurado.', 'info');
-        return;
-      }
 
       if (preferredState) {
         // Deep comparison to avoid unnecessary state updates and potential world regeneration
@@ -923,6 +940,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           const hydratedState = await hydrateStoreFromMeta(preferredState);
+          remoteWritesBlockedRef.current = false;
           const currentSnapshot = latestStateRef.current;
           marketSnapshotRef.current = currentSnapshot.worldId === idToLoad
             ? currentSnapshot
@@ -933,18 +951,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.log('Game loaded successfully');
           setIsOnline(true);
           addToast('Mundo carregado com relogio do servidor', 'success');
-        } else if (applyLocalHydration(idToLoad)) {
+        } else if (!isAuthenticated && applyLocalHydration(idToLoad)) {
           addToast('Mundo carregado do cache local', 'info');
         } else {
-        addToast('Nenhum save encontrado para este mundo', 'error');
-      }
+          addToast('Nao foi possivel buscar o mundo mestre', 'error');
+        }
     } catch (error) {
       console.error('Failed to load game', error);
-      if (applyLocalHydration(idToLoad)) {
+      if (!isAuthenticated && applyLocalHydration(idToLoad)) {
         addToast('Supabase indisponivel. Cache local restaurado.', 'warning');
       } else {
         setIsOnline(false);
-        addToast('Erro ao carregar mundo', 'error');
+        addToast('Servidor indisponivel. O mundo nao foi aberto.', 'error');
       }
     } finally {
       setIsSyncing(false);
@@ -952,17 +970,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTimeout(() => setIsInitialLoad(false), 1000);
     }
   }, [worldId, worlds, setState, addToast, state.world.currentDate, state.world.status, state.teams, state.players, applyLocalHydration, hydrateStoreFromMeta]);
-
-  useEffect(() => {
-    if (worldId || isSyncing || worlds.length === 0 || hasAutoRestoredWorldRef.current) return;
-
-    const lastWorldId = getLastSavedWorldId();
-    const preferredWorld = (lastWorldId && worlds.find(world => world.id === lastWorldId)) || worlds[0];
-    if (!preferredWorld?.id) return;
-
-    hasAutoRestoredWorldRef.current = true;
-    loadGame(preferredWorld.id);
-  }, [worldId, isSyncing, worlds, loadGame]);
 
   // Auto-save (debounce).
   //

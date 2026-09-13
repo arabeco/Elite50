@@ -17,6 +17,7 @@ import { GENESIS_DRAFT_LAST_DAY } from '../constants/gameConstants';
 import { equipBootOnPlayer, getBootImagePath, getStoreItem, getStoreState, releasePlayerBootToInventory } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 import { groupAchievementsByTrophy } from '../utils/trophyAssets';
+import { getDistrictTheme } from '../utils/districtTheme';
 
 interface PlayerModalProps {
   player: Player;
@@ -92,47 +93,14 @@ const TraitSigil = ({ trait, rarity, hidden }: { trait?: string | null; rarity: 
 export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => {
   const { state, addToast } = useGame();
 
-  const getTheme = (district: District) => {
-    switch (district) {
-      case 'NORTE': return {
-        main: 'text-cyan-400',
-        border: 'border-cyan-400',
-        bg: 'bg-cyan-950/30',
-        glow: 'shadow-[0_0_20px_rgba(34,211,238,0.3)]',
-        gradient: 'from-cyan-900/50 to-slate-900'
-      };
-      case 'SUL': return {
-        main: 'text-orange-500',
-        border: 'border-orange-500',
-        bg: 'bg-orange-950/30',
-        glow: 'shadow-[0_0_20px_rgba(249,115,22,0.3)]',
-        gradient: 'from-orange-900/50 to-stone-900'
-      };
-      case 'LESTE': return {
-        main: 'text-emerald-500',
-        border: 'border-emerald-500',
-        bg: 'bg-emerald-950/30',
-        glow: 'shadow-[0_0_20px_rgba(16,185,129,0.3)]',
-        gradient: 'from-emerald-900/50 to-slate-900'
-      };
-      case 'OESTE': return {
-        main: 'text-purple-500',
-        border: 'border-purple-500',
-        bg: 'bg-purple-950/30',
-        glow: 'shadow-[0_0_20px_rgba(168,85,247,0.3)]',
-        gradient: 'from-purple-900/50 to-slate-900'
-      };
-      default: return {
-        main: 'text-cyan-400',
-        border: 'border-cyan-400',
-        bg: 'bg-cyan-950/30',
-        glow: 'shadow-[0_0_20px_rgba(34,211,238,0.3)]',
-        gradient: 'from-cyan-900/50 to-slate-900'
-      };
-    }
+  const districtTheme = getDistrictTheme(player.district);
+  const theme = {
+    main: districtTheme.text,
+    border: districtTheme.border,
+    bg: districtTheme.backgroundMuted,
+    glow: districtTheme.glow,
+    gradient: districtTheme.gradient,
   };
-
-  const theme = getTheme(player.district);
   const globalRank = getPlayerGlobalRank(state, player.id);
   const eliteBadgeLabel = getEliteBadgeLabel(globalRank);
   const eliteTier = getEliteTier(globalRank);
@@ -169,16 +137,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
   ];
   const fusionRows = player.position === 'Goleiro'
     ? [
-        { key: 'REF', label: 'Reflexos', formula: 'AGI + INT', value: player.fusion.REF ?? 0, tone: 'text-cyan-200', bar: 'from-cyan-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-reflex.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
+        { key: 'REF', label: 'Reflexos', formula: 'AGI + INT', value: player.fusion.REF ?? 0, tone: 'text-mineral-200', bar: 'from-mineral-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-reflex.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
         { key: 'DEF', label: 'Defesa', formula: 'FOR + TEC', value: player.fusion.DEF ?? 0, tone: 'text-emerald-200', bar: 'from-emerald-400 to-lime-300', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-wall.svg', color: '#34d399', glow: 'rgba(52,211,153,0.28)' },
-        { key: 'POS', label: 'Posicao', formula: 'AGI + TAT', value: player.fusion.POS ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-fuchsia-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-position.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
+        { key: 'POS', label: 'Posicao', formula: 'AGI + TAT', value: player.fusion.POS ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-mineral-400', iconPath: '/assetas/avatars/fusion-icons/fusion-goal-position.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
         { key: 'PAS', label: 'Passe', formula: 'TAT + TEC', value: player.fusion.PAS, tone: 'text-amber-200', bar: 'from-amber-300 to-yellow-200', iconPath: '/assetas/avatars/fusion-icons/fusion-link.svg', color: '#facc15', glow: 'rgba(250,204,21,0.28)' },
         { key: 'DET', label: 'Determinacao', formula: 'FOR + INT', value: player.fusion.DET, tone: 'text-rose-200', bar: 'from-rose-400 to-orange-300', iconPath: '/assetas/avatars/fusion-icons/fusion-drive.svg', color: '#fb7185', glow: 'rgba(251,113,133,0.28)' },
       ]
     : [
-        { key: 'DRI', label: 'Drible', formula: 'AGI + INT', value: player.fusion.DRI ?? 0, tone: 'text-cyan-200', bar: 'from-cyan-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-react.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
+        { key: 'DRI', label: 'Drible', formula: 'AGI + INT', value: player.fusion.DRI ?? 0, tone: 'text-mineral-200', bar: 'from-mineral-400 to-blue-400', iconPath: '/assetas/avatars/fusion-icons/fusion-react.svg', color: '#22d3ee', glow: 'rgba(34,211,238,0.28)' },
         { key: 'FIN', label: 'Finalizacao', formula: 'FOR + TEC', value: player.fusion.FIN ?? 0, tone: 'text-emerald-200', bar: 'from-emerald-400 to-lime-300', iconPath: '/assetas/avatars/fusion-icons/fusion-execute.svg', color: '#34d399', glow: 'rgba(52,211,153,0.28)' },
-        { key: 'MOV', label: 'Movimento', formula: 'AGI + TAT', value: player.fusion.MOV ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-fuchsia-400', iconPath: '/assetas/avatars/fusion-icons/fusion-space.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
+        { key: 'MOV', label: 'Movimento', formula: 'AGI + TAT', value: player.fusion.MOV ?? 0, tone: 'text-purple-200', bar: 'from-purple-400 to-mineral-400', iconPath: '/assetas/avatars/fusion-icons/fusion-space.svg', color: '#d946ef', glow: 'rgba(217,70,239,0.28)' },
         { key: 'PAS', label: 'Passe', formula: 'TAT + TEC', value: player.fusion.PAS, tone: 'text-amber-200', bar: 'from-amber-300 to-yellow-200', iconPath: '/assetas/avatars/fusion-icons/fusion-link.svg', color: '#facc15', glow: 'rgba(250,204,21,0.28)' },
         { key: 'DET', label: 'Determinacao', formula: 'FOR + INT', value: player.fusion.DET, tone: 'text-rose-200', bar: 'from-rose-400 to-orange-300', iconPath: '/assetas/avatars/fusion-icons/fusion-drive.svg', color: '#fb7185', glow: 'rgba(251,113,133,0.28)' },
       ];
@@ -344,7 +312,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
     if (rarity === 'Prata') return 'border-slate-400/50 text-slate-200 bg-slate-800/40';
     if (rarity === 'Ouro') return 'border-amber-500/50 text-amber-300 bg-amber-950/30';
     if (rarity === 'Épico') return 'border-purple-500/50 text-purple-300 bg-purple-950/40';
-    if (rarity === 'Lendário') return 'border-cyan-400/50 text-cyan-300 bg-cyan-950/50 shadow-[0_0_10px_rgba(34,211,238,0.2)]';
+    if (rarity === 'Lendário') return 'border-mineral-400/50 text-mineral-300 bg-mineral-950/50 shadow-none';
     if (rarity === 'Fardo') return 'border-red-900/50 text-red-300 bg-red-950/30';
     return 'border-white/5 text-slate-500 bg-white/5';
   };
@@ -500,7 +468,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-md max-h-[calc(100svh-0.5rem)] sm:max-h-[90vh] bg-slate-950/95 backdrop-blur-2xl rounded-xl border ${theme.border} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_35px_rgba(245,158,11,0.22)]' : eliteTier === 'top50' ? 'shadow-[0_0_35px_rgba(34,211,238,0.18)]' : 'shadow-[0_0_30px_rgba(0,0,0,0.6)]'} flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
+        className={`relative w-full max-w-md max-h-[calc(100svh-0.5rem)] sm:max-h-[90vh] bg-slate-950/95 backdrop-blur-2xl rounded-xl border ${theme.border} ${eliteTier === 'top10' || eliteTier === 'top3' ? 'shadow-[0_0_35px_rgba(245,158,11,0.22)]' : eliteTier === 'top50' ? 'shadow-none' : 'shadow-[0_0_30px_rgba(0,0,0,0.6)]'} flex flex-col overflow-y-auto overflow-x-hidden slim-scrollbar`}
       >
         <button onClick={onClose} className="absolute top-3 right-3 z-20 p-1.5 bg-black/60 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors">
           <X size={16} />
@@ -512,7 +480,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
           {eliteBadgeLabel && (
-            <div className={`absolute inset-0 ${eliteTier === 'top10' || eliteTier === 'top3' ? 'bg-gradient-to-br from-amber-500/18 via-transparent to-transparent' : 'bg-gradient-to-br from-cyan-500/14 via-transparent to-transparent'}`} />
+            <div className={`absolute inset-0 ${eliteTier === 'top10' || eliteTier === 'top3' ? 'bg-gradient-to-br from-amber-500/18 via-transparent to-transparent' : 'bg-gradient-to-br from-mineral-500/14 via-transparent to-transparent'}`} />
           )}
           <div className="relative z-10 flex items-end gap-3 sm:gap-4 w-full">
             <div className={`w-28 h-36 sm:w-36 sm:h-44 rounded-2xl sm:rounded-[1.75rem] border ${theme.border} bg-black/60 shadow-2xl overflow-hidden flex-shrink-0 group relative`}>
@@ -526,7 +494,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
                 <span className={`text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] uppercase ${theme.main}`}>{player.district} CLAN</span>
                 {eliteBadgeLabel && (
-                  <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-[0.25em] ${eliteTier === 'top10' || eliteTier === 'top3' ? 'border-amber-400/35 bg-amber-500/12 text-amber-100' : 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-[0.25em] ${eliteTier === 'top10' || eliteTier === 'top3' ? 'border-amber-400/35 bg-amber-500/12 text-amber-100' : 'border-mineral-400/35 bg-mineral-500/10 text-mineral-100'}`}>
                     {eliteBadgeLabel}
                   </span>
                 )}
@@ -536,7 +504,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <span className={`text-base sm:text-lg leading-none ${player.appearance.gender === 'F' ? 'text-pink-300' : 'text-sky-300'}`} aria-label={player.appearance.gender === 'F' ? 'Feminino' : 'Masculino'}>
                   {genderSymbol}
                 </span>
-                <span className="text-[8px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-widest bg-cyan-900/50 px-1.5 sm:px-2 py-0.5 rounded-lg border border-cyan-500/50">{displayRole}</span>
+                <span className="text-[8px] sm:text-[10px] font-bold text-mineral-400 uppercase tracking-widest bg-mineral-900/50 px-1.5 sm:px-2 py-0.5 rounded-lg border border-mineral-500/50">{displayRole}</span>
               </h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <p className="text-[10px] sm:text-xs text-slate-400 font-medium tracking-wide">{player.name}</p>
@@ -795,10 +763,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 </React.Suspense>
               </div>
 
-              <div className="order-first rounded-xl border border-cyan-400/20 bg-black/55 p-3 shadow-[0_0_24px_rgba(34,211,238,0.08)]">
+              <div className="order-first rounded-xl border border-mineral-400/20 bg-black/55 p-3 shadow-none">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[8px] font-black uppercase tracking-[0.28em] text-cyan-200">Matriz de fusao</p>
+                    <p className="text-[8px] font-black uppercase tracking-[0.28em] text-mineral-200">Matriz de fusao</p>
                     <h3 className="mt-1 text-sm font-black uppercase italic text-white">Matriz de atributos</h3>
                   </div>
                   <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-right">
@@ -945,7 +913,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                     <span>Potencial {player.potential}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-black/55">
-                    <div className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400" style={{ width: `${valueProgress}%` }} />
+                    <div className="h-full bg-gradient-to-r from-emerald-400 to-mineral-400" style={{ width: `${valueProgress}%` }} />
                   </div>
                 </div>
               </div>
@@ -970,7 +938,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300"
+                    className="h-full bg-gradient-to-r from-mineral-400 via-emerald-400 to-amber-300"
                     style={{ width: `${valueProgress}%` }}
                   />
                 </div>
@@ -996,7 +964,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                       <div key={item.label} className="flex min-w-0 flex-col items-center gap-1">
                         <div className="flex h-24 w-full items-end justify-center rounded-lg border border-white/5 bg-white/[0.03] px-1 pb-1">
                           <div
-                            className={`w-full rounded-md ${item.delta >= 0 ? 'bg-gradient-to-t from-emerald-500 to-cyan-300' : 'bg-gradient-to-t from-rose-600 to-amber-300'}`}
+                            className={`w-full rounded-md ${item.delta >= 0 ? 'bg-gradient-to-t from-emerald-500 to-mineral-300' : 'bg-gradient-to-t from-rose-600 to-amber-300'}`}
                             style={{ height: `${height}px` }}
                           />
                         </div>
@@ -1027,7 +995,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                           <p className="truncate text-[9px] font-black uppercase tracking-widest text-white">
                             {event.fromTeamName || 'Livre'} para {event.toTeamName || 'Livre'}
                           </p>
-                          <span className="text-[8px] font-black uppercase tracking-widest text-cyan-300">S{event.season}</span>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-mineral-300">S{event.season}</span>
                         </div>
                         <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">
                           {event.type} {event.note ? `- ${event.note}` : ''}
@@ -1077,7 +1045,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-white/10">
                     <div
-                      className={`h-full ${teamScoreMax && teamPower > teamScoreMax ? 'bg-rose-500' : 'bg-cyan-400'}`}
+                      className={`h-full ${teamScoreMax && teamPower > teamScoreMax ? 'bg-rose-500' : 'bg-mineral-400'}`}
                       style={{ width: `${teamScoreMax ? Math.min(100, (teamPower / teamScoreMax) * 100) : 0}%` }}
                     />
                   </div>
@@ -1104,7 +1072,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                   </p>
                 )}
                 {equippedBootItem?.effectLabel && (
-                  <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                  <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-mineral-300">
                     {equippedBootItem.effectLabel}
                   </p>
                 )}
@@ -1112,7 +1080,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                   Equipe no atleta e, se ele sair do clube, o item volta ao inventario.
                 </p>
               </div>
-              <div className="w-16 h-16 rounded-xl border border-cyan-500/25 bg-white/[0.03] flex items-center justify-center overflow-hidden">
+              <div className="w-16 h-16 rounded-xl border border-mineral-500/25 bg-white/[0.03] flex items-center justify-center overflow-hidden">
                 <img
                   src={getBootImagePath(player.id, state)}
                   alt={equippedBootItem?.name || 'Chuteira'}
@@ -1126,7 +1094,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <button
                   type="button"
                   onClick={() => setShowBootPicker(prev => !prev)}
-                  className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.25em] text-cyan-200 transition hover:bg-cyan-500/20"
+                  className="w-full rounded-xl border border-mineral-500/30 bg-mineral-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.25em] text-mineral-200 transition hover:bg-mineral-500/20"
                 >
                   {showBootPicker ? 'Fechar lista de chuteiras' : 'Equipar chuteira'}
                 </button>
@@ -1158,7 +1126,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                             onClick={() => handleEquipBoot(item.id)}
                             className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
                               equippedHere
-                                ? 'border-cyan-400/40 bg-cyan-500/10'
+                                ? 'border-mineral-400/40 bg-mineral-500/10'
                                 : equippedElsewhere
                                   ? 'border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/15'
                                   : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
@@ -1176,7 +1144,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                               )}
                               <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">{item.rarity}</p>
                               {item.effectLabel && (
-                                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-cyan-300/90">
+                                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-mineral-300/90">
                                   {item.effectLabel}
                                 </p>
                               )}
@@ -1186,14 +1154,14 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                                 </p>
                               )}
                               {equippedHere && (
-                                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-cyan-200/80">
+                                <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-mineral-200/80">
                                   Equipada neste atleta
                                 </p>
                               )}
                             </div>
                             <div className="flex flex-col items-end gap-1">
                               {equippedHere && (
-                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-mineral-300">
                                   <CheckCircle2 size={12} />
                                   Equipada
                                 </span>
@@ -1229,8 +1197,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
                 <p className="text-[7px] font-black uppercase tracking-widest text-amber-200">Titulos</p>
                 <p className="mt-0.5 text-xl font-black italic text-white">{playerTitleCount}</p>
               </div>
-              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-2">
-                <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Individuais</p>
+              <div className="rounded-lg border border-mineral-500/20 bg-mineral-500/10 p-2">
+                <p className="text-[7px] font-black uppercase tracking-widest text-mineral-200">Individuais</p>
                 <p className="mt-0.5 text-xl font-black italic text-white">{playerIndividualCount}</p>
               </div>
             </div>
@@ -1303,10 +1271,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
               {isDraftPending ? (
                 <>
                   <Clock size={16} className="animate-pulse" />
-                  CANCELAR WISHLIST
+                  REMOVER ESCOLHA
                 </>
               ) : (
-                'ADICIONAR À WISHLIST'
+                'ADICIONAR AO DRAFT'
               )}
             </button>
           )}
@@ -1318,7 +1286,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose }) => 
           {isMyPlayer && (
             <div className="flex flex-col gap-2">
               <div className="w-full py-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-2">
-                <Shield size={14} className="text-cyan-400" />
+                <Shield size={14} className="text-mineral-400" />
                 <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Atleta do seu Elenco</span>
               </div>
               <button onPointerDown={startHold} onPointerUp={stopHold} onPointerLeave={stopHold} disabled={isProcessing} className="relative w-full py-3 rounded-xl font-black uppercase tracking-[0.3em] text-[10px] bg-red-950/40 text-red-400 border border-red-500/30 hover:bg-red-900/40">

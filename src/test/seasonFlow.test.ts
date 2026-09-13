@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateInitialState } from '../engine/generator';
-import { advanceGameDay, autoCompleteDraft, calculateTeamPower, startNewSeason } from '../engine/gameLogic';
+import { advanceAutomatedGameDay, advanceGameDay, autoCompleteDraft, calculateTeamPower, prepareLegacySeasonOverflowForCatchUp, repairLegacySeasonOverflow, startNewSeason } from '../engine/gameLogic';
 import { respondDistrictCupManagerInvite } from '../engine/districtCupLogic';
 import { SEASON_DAYS, SQUAD_SIZE_MAX, TOTAL_ROUNDS } from '../constants/gameConstants';
 import { GameState, Manager } from '../types';
@@ -50,6 +50,66 @@ const runCompleteSeason = (state: GameState) => {
 };
 
 describe('full season QA flow', () => {
+  it('starts the next season automatically when the server advances past offseason', () => {
+    let state = generateInitialState();
+    attachUserManager(state);
+    state = runCompleteSeason(state);
+
+    const previousSeason = state.world.currentSeason || 2050;
+    state = advanceAutomatedGameDay(state);
+
+    expect(state.world.currentSeason).toBe(previousSeason + 1);
+    expect(state.world.currentDay).toBe(1);
+    expect(state.world.phase).toBe('REGULAR_SEASON');
+  });
+
+  it('repairs legacy offseason overflow without moving the simulated date', () => {
+    let state = generateInitialState();
+    attachUserManager(state);
+    state = runCompleteSeason(state);
+
+    const legacyDate = new Date(state.world.currentDate);
+    legacyDate.setDate(legacyDate.getDate() + 18);
+    state.world.currentDate = legacyDate.toISOString();
+    state.world.currentDay = SEASON_DAYS + 18;
+    state.world.phase = 'OFFSEASON';
+
+    const repaired = repairLegacySeasonOverflow(state);
+
+    expect(repaired.world.currentSeason).toBe(2051);
+    expect(repaired.world.currentDay).toBe(18);
+    expect(repaired.world.currentDate).toBe(legacyDate.toISOString());
+    expect(repaired.world.currentRound).toBeGreaterThan(0);
+  });
+
+  it('prepares legacy overflow for one-day server catch-up', () => {
+    const state = generateInitialState();
+    const legacyDate = new Date('2050-07-30T08:00:00.000Z');
+    const legacyTick = new Date('2026-07-30T03:00:00.000Z');
+    state.world.currentDate = legacyDate.toISOString();
+    state.world.serverClockLastTickAt = legacyTick.toISOString();
+    state.world.currentDay = SEASON_DAYS + 18;
+    state.world.phase = 'OFFSEASON';
+
+    const prepared = prepareLegacySeasonOverflowForCatchUp(state);
+
+    expect(prepared.world.currentDay).toBe(SEASON_DAYS);
+    expect(prepared.world.currentDate).toBe('2050-07-12T08:00:00.000Z');
+    expect(prepared.world.serverClockLastTickAt).toBe('2026-07-12T03:00:00.000Z');
+  });
+
+  it('keeps league rest days in the regular-season phase', () => {
+    let state = startNewSeason(generateInitialState());
+    state = advanceAutomatedGameDay(state);
+    state = advanceAutomatedGameDay(state);
+    state = advanceAutomatedGameDay(state);
+    state = advanceAutomatedGameDay(state);
+
+    expect(state.world.currentDay).toBe(4);
+    expect(state.world.currentRound).toBe(1);
+    expect(state.world.phase).toBe('REGULAR_SEASON');
+  });
+
   it('runs draft, short league, Elite Cup, district showcase, offseason and next season without dead state', () => {
     let state = generateInitialState();
     attachUserManager(state);

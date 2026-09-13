@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Dashboard } from '../components/Dashboard';
@@ -102,30 +102,48 @@ describe('Dashboard click smoke', () => {
     const { container } = renderDashboard(makeDraftWorld());
 
     const nav = screen.getByRole('navigation');
-    const openedOnHome = !!screen.queryByText(/Monte seu elenco inicial/i);
+    await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
 
-    if (openedOnHome) {
-      await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
-    }
-
-    const teamTabs = container.querySelector('[data-onboarding="team-mode-tabs"]');
-    const draftTab = teamTabs ? within(teamTabs as HTMLElement).queryByRole('button', { name: /Draft/i }) : null;
-    if (draftTab) {
-      await user.click(draftTab);
-    }
+    const teamTabs = await waitFor(() => {
+      const element = container.querySelector('[data-onboarding="team-mode-tabs"]');
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+    await user.click(within(teamTabs).getByRole('button', { name: /Draft/i }));
 
     expect(await screen.findByRole('heading', { name: /DRAFT\s+GENESIS/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Confirmar Draft/i })).toBeInTheDocument();
-    expect(screen.getByText(/Mercado de Draft/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Minhas escolhas/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Confirmar Draft/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Escolher/i })).toBeInTheDocument();
 
     await user.click(within(nav).getByRole('button', { name: /Mundo/i }));
     expect(await screen.findByText(/Not/i)).toBeInTheDocument();
 
-    await user.click(within(nav).getByRole('button', { name: /Home/i }));
+    const northLeagueButton = await screen.findByRole(
+      'button',
+      { name: /Ver Liga Norte/i },
+      { timeout: 5000 }
+    );
+    await user.click(northLeagueButton);
+    await waitFor(() => expect(northLeagueButton).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.queryByText('NaN')).not.toBeInTheDocument();
+
+    await user.click(within(nav).getByRole('button', { name: /Início/i }));
     expect(await screen.findByText(/Monte seu elenco inicial|Continue o Draft/i)).toBeInTheDocument();
 
     await user.click(within(nav).getByRole('button', { name: /Carreira/i }));
-    await user.click(await screen.findByRole('button', { name: /Config/i }));
+    await user.click(await screen.findByRole(
+      'button',
+      { name: /Temporadas/i },
+      { timeout: 5000 }
+    ));
+    expect(await screen.findByText(/Campanha atual/i)).toBeInTheDocument();
+    const settingsButton = await screen.findByRole(
+      'button',
+      { name: /Config/i },
+      { timeout: 5000 }
+    );
+    await user.click(settingsButton);
     await user.click(screen.getByRole('button', { name: /Reportar problema/i }));
     expect(await screen.findByRole('heading', { name: /Reportar problema/i })).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText(/O que aconteceu/i), 'Fluxo de teste abriu corretamente.');
@@ -135,7 +153,7 @@ describe('Dashboard click smoke', () => {
       category: 'bug',
       message: 'Fluxo de teste abriu corretamente.'
     }));
-  }, 15000);
+  }, 30000);
 
   it('lets a lobby participant choose Founder mode without becoming world creator', async () => {
     const user = userEvent.setup();
@@ -155,4 +173,26 @@ describe('Dashboard click smoke', () => {
     await user.click(founderButton);
     expect(await screen.findByText(/REGISTRO DE/i)).toBeInTheDocument();
   }, 15000);
+
+  it('keeps the season recap closed until the player opens it from Home', async () => {
+    const user = userEvent.setup();
+    const state = generateInitialState();
+    attachUserClub(state);
+    state.world.status = 'ACTIVE';
+    state.world.phase = 'OFFSEASON';
+    state.world.currentDay = 22;
+    state.world.districtCup.managerInvites = [];
+    state.world.history = [];
+
+    renderDashboard(state);
+
+    expect(screen.queryByText(`Temporada ${state.world.currentSeason || 2050}`)).not.toBeInTheDocument();
+    const nav = screen.getByRole('navigation');
+    await user.click(within(nav).getByRole('button', { name: /Elenco/i }));
+    await user.click(within(nav).getByRole('button', { name: /Início/i }));
+    const recapButton = await screen.findByRole('button', { name: /Abrir recap/i }, { timeout: 10000 });
+
+    await user.click(recapButton);
+    expect(await screen.findByText(`Temporada ${state.world.currentSeason || 2050}`)).toBeInTheDocument();
+  }, 25000);
 });

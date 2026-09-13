@@ -1,11 +1,13 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { advanceGameDay } from './engine.mjs';
+import { advanceAutomatedGameDay, prepareLegacySeasonOverflowForCatchUp } from './engine.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const CRON_SECRET = Deno.env.get('WORLD_CLOCK_CRON_SECRET') || '';
-const MAX_DAYS_PER_RUN = Number(Deno.env.get('WORLD_CLOCK_MAX_DAYS_PER_RUN') || '30');
+// A full simulated day is CPU-heavy for a 32-team world. Catch up gradually so
+// long-paused projects stay below the Edge worker resource ceiling.
+const MAX_DAYS_PER_RUN = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WORLD_TIME_ZONE = 'America/Sao_Paulo';
 
@@ -310,6 +312,11 @@ Deno.serve(async (req) => {
       if (!record) continue;
 
       let state = buildMergedState(record, worldRecords);
+      const seasonBeforeRepair = state.world.currentSeason;
+      const dayBeforeRepair = state.world.currentDay;
+      state = prepareLegacySeasonOverflowForCatchUp(state);
+      const repairedLegacySeason = seasonBeforeRepair !== state.world.currentSeason
+        || dayBeforeRepair !== state.world.currentDay;
       const kickoff = openScheduledKickoff(state, now);
       state = kickoff.state;
 
@@ -318,7 +325,7 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < dueDays; i += 1) {
         if (state.world.currentDay === -1) break;
-        state = advanceGameDay(state, false);
+        state = advanceAutomatedGameDay(state, false);
         advancedDays += 1;
       }
 
@@ -336,11 +343,19 @@ Deno.serve(async (req) => {
         updatedAt: record.updated_at,
       });
 
-      if (!kickoff.opened && advancedDays === 0) {
+      if (!kickoff.opened && advancedDays === 0 && !repairedLegacySeason) {
         continue;
       }
 
-      state.world.serverClockLastTickAt = now.toISOString();
+      const previousTick = validDate(state.world.serverClockLastTickAt)
+        || validDate(state.world.lastServerTickAt)
+        || validDate(record.updated_at)
+        || now;
+      const consumedTick = new Date(previousTick);
+      consumedTick.setUTCDate(consumedTick.getUTCDate() + advancedDays);
+      state.world.serverClockLastTickAt = consumedTick > now
+        ? now.toISOString()
+        : consumedTick.toISOString();
 
       const creatorTeamId = (record as any).user_team_id || null;
       const creatorNotifications = (state.notifications || []).filter((notification: any) =>
@@ -369,6 +384,18 @@ Deno.serve(async (req) => {
       for (const participantRecord of worldRecords) {
         if (participantRecord.user_id === record.user_id) continue;
         const participantTeamId = (participantRecord as any).user_team_id || null;
+        const participantManagerId = (participantRecord as any).user_manager_id || null;
+        const participantTeam = participantTeamId ? state.teams[participantTeamId] : null;
+        const participantPlayers = participantTeam
+          ? Object.fromEntries(
+            (participantTeam.squad || [])
+              .map((playerId: string) => [playerId, state.players[playerId]])
+              .filter(([, player]: [string, any]) => Boolean(player))
+          )
+          : {};
+        const participantManagers = participantManagerId && state.managers[participantManagerId]
+          ? { [participantManagerId]: state.managers[participantManagerId] }
+          : {};
         const resultNotifications = buildMarketResultNotifications(participantRecord, state);
         const nextNotifications = uniqueById([
           ...resultNotifications,
@@ -378,9 +405,13 @@ Deno.serve(async (req) => {
         const { error: participantUpdateError } = await supabase
           .from('games')
           .update({
+            teams_data: participantTeamId && participantTeam ? { [participantTeamId]: participantTeam } : {},
+            players_data: participantPlayers,
+            managers_data: participantManagers,
             notifications: nextNotifications,
             transfer_proposals: (state.transferProposals || []).filter((proposal: any) => proposal.toTeamId === participantTeamId),
             trade_offers: (state.tradeOffers || []).filter((offer: any) => offer.fromTeamId === participantTeamId || offer.toTeamId === participantTeamId),
+            updated_at: now.toISOString(),
           })
           .eq('user_id', participantRecord.user_id)
           .eq('world_id', participantRecord.world_id);

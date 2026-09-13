@@ -1,4 +1,5 @@
 ﻿import React from 'react';
+import { ClubMasthead } from './ClubMasthead';
 import { useGame } from '../../store/GameContext';
 import { useGameDispatch } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
@@ -16,6 +17,7 @@ import { calculateTeamPower, isJoinWindowOpen } from '../../engine/gameLogic';
 import { GENESIS_DRAFT_LAST_DAY, MATCH_REAL_TIME_SECONDS, MIDSEASON_JOIN_MAX_ROUND, OFFSEASON_DAYS, SEASON_DAYS } from '../../constants/gameConstants';
 import { resolveHomePhase } from '../../utils/homeFlow';
 import { getNextGameMidnight, getNextRealMidnight } from '../../utils/worldSchedule';
+import { getDistrictTheme } from '../../utils/districtTheme';
 import { Team, Player, Match, ClubOffer, LeagueState, NewsItem } from '../../types';
 import { Home, Trophy, History, Play, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, CheckCircle2, Circle, Mail, Check, XCircle, Copy } from 'lucide-react';
 interface HomeTabProps {
@@ -24,9 +26,10 @@ interface HomeTabProps {
   onOpenLineup?: () => void;
   onOpenTactics?: () => void;
   onOpenLeague?: () => void;
+  onOpenSeasonReport?: (season: number) => void;
 }
 
-export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague }: HomeTabProps) => {
+export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, onOpenLeague, onOpenSeasonReport }: HomeTabProps) => {
   const { state, setState, saveGame, isSyncing } = useGame();
   const { respondToClubOffer, respondToDistrictCupInvite, addToast } = useGameDispatch();
   const dashData = useDashboardData();
@@ -136,13 +139,16 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   const lastMatch = pastMatches?.[0];
   const isRevealed = lastMatch?.revealed !== false;
 
+  const latestSeasonReport = state.world.history?.[0];
+  const recapSeason = state.world.phase === 'OFFSEASON'
+    ? (state.world.currentSeason || 2050)
+    : latestSeasonReport?.season;
   const headlineData = React.useMemo(() => {
-    const latestSeasonReport = state.world.history?.[0];
-    if (state.world.phase === 'OFFSEASON' && latestSeasonReport) {
+    if (state.world.phase === 'OFFSEASON') {
       return {
         type: 'news',
-        title: `Season ${latestSeasonReport.season} arquivada`,
-        message: 'A offseason esta viva: veja o season report, acompanhe a Copa dos Distritos e prepare a entrada na proxima temporada.',
+        title: `Temporada ${state.world.currentSeason || 2050} encerrada`,
+        message: 'Veja o recap e acompanhe as etapas finais antes da proxima temporada.',
         revealed: true
       };
     }
@@ -172,7 +178,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       message: state.lastHeadline?.message || "Novas promessas surgem nos distritos periféricos de Neo-City.",
       revealed: true
     };
-  }, [lastMatch, state.lastHeadline, userTeam, isRevealed]);
+  }, [lastMatch, latestSeasonReport, state.lastHeadline, state.world.phase, userTeam, isRevealed]);
 
   // Calendar events for news feed
   const newsFeed = React.useMemo(() => {
@@ -241,6 +247,40 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       match && (match.homeTeamId === userTeam.id || match.awayTeamId === userTeam.id)
     );
   }, [state.world.leagues, state.world.eliteCup.bracket, userTeam]);
+
+  const seasonProgress = React.useMemo(() => {
+    const leagueMatches = Object.values(state.world.leagues || {}).flatMap(league => league.matches || []);
+    const eliteMatches = [
+      ...(state.world.eliteCup?.bracket.round1 || []),
+      ...(state.world.eliteCup?.bracket.quarters || []),
+      ...(state.world.eliteCup?.bracket.semis || []),
+      ...(state.world.eliteCup?.bracket.final ? [state.world.eliteCup.bracket.final] : []),
+    ];
+    const districtMatches = [
+      ...(state.world.districtCup?.matches || []),
+      ...(state.world.districtCup?.final ? [state.world.districtCup.final] : []),
+    ];
+    const leagueDone = leagueMatches.length > 0 && leagueMatches.every(match => match.played);
+    const eliteDone = !!state.world.eliteCup?.winnerId
+      || (eliteMatches.length > 0 && eliteMatches.every(match => match.played) && !!state.world.eliteCup?.bracket.final);
+    const districtDone = !!state.world.districtCup?.winnerId
+      || (districtMatches.length > 0 && districtMatches.every(match => match.played) && !!state.world.districtCup?.final);
+    const cycleFinished = leagueDone && eliteDone && districtDone;
+    const stages = [
+      { label: 'Ligas', done: leagueDone, active: !leagueDone && state.world.status !== 'LOBBY' },
+      { label: 'Elite', done: eliteDone, active: leagueDone && !eliteDone },
+      { label: 'Distritos', done: districtDone, active: eliteDone && !districtDone },
+      { label: 'Fim', done: cycleFinished, active: state.world.phase === 'OFFSEASON' && !cycleFinished },
+    ];
+    const completed = stages.filter(stage => stage.done).length;
+
+    return {
+      stages,
+      percent: Math.round((completed / stages.length) * 100),
+      allCompetitionsFinished: cycleFinished,
+      districtInProgress: eliteDone && !districtDone,
+    };
+  }, [state.world.districtCup, state.world.eliteCup, state.world.leagues, state.world.phase, state.world.status]);
 
   const nextMatchData = React.useMemo(() => {
     if (!userTeam) return null;
@@ -634,9 +674,9 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
     if (todayPhase === 'offseason') {
       return [
-        { label: 'Ver Calendario', icon: Calendar, onClick: onOpenLeague, primary: true, disabled: !onOpenLeague },
+        ...(recapSeason ? [{ label: 'Ver Recap', icon: Trophy, onClick: () => onOpenSeasonReport?.(recapSeason), primary: true, disabled: !onOpenSeasonReport }] : []),
+        { label: 'Ver Calendario', icon: Calendar, onClick: onOpenLeague, primary: !recapSeason, disabled: !onOpenLeague },
         { label: 'Ajustar Tatica', icon: Brain, onClick: onOpenTactics, disabled: !onOpenTactics },
-        { label: 'Ver Elenco', icon: Users, onClick: onOpenTeam, disabled: !onOpenTeam },
       ];
     }
 
@@ -772,12 +812,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     if (todayPhase === 'offseason') {
       return {
         eyebrow: 'OFFSEASON VIVA',
-        title: 'Transicao curta, mundo continuo',
-        message: joinWindowOpen
-          ? `A temporada acabou, mas o mundo segue. Ha ${OFFSEASON_DAYS} dias de janela para ajustes, leitura do season report e entrada em clubes ate a rodada ${MIDSEASON_JOIN_MAX_ROUND}.`
-          : 'A janela principal ja passou e o mundo esta alinhando a virada automatica para a proxima temporada.',
+        title: seasonProgress.allCompetitionsFinished ? 'Temporada encerrada' : 'Ciclo final em andamento',
+        message: seasonProgress.allCompetitionsFinished
+          ? 'Ligas e copas concluidas. O recap esta disponivel.'
+          : seasonProgress.districtInProgress
+            ? 'As ligas e a Copa Elite acabaram. A Copa dos Distritos ainda esta em jogo.'
+            : 'A temporada principal acabou. As etapas finais continuam no calendario.',
         status: `Dia ${Math.min(offseasonDay, OFFSEASON_DAYS)}/${OFFSEASON_DAYS} da offseason`,
-        consequence: 'Depois disso: a nova temporada entra automaticamente sem resetar os clubes.',
+        consequence: joinWindowOpen ? 'Janela aberta' : 'Proxima temporada sendo preparada',
       };
     }
 
@@ -1287,10 +1329,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               : 'Ajustar tatica e treino';
 
     return [
-      { label: 'Fase', value: phaseLabel, tone: 'text-cyan-300', icon: Trophy },
+      { label: 'Fase', value: phaseLabel, tone: 'text-mineral-300', icon: Trophy },
       { label: 'Mercado', value: state.world.transferWindowOpen ? 'Aberto' : 'Fechado', tone: state.world.transferWindowOpen ? 'text-emerald-300' : 'text-slate-300', icon: ShoppingCart },
       { label: 'Entrada', value: isUnemployed ? (joinWindowOpen ? 'Negociando agora' : 'Fila da prox temporada') : (joinWindowOpen ? `Livre ate R${MIDSEASON_JOIN_MAX_ROUND}` : 'Janela fechada'), tone: joinWindowOpen ? 'text-amber-300' : 'text-rose-300', icon: Shield },
-      { label: 'Agora', value: recommendation, tone: 'text-fuchsia-300', icon: Brain },
+      { label: 'Agora', value: recommendation, tone: 'text-mineral-300', icon: Brain },
     ];
   }, [
     isUnemployed,
@@ -1363,7 +1405,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             />
             <button
               onClick={handleStartReport}
-              className="mt-6 w-full py-4 bg-cyan-500 rounded-2xl text-[10px] font-black text-black uppercase tracking-[0.3em] hover:bg-cyan-400 transition-all flex items-center justify-center gap-2 shadow-[0_10px_30px_rgba(6,182,212,0.3)]"
+              className="mt-6 w-full py-4 bg-mineral-500 rounded-2xl text-[10px] font-black text-black uppercase tracking-[0.3em] hover:bg-mineral-400 transition-all flex items-center justify-center gap-2 shadow-none"
             >
               <Play size={16} fill="black" /> REVER RELATÓRIO COMPLETO
             </button>
@@ -1374,12 +1416,13 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-5xl mx-auto pb-8 px-2 sm:px-0">
+    <div className="sport-home space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-5xl mx-auto pb-8 px-2 sm:px-0">
+      <ClubMasthead team={userTeam} players={state.players} season={state.world.currentSeason} onOpenTeam={onOpenTeam} />
 
       {/* SYNC INDICATOR */}
       {isSyncing && (
         <div className="fixed top-16 right-4 sm:top-24 sm:right-8 z-50 flex items-center gap-2 px-3 py-1.5 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl animate-in fade-in zoom-in slide-in-from-right-4 duration-500">
-          <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <div className="w-2 h-2 rounded-full bg-mineral-500 animate-pulse shadow-none" />
           <span className="text-[8px] font-black text-white/60 uppercase tracking-[0.2em]">Salvando no Supabase...</span>
         </div>
       )}
@@ -1390,14 +1433,14 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             ? 'border-emerald-400/25 bg-emerald-500/10'
             : homeNotice.tone === 'amber'
               ? 'border-amber-400/25 bg-amber-500/10'
-              : 'border-cyan-400/25 bg-cyan-500/10'
+              : 'border-mineral-400/25 bg-mineral-500/10'
         }`}>
           <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
             homeNotice.tone === 'emerald'
               ? 'bg-emerald-300'
               : homeNotice.tone === 'amber'
                 ? 'bg-amber-300'
-                : 'bg-cyan-300'
+                : 'bg-mineral-300'
           }`} />
           <div className="min-w-0 flex-1">
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white">{homeNotice.title}</p>
@@ -1468,7 +1511,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         <section className="rounded-[1.75rem] border border-white/10 bg-black/25 p-3 shadow-[0_14px_34px_rgba(0,0,0,0.24)]">
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <div className="flex items-center gap-2">
-              <Newspaper size={15} className="text-cyan-200" />
+              <Newspaper size={15} className="text-mineral-200" />
               <p className="text-[9px] font-black uppercase tracking-[0.26em] text-white">Destaques</p>
             </div>
             <span className="text-[8px] font-black uppercase tracking-widest text-white/35">
@@ -1479,9 +1522,9 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             {highlightNews.map(card => {
               const Icon = card.icon;
               const toneClasses = {
-                cyan: 'border-cyan-400/25 bg-cyan-500/10 text-cyan-200',
+                cyan: 'border-mineral-400/25 bg-mineral-500/10 text-mineral-200',
                 emerald: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
-                fuchsia: 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200',
+                fuchsia: 'border-mineral-400/25 bg-mineral-500/10 text-mineral-200',
                 amber: 'border-amber-400/25 bg-amber-500/10 text-amber-200',
                 rose: 'border-rose-400/25 bg-rose-500/10 text-rose-200'
               }[card.tone];
@@ -1514,16 +1557,16 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
       {/* CENTRAL DO DIA: game-state driven actions */}
       <div
-        data-onboarding="home-gps"
-        className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-card-neon border-cyan-500/25 p-5 sm:p-8 shadow-[0_0_45px_rgba(6,182,212,0.12)]"
+        data-onboarding="home-gps" data-sport-panel="matchday"
+        className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-card-neon border-mineral-500/25 p-5 sm:p-8 shadow-none"
       >
-        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-cyan-500/10 blur-[80px]" />
-        <div className="absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-fuchsia-500/10 blur-[80px]" />
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-mineral-500/10 blur-[80px]" />
+        <div className="absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-mineral-500/10 blur-[80px]" />
 
         <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
           <div className="space-y-3 lg:flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.3em] text-cyan-300">
+              <span className="rounded-full border border-mineral-500/30 bg-mineral-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.3em] text-mineral-300">
                 {guidedTodayCopy.eyebrow}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[8px] font-black uppercase tracking-[0.25em] text-slate-400">
@@ -1535,6 +1578,51 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 </span>
               )}
             </div>
+            <div className="max-w-xl py-1" aria-label={`Progresso da temporada: ${seasonProgress.percent}%`}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[8px] font-black uppercase tracking-[0.24em] text-white/45">
+                  Ciclo S{state.world.currentSeason}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-black tabular-nums text-mineral-200">{seasonProgress.percent}%</span>
+                  {recapSeason && onOpenSeasonReport && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenSeasonReport(recapSeason)}
+                      className="flex items-center gap-0.5 text-[7px] font-black uppercase tracking-wider text-white/45 transition hover:text-mineral-200"
+                    >
+                      Abrir recap
+                      <ChevronRight size={10} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="relative">
+                <div className="absolute left-2 right-2 top-1.5 h-px bg-white/10" />
+                <div
+                  className="absolute left-2 top-1.5 h-px bg-mineral-300 transition-[width] duration-500"
+                  style={{ width: `calc((100% - 1rem) * ${seasonProgress.percent / 100})` }}
+                />
+                <div className="relative flex justify-between gap-2">
+                  {seasonProgress.stages.map(stage => (
+                    <div key={stage.label} className="flex min-w-0 flex-col items-center gap-1.5">
+                      <span className={`h-3 w-3 rounded-full border-2 shadow-[0_0_10px_rgba(0,0,0,0.35)] ${
+                        stage.done
+                          ? 'border-mineral-200 bg-mineral-300'
+                          : stage.active
+                            ? 'animate-pulse border-amber-200 bg-amber-300'
+                            : 'border-white/20 bg-slate-950'
+                      }`} />
+                      <span className={`truncate text-[7px] font-black uppercase tracking-wider ${
+                        stage.done ? 'text-mineral-100' : stage.active ? 'text-amber-200' : 'text-white/25'
+                      }`}>
+                        {stage.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div>
               <h2 className="text-2xl sm:text-4xl font-black uppercase italic tracking-tighter text-white">
                 {guidedTodayCopy.title}
@@ -1544,19 +1632,19 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               </p>
             </div>
             {isLobby && state.isCreator && (
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-3 sm:p-4">
+              <div className="rounded-2xl border border-mineral-400/20 bg-mineral-500/10 p-3 sm:p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100/70">Codigo do mundo</p>
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-100/70">Codigo do mundo</p>
                     <p className="mt-1 font-mono text-base sm:text-lg font-black tracking-[0.18em] text-white">{worldJoinCode}</p>
-                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-cyan-100/45">
+                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-mineral-100/45">
                       Use esse codigo para alguem entrar antes da temporada comecar.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleCopyJoinCode}
-                    className="shrink-0 rounded-xl border border-cyan-400/25 bg-black/30 p-3 text-cyan-100 transition hover:bg-cyan-400 hover:text-black"
+                    className="shrink-0 rounded-xl border border-mineral-400/25 bg-black/30 p-3 text-mineral-100 transition hover:bg-mineral-400 hover:text-black"
                     title="Copiar codigo do mundo"
                   >
                     <Copy size={15} />
@@ -1567,12 +1655,12 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
           </div>
 
           <div className="flex flex-col gap-3 lg:min-w-[420px] lg:max-w-[460px]">
-            <div className="relative overflow-hidden rounded-[1.75rem] border border-cyan-400/25 bg-gradient-to-br from-cyan-500/12 via-black/30 to-fuchsia-500/10 p-4 sm:p-5">
-              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-400/10 blur-[60px]" />
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-mineral-400/25 bg-gradient-to-br from-mineral-500/12 via-black/30 to-mineral-500/10 p-4 sm:p-5">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-mineral-400/10 blur-[60px]" />
               <div className="relative z-10">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-mineral-300">
                       <Target size={13} />
                       {isUnemployed ? 'Status do tecnico' : 'Score do Clube'}
                     </div>
@@ -1602,7 +1690,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   <>
                     <div className="mt-4 h-3 overflow-hidden rounded-full border border-white/10 bg-black/45">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${reservedScoreLeft >= 0 ? 'bg-cyan-400' : 'bg-rose-500'}`}
+                        className={`h-full rounded-full transition-all duration-500 ${reservedScoreLeft >= 0 ? 'bg-mineral-400' : 'bg-rose-500'}`}
                         style={{ width: `${occupiedScorePercent}%` }}
                       />
                     </div>
@@ -1617,7 +1705,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
             <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-4 sm:p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+                  <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-mineral-300">
                     <Clock size={13} />
                     Próximo Evento
                   </div>
@@ -1633,7 +1721,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                       <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                         {spotlightOffer?.note || (joinWindowOpen ? 'Use a aba de clubes para enviar proposta' : 'Voce pode escolher destinos e esperar a proxima virada')}
                       </div>
-                      <div className="mt-2 text-sm sm:text-base font-black text-cyan-300">
+                      <div className="mt-2 text-sm sm:text-base font-black text-mineral-300">
                         {joinWindowOpen ? 'Resposta nunca sai na hora' : 'Pedidos novos ficam enfileirados'}
                       </div>
                     </>
@@ -1645,7 +1733,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                       <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                         {nextMatchData.dateLabel}
                       </div>
-                      <div className="mt-2 text-sm sm:text-base font-black text-cyan-300">
+                      <div className="mt-2 text-sm sm:text-base font-black text-mineral-300">
                         {nextMatchData.phase === 'before'
                           ? `Começa em ${nextMatchData.countdown}`
                           : nextMatchData.countdownLabel}
@@ -1654,12 +1742,22 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   ) : (
                     <>
                       <div className="mt-3 text-lg sm:text-xl font-black uppercase italic tracking-tight text-white">
-                        {firstUserMatch ? 'Calendario pronto' : 'Nenhum evento carregado'}
+                        {isOffseason
+                          ? seasonProgress.allCompetitionsFinished
+                            ? 'Ciclo concluido'
+                            : seasonProgress.districtInProgress
+                              ? 'Copa dos Distritos em jogo'
+                              : 'Etapas finais em andamento'
+                          : firstUserMatch ? 'Calendario pronto' : 'Nenhum evento carregado'}
                       </div>
                       <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        {firstUserMatch
-                          ? 'A tabela ja existe. A contagem comeca quando o GM abrir a temporada.'
-                          : 'O calendario real sera exibido aqui assim que houver partida'}
+                        {isOffseason
+                          ? seasonProgress.allCompetitionsFinished
+                            ? 'Todos os campeonatos encerrados'
+                            : 'Abra o calendario para acompanhar a chave'
+                          : firstUserMatch
+                            ? 'A tabela ja existe. A contagem comeca quando o GM abrir a temporada.'
+                            : 'O calendario real sera exibido aqui assim que houver partida'}
                       </div>
                     </>
                   )}
@@ -1691,7 +1789,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   disabled={action.disabled}
                   className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl px-3 py-3 text-[9px] font-black uppercase tracking-[0.18em] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${
                     action.primary
-                      ? 'bg-cyan-400 text-black shadow-[0_0_22px_rgba(34,211,238,0.22)] hover:bg-cyan-300'
+                      ? 'bg-mineral-400 text-black shadow-none hover:bg-mineral-300'
                       : 'border border-white/10 bg-white/[0.04] text-white/65 hover:bg-white/[0.07] hover:text-white'
                   }`}
                 >
@@ -1707,10 +1805,10 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
       {isUnemployed && (
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="rounded-[1.9rem] border border-cyan-400/20 bg-black/30 p-4 sm:p-5">
+          <section className="rounded-[1.9rem] border border-mineral-400/20 bg-black/30 p-4 sm:p-5">
             <div className="flex items-center gap-2">
-              <Mail size={15} className="text-cyan-300" />
-              <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Inbox de propostas</h3>
+              <Mail size={15} className="text-mineral-300" />
+              <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-mineral-200">Inbox de propostas</h3>
             </div>
             <div className="mt-4 space-y-3">
               {userClubOffers.length === 0 ? (
@@ -1721,12 +1819,13 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 userClubOffers.slice(0, 3).map((offer) => {
                   const team = state.teams[offer.teamId];
                   if (!team) return null;
+                  const districtTheme = getDistrictTheme(team.district);
                   const canSign = offer.status === 'ACCEPTED' && joinWindowOpen && (state.world.currentDay || 0) >= offer.availableOnDay;
                   return (
-                    <div key={offer.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div key={offer.id} className={`rounded-2xl border bg-white/[0.03] p-4 ${districtTheme.borderMuted}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">{team.district}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-[0.24em] ${districtTheme.text}`}>{team.district}</p>
                           <h4 className="mt-1 text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
                           <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">{offer.note || 'Sem detalhe adicional.'}</p>
                         </div>
@@ -1793,7 +1892,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 type="button"
                 onClick={onOpenTeam}
                 disabled={!onOpenTeam}
-                className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.22em] text-cyan-100 transition hover:bg-cyan-500/18 disabled:opacity-35"
+                className="rounded-xl border border-mineral-400/25 bg-mineral-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-[0.22em] text-mineral-100 transition hover:bg-mineral-500/18 disabled:opacity-35"
               >
                 Ver todos
               </button>
@@ -1820,7 +1919,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[8px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                      <p className="text-[8px] font-black uppercase tracking-[0.22em] text-mineral-200">
                         {team.district} {league ? `- ${league.position}o ${league.name}` : ''}
                       </p>
                       <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
@@ -1837,7 +1936,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       )}
 
       {isFirstMatchFlow && nextMatchData?.opponent && (
-        <div className="relative overflow-hidden rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-500/10 via-white/[0.035] to-cyan-500/10 p-5 shadow-[0_0_35px_rgba(245,158,11,0.10)]">
+        <div className="relative overflow-hidden rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-500/10 via-white/[0.035] to-mineral-500/10 p-5 shadow-[0_0_35px_rgba(245,158,11,0.10)]">
           <div className="absolute right-0 top-0 h-40 w-40 translate-x-12 -translate-y-12 rounded-full bg-amber-400/10 blur-[70px]" />
           <div className="relative z-10 grid gap-4 lg:grid-cols-[1fr_0.82fr] lg:items-center">
             <div className="space-y-3">
@@ -1868,7 +1967,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
               <div className="grid gap-2 sm:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Seu score</p>
-                  <p className="mt-1 text-2xl font-black italic text-cyan-300">{nextMatchData.userPower}</p>
+                  <p className="mt-1 text-2xl font-black italic text-mineral-300">{nextMatchData.userPower}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Adversario</p>
@@ -1920,12 +2019,12 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         <button
           type="button"
           onClick={nextMatchData?.ctaAction || onOpenLeague}
-          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-cyan-500/40 hover:bg-white/[0.055]"
+          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-mineral-500/40 hover:bg-white/[0.055]"
         >
-          <div className="absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-12 rounded-full bg-cyan-500/10 blur-[60px]" />
+          <div className="absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-12 rounded-full bg-mineral-500/10 blur-[60px]" />
           <div className="relative z-10 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-mineral-300">
                 <Calendar size={13} />
                 Proximo Jogo
               </div>
@@ -1937,7 +2036,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                   <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                     {nextMatchData.dateLabel}
                   </div>
-                  <div className="mt-2 text-xs font-black text-cyan-300">
+                  <div className="mt-2 text-xs font-black text-mineral-300">
                     {nextMatchData.phase === 'before'
                       ? `Começa em ${nextMatchData.countdown}`
                       : nextMatchData.countdownLabel}
@@ -1956,19 +2055,19 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 </>
               )}
             </div>
-            <ChevronRight size={18} className="shrink-0 text-cyan-300 transition-transform group-hover:translate-x-1" />
+            <ChevronRight size={18} className="shrink-0 text-mineral-300 transition-transform group-hover:translate-x-1" />
           </div>
         </button>
 
         <button
           type="button"
           onClick={onOpenTeam}
-          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-fuchsia-500/40 hover:bg-white/[0.055]"
+          className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left transition-all hover:border-mineral-500/40 hover:bg-white/[0.055]"
         >
-          <div className="absolute right-0 bottom-0 h-32 w-32 translate-x-12 translate-y-12 rounded-full bg-fuchsia-500/10 blur-[60px]" />
+          <div className="absolute right-0 bottom-0 h-32 w-32 translate-x-12 translate-y-12 rounded-full bg-mineral-500/10 blur-[60px]" />
           <div className="relative z-10 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-fuchsia-300">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-mineral-300">
                 <Target size={13} />
                 Elenco
               </div>
@@ -1979,7 +2078,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 {pointsLeft < 0 ? 'Score acima do teto' : `${pointsLeft} pontos livres`}
               </div>
             </div>
-            <ChevronRight size={18} className="shrink-0 text-fuchsia-300 transition-transform group-hover:translate-x-1" />
+            <ChevronRight size={18} className="shrink-0 text-mineral-300 transition-transform group-hover:translate-x-1" />
           </div>
         </button>
       </div>
@@ -2011,7 +2110,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
         <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center animate-in zoom-in duration-500">
           <div className="w-full max-w-4xl h-full max-h-[80vh] relative p-4 flex flex-col">
             <div className="flex items-center justify-between mb-4 px-2">
-              <h2 className="text-sm font-black text-cyan-400 uppercase tracking-[0.4em] italic">Narração da Partida</h2>
+              <h2 className="text-sm font-black text-mineral-400 uppercase tracking-[0.4em] italic">Narração da Partida</h2>
             </div>
             <button
               onClick={() => {
@@ -2044,7 +2143,7 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
                 <span className="text-[7px] sm:text-[8px] font-black">-10s</span>
               </button>
 
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-cyan-500 flex items-center justify-center text-black shadow-[0_0_20px_rgba(6,182,212,0.5)]">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-mineral-500 flex items-center justify-center text-black shadow-none">
                 <Play size={window.innerWidth < 640 ? 20 : 24} fill="currentColor" />
               </div>
 
@@ -2066,9 +2165,9 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
       {selectedHeadline && (() => {
         const Icon = selectedHeadline.icon;
         const modalTone = {
-          cyan: 'border-cyan-400/30 from-cyan-500/20 via-black to-black text-cyan-200',
+          cyan: 'border-mineral-400/30 from-mineral-500/20 via-black to-black text-mineral-200',
           emerald: 'border-emerald-400/30 from-emerald-500/20 via-black to-black text-emerald-200',
-          fuchsia: 'border-fuchsia-400/30 from-fuchsia-500/20 via-black to-black text-fuchsia-200',
+          fuchsia: 'border-mineral-400/30 from-mineral-500/20 via-black to-black text-mineral-200',
           amber: 'border-amber-400/30 from-amber-500/20 via-black to-black text-amber-200',
           rose: 'border-rose-400/30 from-rose-500/20 via-black to-black text-rose-200'
         }[selectedHeadline.tone];
@@ -2106,8 +2205,3 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
     </div>
   );
 };
-
-
-
-
-

@@ -543,6 +543,7 @@ export interface SeasonReport {
 export interface WorldState {
   id?: string;
   name?: string;
+  stateRevision?: number;
   status: WorldStatus;
   currentDate: string;
   currentDay: number;
@@ -552,6 +553,8 @@ export interface WorldState {
   transferWindowOpen?: boolean;
   seasonStartReal?: string | null;
   startScheduledAt?: string | null;
+  serverClockLastTickAt?: string | null;
+  lastServerTickAt?: string | null;
   clock?: {
     profile: 'REAL' | 'TEST';
     timeSpeed: number;

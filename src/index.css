@@ -1,21 +1,44 @@
 @import "tailwindcss";
 
+/* Neutral controls; district, club, rarity and status colors remain independent. */
+@theme {
+  --color-slate-950: #111315;
+  --color-slate-900: #1c1f22;
+  --color-slate-800: #2c3033;
+  --color-slate-700: #464b4e;
+  --color-slate-600: #62696b;
+  --color-slate-500: #858d8d;
+  --color-slate-400: #a7aeab;
+  --color-slate-300: #c9ceca;
+  --color-mineral-50: #f5f5f0;
+  --color-mineral-100: #eaeae4;
+  --color-mineral-200: #d8d9d2;
+  --color-mineral-300: #c6c8bf;
+  --color-mineral-400: #b9bcb2;
+  --color-mineral-500: #adb1a6;
+  --color-mineral-600: #777d72;
+  --color-mineral-700: #53594f;
+  --color-mineral-800: #333830;
+  --color-mineral-900: #232620;
+  --color-mineral-950: #161915;
+}
+
 @layer base {
   :root {
     --elite-ink: #101114;
-    --elite-panel: rgba(244, 246, 241, 0.12);
-    --elite-panel-strong: rgba(244, 246, 241, 0.18);
-    --elite-line: rgba(244, 246, 241, 0.20);
+    --elite-panel: #1c1e21;
+    --elite-panel-strong: #25272a;
+    --elite-line: rgba(244, 246, 241, 0.13);
     --elite-soft-white: #f4f6f1;
     --elite-muted: #a9afa7;
     --district-norte: #38d7c6;
-    --district-sul: #f0c75e;
-    --district-leste: #ff6f88;
-    --district-oeste: #8fd36a;
+    --district-sul: #f0a43c;
+    --district-leste: #8fd36a;
+    --district-oeste: #bd6cff;
     --district-glow-a: rgba(56, 215, 198, 0.36);
-    --district-glow-b: rgba(240, 199, 94, 0.30);
-    --district-glow-c: rgba(255, 111, 136, 0.30);
-    --district-glow-d: rgba(143, 211, 106, 0.30);
+    --district-glow-b: rgba(240, 164, 60, 0.30);
+    --district-glow-c: rgba(143, 211, 106, 0.30);
+    --district-glow-d: rgba(189, 108, 255, 0.30);
   }
 
   body {
@@ -52,67 +75,36 @@
 }
 
 @layer utilities {
-  .glass-card {
-    background: linear-gradient(145deg, rgba(244, 246, 241, 0.14), rgba(244, 246, 241, 0.055));
-    backdrop-filter: blur(22px) saturate(150%);
-    -webkit-backdrop-filter: blur(22px) saturate(150%);
-    border: 1px solid var(--elite-line);
-    box-shadow: 0 14px 44px -18px rgba(0, 0, 0, 0.72);
+  /* Notch e barra de gestos: empurra o header e a nav fixa para dentro da area
+     segura. Em aparelho sem recorte env() devolve 0, entao nada muda. */
+  .safe-top {
+    margin-top: env(safe-area-inset-top, 0px);
   }
 
+  .safe-bottom {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .glass-card,
   .glass-card-neon {
-    background:
-      linear-gradient(145deg, rgba(244, 246, 241, 0.16), rgba(16, 17, 20, 0.42)),
-      rgba(16, 17, 20, 0.34);
-    backdrop-filter: blur(26px) saturate(145%);
-    -webkit-backdrop-filter: blur(26px) saturate(145%);
-    border: 1px solid transparent;
-    background-clip: padding-box;
-    position: relative;
-    box-shadow:
-      0 16px 46px -18px rgba(0, 0, 0, 0.78),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    background: linear-gradient(145deg, #25272af5, #181a1df5);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--elite-line);
+    box-shadow: 0 12px 32px -18px #000b, inset 0 1px 0 #ffffff05;
   }
 
-  .glass-card-neon::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1.5px;
-    /* Border thickness */
-    background: linear-gradient(
-      135deg,
-      var(--district-glow-a),
-      var(--district-glow-b),
-      var(--district-glow-c),
-      var(--district-glow-d)
-    );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  .neon-border-cyan {
-    box-shadow: 0 0 18px rgba(56, 215, 198, 0.18), inset 0 0 10px rgba(244, 246, 241, 0.06);
-    border-color: rgba(56, 215, 198, 0.45) !important;
-  }
-
+  /* Legacy utility names retained for existing screens, now using mineral surfaces. */
+  .glass-card-neon::before { content: none; }
+  .neon-border-cyan,
   .neon-border-magenta {
-    box-shadow: 0 0 18px rgba(255, 111, 136, 0.18), inset 0 0 10px rgba(244, 246, 241, 0.06);
-    border-color: rgba(255, 111, 136, 0.45) !important;
+    border-color: var(--elite-line);
+    box-shadow: 0 12px 32px -18px #000b;
   }
-
-  .neon-text-cyan {
-    text-shadow: 0 0 10px rgba(56, 215, 198, 0.55), 0 0 18px rgba(56, 215, 198, 0.22);
-    color: var(--district-norte);
-  }
-
+  .neon-text-cyan,
   .neon-text-magenta {
-    text-shadow: 0 0 10px rgba(255, 111, 136, 0.55), 0 0 18px rgba(255, 111, 136, 0.22);
-    color: var(--district-leste);
+    color: var(--elite-soft-white);
+    text-shadow: none;
   }
 
   .white-gradient-sheen {
@@ -132,7 +124,7 @@
         rgba(255, 255, 255, 0.10) 50%,
         rgba(255, 255, 255, 0) 100%);
     transform: skewX(-20deg);
-    animation: sheen 4s infinite;
+    animation: none;
     pointer-events: none;
     z-index: 10;
   }
@@ -391,4 +383,370 @@
   0% { transform: scale(0.72); }
   55% { transform: scale(1.18); }
   100% { transform: scale(1); }
+}
+
+/* Mineral shell: the imagery is a quiet backdrop, never the UI accent. */
+.elite-shell { background: var(--elite-ink); }
+.elite-backdrop {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  filter: grayscale(1);
+  opacity: .09;
+  pointer-events: none;
+}
+.elite-shell > main {
+  position: relative;
+  padding-top: calc(5rem + env(safe-area-inset-top, 0px));
+}
+@media (min-width: 640px) {
+  .elite-shell > main { padding-top: calc(7rem + env(safe-area-inset-top, 0px)); }
+}
+.elite-league-line {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: 2px;
+}
+.elite-club-name { color: var(--club-accent, var(--elite-soft-white)); }
+.elite-shell [data-onboarding^="screen-team-"],
+.elite-shell [data-onboarding="screen-career"] {
+  border-top: 2px solid var(--club-accent, var(--elite-line));
+}
+.elite-nav { background: #1c1e21f5; }
+.elite-nav button[aria-current="page"] { color: #f4f6f1; }
+.elite-nav button[aria-current="page"]::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+}
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--elite-soft-white);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .white-gradient-sheen::after, .elite-player-card::after, .elite-glimmer { animation: none; }
+}
+/* Elite / Silver Glass — Home and navigation prototype. */
+.silver-header, .sport-nav {
+  background: linear-gradient(115deg, #ffffff20, #e1e8f00a 55%, #ffffff17);
+  border: 1px solid #f2f6ff35;
+  box-shadow: inset 0 1px 0 #ffffff50, 0 12px 36px #0006;
+  backdrop-filter: blur(28px) saturate(.7);
+  -webkit-backdrop-filter: blur(28px) saturate(.7);
+}
+.elite-shell { background: radial-gradient(ellipse at 80% 0, #56616b 0, #262d35 33%, #12171e 80%); }
+.elite-backdrop { opacity: .045; }
+.sport-nav { border-radius: 25px; padding: 7px; gap: 4px; }
+.sport-nav button { border-radius: 18px; min-height: 58px; color: #d0d8e0; }
+.sport-nav button > span:last-child { font-size: 10px; letter-spacing: .025em; opacity: 1; font-weight: 650; }
+.sport-nav button[aria-current="page"] { color: #18222c; }
+.sport-nav button[aria-current="page"]::after { display: none; }
+.sport-nav__plate { background: linear-gradient(145deg, #fff, #d7e0e8); border-radius: 18px; border: 1px solid #fff9; box-shadow: 0 0 20px #fff2, inset 0 1px 0 #fff; }
+.sport-nav__notification { background: #f4f8ff; box-shadow: 0 0 8px #fff6; border: 2px solid #59616a; }
+.sport-home { --sport-paper: #eef3f8; }
+.club-masthead {
+  min-height: 240px; position: relative; isolation: isolate; overflow: hidden;
+  border-radius: 28px; color: #f5f8fc;
+  background: linear-gradient(115deg, #ffffff28 0, #e7f1ff0a 46%, #ffffff30 100%);
+  border: 1px solid #ffffff50;
+  box-shadow: inset 0 1px 0 #fff9, inset 0 -1px 0 #fff2, 0 22px 48px #0004;
+  backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+}
+.club-masthead::after { content: ''; position: absolute; width: 200px; height: 200px; right: -15px; top: 10px; border-radius: 50%; background: #e9f2ff60; filter: blur(45px); z-index: -1; }
+.club-masthead__copy { position: relative; z-index: 2; width: 65%; padding: 24px 0 24px 22px; }
+.sport-wordmark { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 500; letter-spacing: .25em; }
+.sport-wordmark b { font-size: 10px; font-weight: 400; letter-spacing: .15em; color: #d6e1ea; border-left: 1px solid #fff5; padding-left: 8px; }
+.club-masthead__edition { font-size: 9px; line-height: 1.6; letter-spacing: .12em; font-weight: 500; margin: 22px 0 9px; text-transform: uppercase; color: #d4dde7; }
+.club-masthead h2 { font-family: 'Segoe UI', Arial, sans-serif; font-size: clamp(30px, 7vw, 56px); font-weight: 300; line-height: 1.05; letter-spacing: -.045em; text-transform: uppercase; overflow-wrap: anywhere; max-width: 100%; text-shadow: 0 2px 18px #ffffff25; }
+.sport-team-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 19px; font-size: 11px; font-weight: 500; color: #fff; background: #ffffff12; border: 1px solid #ffffff40; border-radius: 30px; padding: 9px 12px; backdrop-filter: blur(12px); }
+.sport-team-link:hover { background: #ffffff25; }
+.sport-team-link:disabled { opacity: .6; }
+.club-masthead__pitch { position: absolute; width: 65%; height: 180%; right: -20%; top: -35%; transform: rotate(25deg); border: 1px solid #ffffff35; border-radius: 50%; box-shadow: -25px 0 0 #ffffff04, -26px 0 0 #ffffff18; }
+.club-masthead__athlete { position: absolute; right: -13%; bottom: -25%; width: 68%; height: 125%; z-index: 1; pointer-events: none; }
+.club-masthead .club-masthead__avatar { width: 100%; height: 100%; border-radius: 0; filter: drop-shadow(0 8px 20px #101b2860); }
+.club-masthead__rating { position: absolute; right: 30%; bottom: 26%; display: flex; flex-direction: column; background: linear-gradient(135deg, #ffffffdf, #d3dfe8cf); color: #22303d; border: 1px solid #ffffffb0; border-radius: 12px; backdrop-filter: blur(16px); padding: 8px 13px; font-size: 24px; line-height: 1; font-weight: 500; box-shadow: 0 5px 18px #0003; }
+.club-masthead__rating small { max-width: 85px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 5px; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.club-masthead__crest { position: absolute; right: 15px; bottom: 25px; }
+.sport-home [data-sport-panel="matchday"] { background: linear-gradient(135deg, #ffffff13, #d4e2f206); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 26px; border: 1px solid #ffffff29; padding: 22px; box-shadow: inset 0 1px 0 #ffffff30; }
+.sport-home [data-sport-panel="matchday"]::before { content: 'CENTRAL DE JOGO'; display: block; border-bottom: 1px solid #ffffff20; margin-bottom: 16px; padding-bottom: 14px; font-size: 10px; letter-spacing: .2em; font-weight: 500; color: #d8e1eb; }
+.sport-home [data-sport-panel="matchday"] h2 { font-family: 'Segoe UI', Arial, sans-serif; font-size: clamp(25px, 4vw, 38px); font-weight: 350; font-style: normal; letter-spacing: -.025em; line-height: 1.15; text-transform: none; }
+.sport-home [data-sport-panel="matchday"] h3 { font-style: normal; letter-spacing: -.025em; }
+.sport-home [data-sport-panel="matchday"] p.leading-relaxed { font-size: 12px; font-weight: 400; color: #c0cbd7; letter-spacing: .01em; line-height: 1.6; }
+.sport-home [data-sport-panel="matchday"] button { font-size: 11px; font-weight: 600; letter-spacing: .025em; border-radius: 16px; }
+.sport-home [data-sport-panel="matchday"] button.bg-mineral-400 { background: linear-gradient(135deg, #fff, #cfdae5); }
+@media (min-width: 640px) {
+  .club-masthead { min-height: 285px; }
+  .club-masthead__copy { padding: 30px 32px; }
+  .club-masthead__athlete { width: 43%; right: 0; }
+  .club-masthead h2 { max-width: 550px; }
+  .sport-wordmark { font-size: 18px; }
+  .sport-nav button > span:last-child { font-size: 12px; }
+  .sport-nav button { min-height: 68px; }
+}
+/* Guided recruitment: readable actions before optional player detail. */
+.recruit-flow { max-width: 900px; margin: 0 auto; display: grid; gap: 14px; color: #eef4fa; padding-bottom: 24px; }
+.recruit-panel { border: 1px solid #ffffff25; border-radius: 22px; padding: 20px; background: linear-gradient(135deg,#ffffff12,#ffffff05); backdrop-filter: blur(20px); }
+.recruit-flow h1 { font-size: 27px; font-weight: 500; letter-spacing: -.035em; line-height: 1.15; margin: 5px 0 10px; }
+.recruit-flow h2, .recruit-trade h2 { font-size: 20px; font-weight: 550; margin-bottom: 9px; }
+.recruit-flow p, .recruit-trade p { font-size: 13px; line-height: 1.5; font-weight: 400; color: #c4cfdc; }
+.recruit-eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #b7c4d1; }
+.recruit-budget { display: flex; justify-content: space-between; gap: 16px; margin: 17px 0 10px; padding: 14px 0; border-block: 1px solid #ffffff16; }
+.recruit-budget small { display: block; font-size: 11px; color: #c4cfdc; }
+.recruit-budget strong { display: block; font-size: 25px; font-weight: 550; }
+.recruit-budget strong span { font-size: 12px; font-weight: 400; }
+.recruit-flow .recruit-note { font-size: 11px; color: #b2c0ce; }
+.recruit-guide { margin-top: 14px; }
+.recruit-guide > strong { display: block; font-size: 13px; font-weight: 550; margin-bottom: 6px; }
+.recruit-guide > p { font-size: 11px; }
+.recruit-guide > small { display: block; font-size: 10px; font-weight: 400; color: #aebdcb; }
+.recruit-roles { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 5px; margin: 10px 0 6px; }
+.recruit-roles button { display: grid; gap: 3px; font-size: 10px; background: #ffffff08; border: 1px solid #ffffff20; padding: 8px 4px; border-radius: 10px; }
+.recruit-roles button b { font-size: 14px; }
+.recruit-tabs { display: flex; gap: 5px; padding: 5px; background: #141d27d9; border: 1px solid #ffffff25; border-radius: 17px; }
+.recruit-tabs button { flex: 1; border-radius: 12px; min-height: 44px; padding: 8px; font-size: 12px; font-weight: 550; color: #c4cfdc; }
+.recruit-tabs button[aria-pressed="true"], .recruit-roles button[aria-pressed="true"] { background: #e8eff6; color: #1c2b37; }
+.recruit-filters { display: grid; grid-template-columns: 1fr 130px; gap: 10px; padding: 14px; }
+.recruit-filters label:first-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.recruit-filters input:not([type="checkbox"]), .recruit-filters select, .recruit-trade select { min-width: 0; width: 100%; min-height: 42px; border: 1px solid #ffffff25; border-radius: 10px; padding: 9px; background: #18222ce8; color: #e8eff6; font-size: 12px; }
+.recruit-checkbox { grid-column: 1 / -1; display: flex; gap: 9px; align-items: center; font-size: 12px; font-weight: 400; min-height: 30px; }
+.recruit-checkbox input { accent-color: #c7dfef; width: 16px; height: 16px; }
+.recruit-list { display: grid; gap: 8px; }
+.recruit-player { display: grid; grid-template-columns: minmax(0,1fr) minmax(100px, auto); gap: 7px 12px; align-items: center; background: #ffffff07; border: 1px solid #ffffff1b; padding: 12px; border-radius: 16px; margin-top: 6px; }
+.recruit-player-info { display: flex; gap: 9px; align-items: center; min-width: 0; text-align: left; }
+.recruit-player-info > div { flex-shrink: 0; }
+.recruit-player-info > span { min-width: 0; }
+.recruit-player-info strong { display: block; font-size: 14px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recruit-player-info small { display: block; color: #b2c2d2; font-size: 11px; font-weight: 400; margin-top: 3px; }
+.recruit-player-action { display: grid; gap: 5px; justify-items: end; max-width: 150px; }
+.recruit-player-action small { font-size: 10px; font-weight: 400; text-align: right; color: #c4d6e4; }
+.recruit-player-action > button, .recruit-primary { min-height: 42px; border-radius: 11px; padding: 10px 15px; font-size: 12px; background: linear-gradient(145deg,#f8fbff,#ccdce8); color: #172633; font-weight: 600; }
+.recruit-flow button:disabled, .recruit-trade button:disabled { opacity: .4; cursor: not-allowed; }
+.recruit-flow .recruit-player-note { grid-column: 1 / -1; font-size: 10px; color: #a8bdcf; }
+.recruit-player-note button { text-decoration: underline; min-height: 28px; }
+.recruit-secondary { min-height: 42px; padding: 10px 14px; border: 1px solid #ffffff35; border-radius: 12px; font-size: 12px; color: #e5eef7; background: #ffffff0a; }
+.recruit-status { font-size: 11px; text-align: right; max-width: 120px; }
+.recruit-result { display: flex; gap: 12px; align-items: center; padding-block: 16px; border-bottom: 1px solid #ffffff1b; }
+.recruit-result strong { font-size: 13px; }
+.recruit-empty { padding: 20px 0; }
+.recruit-flow .recruit-alert { margin-top: 12px; padding: 12px; border-radius: 12px; background: #e5b45013; border: 1px solid #e5b45045; color: #f0d79a; }
+.recruit-overlay { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; background: #060e18cc; backdrop-filter: blur(14px); padding: 18px; }
+.recruit-trade { width: 100%; max-width: 460px; max-height: 85dvh; overflow-y: auto; position: relative; border: 1px solid #ffffff40; border-radius: 24px; padding: 28px 22px; background: #27343f; color: #f1f5fa; box-shadow: 0 24px 60px #0007; }
+.recruit-trade h2 { padding-right: 25px; }
+.recruit-trade label { display: grid; gap: 8px; margin: 20px 0; font-size: 13px; }
+.recruit-trade .recruit-primary { margin-top: 20px; width: 100%; }
+.recruit-close { position: absolute; top: 10px; right: 10px; padding: 8px; }
+@media (max-width: 430px) { .sport-nav { gap: 1px; padding: 5px; } .sport-nav button > span:last-child { font-size: 9px; letter-spacing: 0; } }
+
+/* ============================================================================
+   Silver Glass — brilho e menu segmentado compartilhados
+   ==========================================================================*/
+
+/* O brilho cruza o vidro logo que a tela abre e volta de tempos em tempos.
+   O ciclo e longo de proposito: a passagem ocupa ~1,4s de 13s, entao o efeito
+   aparece na chegada e depois so pontua, sem virar pisca-pisca. */
+@keyframes sport-sheen {
+  0%, 6%    { transform: translateX(-135%) skewX(-20deg); opacity: 0; }
+  9%        { opacity: 0.9; }
+  15%       { opacity: 0.9; }
+  18%, 100% { transform: translateX(245%) skewX(-20deg); opacity: 0; }
+}
+
+.sport-sheen { position: relative; isolation: isolate; overflow: hidden; }
+
+.sport-sheen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+      #ffffff00 0%,
+      #ffffff26 42%,
+      #ffffff3d 50%,
+      #ffffff26 58%,
+      #ffffff00 100%);
+  transform: translateX(-135%) skewX(-20deg);
+  animation: sport-sheen 13s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+/* Escalonado para as superficies nao brilharem todas no mesmo quadro. */
+.silver-header.sport-sheen::after  { animation-delay: .15s; }
+.club-masthead::before             { animation-delay: .55s; }
+.sport-panel.sport-sheen::after,
+.sport-home [data-sport-panel]::after { animation-delay: 1.1s; }
+.sport-nav.sport-sheen::after      { animation-delay: 1.7s; }
+
+/* O header ja carregava .white-gradient-sheen com animation: none. Em vez de
+   marcar a classe no JSX de novo, essa regra reaproveita o mesmo pseudo. */
+.white-gradient-sheen::after {
+  width: 45%;
+  background: linear-gradient(100deg,
+      #ffffff00 0%,
+      #ffffff26 42%,
+      #ffffff3d 50%,
+      #ffffff26 58%,
+      #ffffff00 100%);
+  transform: translateX(-135%) skewX(-20deg);
+  animation: sport-sheen 13s cubic-bezier(.4, 0, .2, 1) .15s infinite;
+  left: 0;
+}
+
+/* A masthead e os paineis da Home ganham o brilho sem mexer no JSX deles. */
+.club-masthead,
+.sport-home [data-sport-panel] { position: relative; overflow: hidden; }
+
+.club-masthead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+      #ffffff00 0%,
+      #ffffff22 42%,
+      #ffffff38 50%,
+      #ffffff22 58%,
+      #ffffff00 100%);
+  transform: translateX(-135%) skewX(-20deg);
+  animation: sport-sheen 13s cubic-bezier(.4, 0, .2, 1) .55s infinite;
+}
+
+.sport-home [data-sport-panel]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+      #ffffff00 0%,
+      #ffffff1c 42%,
+      #ffffff2e 50%,
+      #ffffff1c 58%,
+      #ffffff00 100%);
+  transform: translateX(-135%) skewX(-20deg);
+  animation: sport-sheen 13s cubic-bezier(.4, 0, .2, 1) 1.1s infinite;
+}
+
+/* --- Menu segmentado: um so componente visual para todas as abas ---------- */
+.sport-tabs,
+.recruit-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  background: #141d27d9;
+  border: 1px solid #ffffff25;
+  border-radius: 17px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.sport-tabs {
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.sport-tabs button,
+.recruit-tabs button {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: max-content;
+  min-height: 44px;
+  padding: 8px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: .01em;
+  text-transform: none;
+  white-space: nowrap;
+  color: #c4cfdc;
+  scroll-snap-align: center;
+  transition: background .18s ease, color .18s ease;
+}
+
+.sport-tabs button:hover,
+.recruit-tabs button:hover { background: #ffffff0e; color: #e8eff6; }
+
+.sport-tabs button[aria-pressed="true"],
+.sport-tabs button[aria-current="page"],
+.recruit-tabs button[aria-pressed="true"] {
+  background: linear-gradient(145deg, #f8fbff, #ccdce8);
+  color: #1c2b37;
+  box-shadow: 0 2px 10px #0003, inset 0 1px 0 #fff;
+}
+
+.sport-tabs button[aria-pressed="true"] svg,
+.sport-tabs button[aria-current="page"] svg { color: #1c2b37; }
+
+/* Ponto de atencao: mesma leitura da nav inferior, sem texto extra. */
+.sport-tabs button[data-attention="true"] { color: #e8eff6; }
+.sport-tabs button[data-attention="true"]:not([aria-pressed="true"])::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f4f8ff;
+  box-shadow: 0 0 8px #fff6;
+}
+.sport-tabs button { position: relative; }
+
+/* --- Painel de vidro reutilizavel ---------------------------------------- */
+.sport-panel {
+  background: linear-gradient(135deg, #ffffff13, #d4e2f206);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid #ffffff29;
+  border-radius: 26px;
+  box-shadow: inset 0 1px 0 #ffffff30, 0 18px 40px #0004;
+  padding: 20px;
+}
+
+.sport-panel__title {
+  display: block;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #ffffff20;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: #d8e1eb;
+}
+
+@media (max-width: 430px) {
+  .sport-tabs button,
+  .recruit-tabs button { font-size: 11px; padding: 8px 10px; gap: 5px; }
+  .sport-panel { padding: 16px; border-radius: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sport-sheen::after,
+  .club-masthead::before,
+  .sport-home [data-sport-panel]::after { animation: none; opacity: 0; }
 }

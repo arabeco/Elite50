@@ -4,13 +4,8 @@ import { useGameDispatch, useGameState } from '../store/GameContext';
 import { isJoinWindowOpen } from '../engine/gameLogic';
 import { ClubOffer, LeagueState, Team } from '../types';
 import { TeamLogo } from './TeamLogo';
-
-const isHumanManager = (managerId: string | null | undefined, stateManagers: any) => {
-  if (!managerId) return false;
-  const manager = stateManagers[managerId];
-  if (!manager) return false;
-  return manager.isNPC === false || !manager.id.startsWith('m_');
-};
+import { getDistrictTheme } from '../utils/districtTheme';
+import { isHumanManager } from '../utils/managerProfile';
 
 export const ObserverClaimPanel: React.FC = () => {
   const { state, isSyncing } = useGameState();
@@ -188,14 +183,15 @@ export const ObserverClaimPanel: React.FC = () => {
             {userOffers.slice(0, 4).map((offer) => {
               const team = state.teams[offer.teamId];
               if (!team) return null;
+              const districtTheme = getDistrictTheme(team.district);
               const actionableNow = offer.status === 'ACCEPTED' && joinWindowOpen && (state.world.currentDay || 0) >= offer.availableOnDay;
               const waitsNext = offer.status === 'WAITING_NEXT_SEASON';
               const pendingAnswer = offer.status === 'PENDING';
               return (
-                <div key={offer.id} className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                <div key={offer.id} className={`rounded-2xl border bg-black/40 p-4 ${districtTheme.borderMuted}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">{team.district}</p>
+                      <p className={`text-[8px] font-black uppercase tracking-[0.24em] ${districtTheme.text}`}>{team.district}</p>
                       <h3 className="mt-1 text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h3>
                       <p className="mt-2 text-[8px] font-bold uppercase tracking-widest text-white/35">
                         {offer.note || 'Sem detalhe adicional.'}

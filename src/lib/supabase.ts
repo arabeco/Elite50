@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { GameState, Manager, TrainingState } from '../types';
+import { GameState, TrainingState } from '../types';
 import { GENESIS_DRAFT_LAST_DAY, MIDSEASON_JOIN_MAX_ROUND } from '../constants/gameConstants';
 import { applyTeamLogoAssets } from '../utils/teamIdentity';
 import { syncNormalizedWorldFromState } from './worldRepository';
@@ -187,7 +187,12 @@ export const saveGameState = async (state: GameState, worldId: string = 'default
 
   if (error) {
     console.error('Error saving game state:', error);
-    return null;
+    throw error;
+  }
+
+  if (isCreator) {
+    const currentRevision = Number(state.world.stateRevision);
+    state.world.stateRevision = Number.isFinite(currentRevision) ? currentRevision + 1 : 1;
   }
 
   if (isCreator && ['dual_write', 'parallel'].includes(import.meta.env.VITE_WORLD_BACKEND_MODE)) {
@@ -314,7 +319,7 @@ export const joinWorldByCode = async (joinCode: string): Promise<GameState | nul
  * do mestre em uma segunda consulta.
  */
 const WORLD_ROW_COLUMNS_WITHOUT_WORLD_STATE =
-  'user_id, world_id, is_creator, is_public, updated_at, user_team_id, user_manager_id, ' +
+  'user_id, world_id, is_creator, is_public, updated_at, state_revision, user_team_id, user_manager_id, ' +
   'teams_data, players_data, managers_data, notifications, transfer_proposals, ' +
   'trade_offers, last_headline, training_data';
 
@@ -355,7 +360,10 @@ export const loadGameState = async (worldId: string = 'default'): Promise<GameSt
     return null;
   }
 
-  masterRecord.world_state = masterWorldRow.world_state;
+  masterRecord.world_state = {
+    ...masterWorldRow.world_state,
+    stateRevision: masterRecord.state_revision ?? masterWorldRow.world_state?.stateRevision ?? 1,
+  };
 
   const isCreator = masterRecord.user_id === user.id || userRecord.is_creator === true;
   const participants = allWorldRecords.map(record => ({
@@ -450,117 +458,50 @@ export const claimTeamInWorld = async (
 ): Promise<GameState | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-
-  const { data: allWorldRecords, error } = await supabase
-    .from('games')
-    .select('*')
-    .eq('world_id', worldId)
-    .order('updated_at', { ascending: true });
-
-  if (error || !allWorldRecords || allWorldRecords.length === 0) {
-    console.error('Error fetching world before claiming team:', error);
-    return null;
-  }
-
-  const alreadyClaimedByOther = allWorldRecords.some(record =>
-    record.user_id !== user.id && record.user_team_id === teamId
-  );
-
-  if (alreadyClaimedByOther) {
-    throw new Error('TEAM_ALREADY_CLAIMED');
-  }
-
-  const masterRecord = allWorldRecords.find(record => record.is_creator) || allWorldRecords[0];
-  const worldState = masterRecord.world_state as any;
-  const teams = { ...(masterRecord.teams_data as any) };
-  const players = { ...(masterRecord.players_data as any) };
-  const selectedTeam = teams[teamId];
-
-  const currentDay = worldState?.currentDay || 0;
-  const currentRound = worldState?.currentRound || 0;
-  const phase = worldState?.phase;
-  const access = worldState?.access || {};
-  const joinWindowOpen =
-    currentDay < 3 ||
-    phase === 'OFFSEASON' ||
-    (phase === 'REGULAR_SEASON' && currentRound <= MIDSEASON_JOIN_MAX_ROUND);
-
-  if (!joinWindowOpen || access.allowMidSeasonJoin === false || access.allowTakeover === false) {
-    throw new Error('JOIN_WINDOW_CLOSED');
-  }
-
-  if (!selectedTeam || !String(teamId).startsWith('t_')) {
-    throw new Error('TEAM_NOT_AVAILABLE');
-  }
-
-  const managerId = user.id;
   const displayName =
     managerName?.trim() ||
     user.email?.split('@')[0] ||
     'Manager Elite';
 
-  const userManager: Manager = {
-    id: managerId,
-    name: displayName,
-    district: selectedTeam.district,
-    reputation: 50,
-    isNPC: false,
-    attributes: {
-      evolution: 50,
-      negotiation: 50,
-      scout: 50
-    },
-    career: {
-      titlesWon: 0,
-      totalLeagueTitles: 0,
-      totalCupTitles: 0,
-      hallOfFameEntries: 0,
-      consecutiveTitles: 0,
-      currentTeamId: teamId,
-      historyTeamIds: [teamId]
-    },
-    achievements: []
-  };
-
-  const updatedTeam = {
-    ...selectedTeam,
-    managerId
-  };
-
-  const filteredPlayers: Record<string, any> = {};
-  (updatedTeam.squad || []).forEach((playerId: string) => {
-    if (players[playerId]) {
-      filteredPlayers[playerId] = players[playerId];
-    }
+  const { error } = await supabase.rpc('claim_legacy_world_team', {
+    p_world_id: worldId,
+    p_team_id: teamId,
+    p_manager_name: displayName,
+    p_training_data: createDefaultTrainingState()
   });
 
-  const training = createDefaultTrainingState();
-
-  const { error: upsertError } = await supabase
-    .from('games')
-    .upsert({
-      user_id: user.id,
-      world_id: worldId,
-      world_state: masterRecord.world_state,
-      teams_data: { [teamId]: updatedTeam },
-      players_data: filteredPlayers,
-      managers_data: { [managerId]: userManager },
-      user_team_id: teamId,
-      user_manager_id: managerId,
-      notifications: [],
-      last_headline: {},
-      training_data: training,
-      is_creator: false,
-      is_public: false,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'user_id,world_id' });
-
-  if (upsertError) {
-    console.error('Error claiming team:', upsertError);
+  if (error) {
+    const message = String(error.message || '').toLowerCase();
+    if (message.includes('team_already_claimed') || error.code === '23505') {
+      throw new Error('TEAM_ALREADY_CLAIMED');
+    }
+    if (message.includes('join_window_closed')) {
+      throw new Error('JOIN_WINDOW_CLOSED');
+    }
+    if (message.includes('team_not_available') || message.includes('world_not_found')) {
+      throw new Error('TEAM_NOT_AVAILABLE');
+    }
+    console.error('Error claiming team:', error);
     return null;
   }
 
   return loadGameState(worldId);
+};
+
+export const submitDraftProposalInWorld = async (worldId: string, playerId: string) => {
+  const { error } = await supabase.rpc('submit_legacy_draft_proposal', {
+    p_world_id: worldId,
+    p_player_id: playerId
+  });
+  if (error) throw new Error(error.message || 'DRAFT_PROPOSAL_FAILED');
+};
+
+export const cancelDraftProposalInWorld = async (worldId: string, playerId: string) => {
+  const { error } = await supabase.rpc('cancel_legacy_draft_proposal', {
+    p_world_id: worldId,
+    p_player_id: playerId
+  });
+  if (error) throw new Error(error.message || 'DRAFT_CANCEL_FAILED');
 };
 
 export const resignFromTeamInWorld = async (worldId: string): Promise<GameState | null> => {

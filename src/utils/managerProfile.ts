@@ -3,6 +3,26 @@ import { ManagerProfileMetaRow } from '../lib/metaStore';
 
 const PLAY_STYLES = new Set<PlayStyle>(['Equilibrado', 'Vertical', 'Tiki-Taka', 'Gegenpressing', 'Retranca Armada']);
 
+/**
+ * Um clube so conta como livre quando ninguem de verdade esta no comando.
+ *
+ * Duas telas decidem isso: o onboarding (escolher clube de herdeiro ou vaga a
+ * substituir) e o painel de observador. Elas usavam regras diferentes, e a do
+ * onboarding era mais frouxa: olhava so `isNPC !== false`. Um manager humano
+ * vindo de save antigo, sem `isNPC` gravado, passava por NPC e o clube dele
+ * aparecia como disponivel. O id tambem e sinal: NPC nasce como `m_...`,
+ * humano carrega o user id do Supabase.
+ */
+export const isHumanManager = (
+  managerId: string | null | undefined,
+  managers: Record<string, Manager | undefined>
+): boolean => {
+  if (!managerId) return false;
+  const manager = managers[managerId];
+  if (!manager) return false;
+  return manager.isNPC === false || !String(manager.id || managerId).startsWith('m_');
+};
+
 export const applyManagerProfileMeta = (manager: Manager, profile: ManagerProfileMetaRow | null): Manager => {
   if (!profile) return manager;
 

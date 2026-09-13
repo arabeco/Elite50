@@ -139,7 +139,11 @@ describe('HomeTab gameplay GPS smoke', () => {
     const { container } = renderHome(makeActiveSeasonState());
 
     expect(await screen.findByText(/Prepare o proximo compromisso/i)).toBeInTheDocument();
-    expect(screen.getByText(/TEMPORADA/i)).toBeInTheDocument();
+    // A masthead do clube tambem escreve "TEMPORADA {ano}", entao a busca solta
+    // acha dois nos. O que este teste quer e o eyebrow do GPS, nao a masthead.
+    const seasonGps = container.querySelector('[data-onboarding="home-gps"]');
+    expect(seasonGps).toBeInTheDocument();
+    expect(seasonGps).toHaveTextContent(/TEMPORADA/i);
     expect(screen.getAllByText(/Casa|Fora/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Proximo jogo/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Score do Clube/i)).toBeInTheDocument();

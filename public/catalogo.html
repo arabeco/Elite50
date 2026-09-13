@@ -1,0 +1,2443 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dossie Elite 2050</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
+<style>
+:root{
+  --ink:#0a0c10; --surface:#12151c; --surface-2:#181c25; --raise:#1f2430;
+  --line:rgba(233,237,230,.11); --line-strong:rgba(233,237,230,.2);
+  --paper:#e9ede6; --paper-dim:#b9c0b7; --muted:#858e86;
+  --norte:#38d7c6; --sul:#f0a43c; --leste:#8fd36a; --oeste:#bd6cff;
+  --crit:#ff5f70; --warn:#f0a43c; --ok:#57d99a;
+  --display:"Chakra Petch",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --col:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--ink);color:var(--paper);font-family:var(--body);font-size:15px;line-height:1.6;margin:0;
+  background-image:radial-gradient(900px 480px at 12% -8%,rgba(56,215,198,.10),transparent 62%),
+                   radial-gradient(760px 420px at 92% 4%,rgba(189,108,255,.09),transparent 60%);
+  background-attachment:fixed;}
+:focus-visible{outline:2px solid var(--norte);outline-offset:3px;border-radius:4px}
+code{font-family:var(--mono);font-size:.87em;background:rgba(233,237,230,.07);border:1px solid var(--line);
+  padding:.08em .38em;border-radius:4px;color:var(--paper-dim);word-break:break-word}
+h1,h2,h3,h4{font-family:var(--display);text-wrap:balance;margin:0}
+
+/* ---- top bar ---- */
+.bar{position:sticky;top:0;z-index:40;background:rgba(10,12,16,.86);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line)}
+.bar__in{max-width:var(--col);margin:0 auto;padding:0 22px;height:56px;display:flex;align-items:center;gap:22px}
+.bar__mark{font-family:var(--display);font-weight:700;font-style:italic;letter-spacing:.04em;font-size:15px;white-space:nowrap}
+.bar__mark span{color:var(--norte)}
+.bar nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.bar nav::-webkit-scrollbar{display:none}
+.bar nav a{font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);text-decoration:none;padding:7px 11px;border-radius:6px;white-space:nowrap;transition:color .15s,background .15s}
+.bar nav a:hover{color:var(--paper);background:rgba(233,237,230,.06)}
+
+main{max-width:var(--col);margin:0 auto;padding:0 22px 96px}
+
+/* ---- masthead ---- */
+.mast{padding:52px 0 34px;border-bottom:1px solid var(--line)}
+.mast__eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--norte);margin:0 0 14px}
+.mast h1{font-size:clamp(34px,6vw,58px);font-weight:700;font-style:italic;letter-spacing:-.015em;line-height:1.02;text-transform:uppercase}
+.mast h1 em{font-style:italic;color:var(--norte)}
+.mast__lede{max-width:62ch;color:var(--paper-dim);font-size:16px;margin:18px 0 0}
+.counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;margin-top:34px;
+  background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.counts div{background:var(--surface);padding:14px 15px}
+.counts b{display:block;font-family:var(--display);font-size:25px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.counts span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:7px}
+
+/* ---- sections ---- */
+section{padding:56px 0 8px;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+.sec__head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.sec__num{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--muted)}
+.sec__head h2{font-size:clamp(23px,3.4vw,32px);font-weight:700;font-style:italic;text-transform:uppercase;letter-spacing:-.01em}
+.sec__lede{color:var(--paper-dim);max-width:66ch;margin:0 0 30px}
+h3.sub{font-size:13px;font-weight:600;letter-spacing:.17em;text-transform:uppercase;color:var(--paper);
+  margin:38px 0 4px;padding-bottom:9px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+h3.sub em{font-style:normal;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:none}
+.sub-note{color:var(--muted);font-size:13px;margin:10px 0 0}
+
+/* ---- avatar lab ---- */
+.lab{display:grid;grid-template-columns:minmax(0,268px) minmax(0,1fr);gap:26px;align-items:start;margin-top:8px}
+@media(max-width:720px){.lab{grid-template-columns:1fr}}
+.lab__stage{position:relative;aspect-ratio:2/3;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;
+  background:radial-gradient(circle at 50% 16%,rgba(56,215,198,.16),transparent 52%),var(--surface)}
+.lab__stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.lab__stage .boot{inset:auto;bottom:5%;left:45%;width:59%;height:auto;transform:translateX(-50%)}
+.lab__controls{display:flex;flex-direction:column;gap:16px}
+.ctrl{display:flex;flex-direction:column;gap:7px}
+.ctrl > label{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  display:flex;justify-content:space-between;gap:10px}
+.ctrl > label b{color:var(--norte);font-weight:500;text-transform:none;letter-spacing:.04em}
+.opts{display:flex;flex-wrap:wrap;gap:5px}
+.opts button{font-family:var(--mono);font-size:11px;background:var(--surface);color:var(--paper-dim);
+  border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;transition:.14s}
+.opts button:hover{border-color:var(--line-strong);color:var(--paper)}
+.opts button[aria-pressed="true"]{background:var(--norte);border-color:var(--norte);color:#06201d;font-weight:600}
+input[type=range]{accent-color:var(--norte);width:100%}
+.lab__read{font-family:var(--mono);font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;line-height:1.8}
+.lab__read b{color:var(--paper-dim);font-weight:500}
+
+/* ---- grids + tiles ---- */
+.grid{display:grid;gap:11px;margin-top:18px}
+.grid--avatar{grid-template-columns:repeat(auto-fill,minmax(116px,1fr))}
+.grid--boot{grid-template-columns:repeat(auto-fill,minmax(146px,1fr))}
+.grid--sq{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.grid--wide{grid-template-columns:repeat(auto-fill,minmax(158px,1fr))}
+.tile{margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;
+  display:flex;flex-direction:column;transition:border-color .15s}
+.tile:hover{border-color:var(--line-strong)}
+.tile--boot,.tile--flag{border-top:2px solid var(--tile-accent,var(--line))}
+.tile__stage{position:relative;aspect-ratio:1;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:8px}
+.tile--avatar .tile__stage{aspect-ratio:2/3;padding:0;background:radial-gradient(circle at 50% 16%,rgba(56,215,198,.13),transparent 50%),var(--ink)}
+.tile__stage img{max-width:100%;max-height:100%;object-fit:contain}
+.tile__stage.stack img.ly{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;max-width:none;max-height:none}
+.tile__stage.stack img.boot{inset:auto;bottom:5%;left:45%;width:59%;height:auto;transform:translateX(-50%)}
+.tile figcaption{padding:8px 9px 9px;display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line)}
+.tile__code{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--paper)}
+.tile__name{font-size:12px;color:var(--paper-dim);line-height:1.3}
+.tile__meta{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.03em}
+.tile__note{font-size:10.5px;color:var(--muted);line-height:1.35}
+.tile--missing .tile__stage{background:repeating-linear-gradient(45deg,rgba(255,95,112,.09) 0 8px,transparent 8px 16px)}
+.tile--missing .tile__stage::after{content:"404";font-family:var(--mono);font-size:13px;color:var(--crit);letter-spacing:.14em}
+
+/* ---- flow ---- */
+.flowmap{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px;margin-top:20px}
+.node{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:14px 15px}
+.node h4{font-size:12px;letter-spacing:.15em;text-transform:uppercase;margin-bottom:7px}
+.node p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.node code{font-size:10.5px}
+.route{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;
+  color:var(--paper-dim);margin-top:18px}
+.route i{font-style:normal;color:var(--muted)}
+.route b{font-weight:500;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--paper)}
+.track{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:20px}
+.track div{background:var(--surface);padding:12px 13px;border-top:2px solid var(--tone)}
+.track b{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.13em;color:var(--tone)}
+.track strong{display:block;font-family:var(--display);font-size:14px;font-weight:600;margin:5px 0 4px}
+.track span{display:block;font-size:11px;color:var(--muted);line-height:1.4}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin-top:18px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);font-weight:500}
+td{background:var(--surface)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+td.name{font-family:var(--display);font-weight:600}
+
+/* ---- findings ---- */
+.findings{display:flex;flex-direction:column;gap:11px;margin-top:20px}
+.finding{border:1px solid var(--line);border-left:3px solid var(--sev);border-radius:9px;background:var(--surface);padding:16px 18px}
+.finding__head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.finding__head h4{font-size:16px;font-weight:600;flex:1 1 100%;line-height:1.3}
+.chip{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--line-strong);border-radius:4px;padding:3px 7px;color:var(--muted)}
+.chip--sev{border-color:var(--sev);color:var(--sev)}
+.finding__where{margin:0 0 9px}
+.finding__where code{font-size:11px}
+.finding__body{margin:0;color:var(--paper-dim);font-size:14px}
+.finding__fix{margin:11px 0 0;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.finding__fix span{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ok);margin-right:8px}
+.finding--done{background:linear-gradient(90deg,rgba(87,217,154,.05),transparent 40%),var(--surface)}
+.finding--done .finding__head h4{color:var(--paper-dim)}
+.chip--was{opacity:.65}
+
+/* ---- ideas ---- */
+.ideas{display:grid;grid-template-columns:repeat(auto-fit,minmax(292px,1fr));gap:11px;margin-top:20px}
+.idea{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:17px 18px;
+  display:flex;flex-direction:column;gap:9px}
+.idea__head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.idea__horizon{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.17em;text-transform:uppercase;color:var(--idea)}
+.idea__effort{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.idea h4{font-size:16px;font-weight:600;line-height:1.28}
+.idea p{margin:0;font-size:13.5px;color:var(--paper-dim)}
+
+.callout{border:1px solid var(--line);border-left:3px solid var(--norte);background:var(--surface);
+  border-radius:9px;padding:16px 18px;margin-top:22px;font-size:14px;color:var(--paper-dim)}
+.callout b{color:var(--paper);font-family:var(--display);letter-spacing:.02em}
+footer{max-width:var(--col);margin:0 auto;padding:30px 22px 60px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.05em}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="bar__in">
+    <div class="bar__mark">ELITE <span>2050</span></div>
+    <nav>
+      <a href="#lab">Avatar</a><a href="#fluxo">Fluxo</a><a href="#catalogo">Catalogo</a>
+      <a href="#atritos">Atritos</a><a href="#melhorias">Melhorias</a>
+    </nav>
+  </div>
+</div>
+
+<main>
+  <header class="mast">
+    <p class="mast__eyebrow">Revisao geral &middot; 11 set 2026</p>
+    <h1>Dossie <em>Elite 2050</em></h1>
+    <p class="mast__lede">Tudo o que o jogo tem hoje, em um lugar so: o catalogo visual completo montado a partir dos proprios arquivos do projeto, o mapa do fluxo de telas e temporada, os 17 atritos que encontrei lendo o codigo (5 ja corrigidos), e as ideias que levariam esse mundo mais longe.</p>
+    <div class="counts">
+      <div><b>32</b><span>cabelos</span></div>
+      <div><b>30</b><span>chuteiras</span></div>
+      <div><b>44</b><span>uniformes</span></div>
+      <div><b>49</b><span>escudos</span></div>
+      <div><b>31</b><span>tracos de DNA</span></div>
+      <div><b>8</b><span>estilos taticos</span></div>
+      <div><b>22</b><span>dias por temporada</span></div>
+      <div><b>12</b><span>atritos abertos</span></div>
+    </div>
+  </header>
+
+  <section id="lab">
+    <div class="sec__head"><span class="sec__num">01</span><h2>Laboratorio de avatar</h2></div>
+    <p class="sec__lede">O mesmo empilhamento que o <code>PlayerAvatar</code> faz em tempo de jogo: corpo, uniforme, cabelo com o offset individual do <code>HAIR_OFFSETS</code>, e a chuteira por cima. Troque as pecas para ver como qualquer combinacao fica antes de sortear no gerador.</p>
+    <div class="lab">
+      <div class="lab__stage" id="stage">
+        <img id="ly-body" src="/assetas/avatars/bodies/body_m_1.png" alt="Corpo do avatar" />
+        <img id="ly-uni" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="Uniforme do avatar" />
+        <img id="ly-hair" src="/assetas/avatars/hair/masc/hair_1.png" alt="Cabelo do avatar" />
+        <img id="ly-boot" class="boot" src="/assetas/avatars/boots/boot_01.png" alt="Chuteira do avatar" />
+      </div>
+      <div class="lab__controls">
+        <div class="ctrl"><label>Genero e corpo <b id="r-body">M1</b></label>
+          <div class="opts" id="opt-body"></div></div>
+        <div class="ctrl"><label>Cabelo <b id="r-hair">M01</b></label>
+          <input type="range" id="in-hair" min="1" max="17" value="1" aria-label="Cabelo" /></div>
+        <div class="ctrl"><label>Uniforme <b id="r-uni">Distrito Norte</b></label>
+          <input type="range" id="in-uni" min="0" max="43" value="0" aria-label="Uniforme" /></div>
+        <div class="ctrl"><label>Chuteira <b id="r-boot">boot_01 &middot; Velocity Cyan</b></label>
+          <input type="range" id="in-boot" min="0" max="29" value="0" aria-label="Chuteira" /></div>
+        <p class="lab__read">arquivo <b id="r-file">hair_1.png</b><br />offset <b id="r-off">x 0 / y 0</b><br />uniforme <b id="r-unifile">district-norte-uniform.png</b></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="fluxo">
+    <div class="sec__head"><span class="sec__num">02</span><h2>Como o jogo anda</h2></div>
+    <p class="sec__lede">Tres rotas, cinco abas, e uma temporada de 22 dias que roda em tempo real: um dia de jogo por dia de calendario, com o <code>world-clock-runner</code> avancando o mundo no servidor mesmo com todo mundo offline.</p>
+
+    <div class="route"><b>/login</b><i>&rarr;</i><b>/worlds</b><i>&rarr;</i><b>/dashboard</b><i>&mdash; sem mundo escolhido volta pra /worlds, sem sessao volta pro /login</i></div>
+
+    <h3 class="sub">As cinco abas <em>src/components/Dashboard.tsx</em></h3>
+    <div class="flowmap">
+      <div class="node"><h4>Home</h4><p>fase, proximo jogo, checklist, manchete, ofertas</p></div><div class="node"><h4>Elenco</h4><p>Draft / Elenco / Escalacao / Tatica / Treino</p></div><div class="node"><h4>Calendario</h4><p>rodadas, Copa Elite, Copa dos Distritos</p></div><div class="node"><h4>Mundo</h4><p>Ligas / Mercado / Ranking / Times / Noticias</p></div><div class="node"><h4>Carreira</h4><p>Loja / Inventario / Circuito / Temporadas / Perfil</p></div>
+    </div>
+
+    <h3 class="sub">A temporada, dia a dia <em>SEASON_DAYS 22</em></h3>
+    <div class="track">
+      <div style="--tone:#8b948c"><b>Dia -1</b><strong>Lobby</strong><span>GM agenda a abertura</span></div><div style="--tone:#38d7c6"><b>Dia 0</b><strong>Genesis</strong><span>monta a lista do draft</span></div><div style="--tone:#38d7c6"><b>Dia 1</b><strong>Genesis</strong><span>ajustes</span></div><div style="--tone:#38d7c6"><b>Dia 2</b><strong>Genesis</strong><span>janela final</span></div><div style="--tone:#38d7c6"><b>Dia 3</b><strong>Autofill</strong><span>elencos vazios completados</span></div><div style="--tone:#8fd36a"><b>Dia 3-16</b><strong>Liga</strong><span>7 rodadas, jogo dia sim dia nao</span></div><div style="--tone:#bd6cff"><b>Dia 17-20</b><strong>Copa Elite</strong><span>4 rodadas de mata-mata</span></div><div style="--tone:#f0a43c"><b>Dia 20</b><strong>Distritos</strong><span>showcase das selecoes</span></div><div style="--tone:#8b948c"><b>Dia 20-22</b><strong>Offseason</strong><span>relatorio, recompensa, rotacao</span></div>
+    </div>
+    <p class="sub-note">Liga com 8 times por distrito e 7 rodadas, ou seja turno unico. Partida dura 2 minutos reais. <code>DISTRICT_CUP_ROUNDS</code> vale 0, entao a Copa dos Distritos entra como showcase e nao ocupa rodada no calendario.</p>
+
+    <h3 class="sub">Os oito estilos e o que cada um faz <em>MatchEngine.ts:27</em></h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Estilo</th><th>Ataque</th><th>Meio</th><th>Defesa</th><th>Dreno</th><th>Extra</th></tr></thead>
+      <tbody><tr><td class="name">Blitzkrieg</td><td class="num">1.25</td><td class="num">1.10</td><td class="num">0.80</td><td class="num">1.50</td><td>&mdash;</td></tr><tr><td class="name">Tiki-Taka</td><td class="num">0.90</td><td class="num">1.30</td><td class="num">1.00</td><td class="num">0.80</td><td>reduz tick 20%</td></tr><tr><td class="name">Retranca Armada</td><td class="num">0.62</td><td class="num">0.92</td><td class="num">1.25</td><td class="num">0.90</td><td>&mdash;</td></tr><tr><td class="name">Motor Lento</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td>bonus tardio 1.4x</td></tr><tr><td class="name">Equilibrado</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td>&mdash;</td></tr><tr><td class="name">Gegenpressing</td><td class="num">1.15</td><td class="num">1.15</td><td class="num">0.90</td><td class="num">1.40</td><td>&mdash;</td></tr><tr><td class="name">Catenaccio</td><td class="num">0.70</td><td class="num">1.10</td><td class="num">1.50</td><td class="num">0.90</td><td>&mdash;</td></tr><tr><td class="name">Vertical</td><td class="num">1.15</td><td class="num">1.00</td><td class="num">0.90</td><td class="num">1.20</td><td>&mdash;</td></tr></tbody>
+    </table></div>
+
+    <h3 class="sub">Os quatro distritos <em>districtTheme.ts</em></h3>
+    <div class="grid grid--wide">
+      <figure class="tile tile--flag" style="--tile-accent:#38d7c6">
+          <div class="tile__stage" style="background:linear-gradient(150deg,#38d7c62e,transparent 70%),var(--ink)">
+            <img src="/assetas/avatars/logos/district-norte-logo.png" alt="Norte" loading="lazy" />
+          </div>
+          <figcaption><span class="tile__code">Norte</span><span class="tile__meta">#38d7c6</span><span class="tile__note">liga com 8 times</span></figcaption>
+        </figure><figure class="tile tile--flag" style="--tile-accent:#f0a43c">
+          <div class="tile__stage" style="background:linear-gradient(150deg,#f0a43c2e,transparent 70%),var(--ink)">
+            <img src="/assetas/avatars/logos/district-sul-logo.png" alt="Sul" loading="lazy" />
+          </div>
+          <figcaption><span class="tile__code">Sul</span><span class="tile__meta">#f0a43c</span><span class="tile__note">liga com 8 times</span></figcaption>
+        </figure><figure class="tile tile--flag" style="--tile-accent:#8fd36a">
+          <div class="tile__stage" style="background:linear-gradient(150deg,#8fd36a2e,transparent 70%),var(--ink)">
+            <img src="/assetas/avatars/logos/district-leste-logo.png" alt="Leste" loading="lazy" />
+          </div>
+          <figcaption><span class="tile__code">Leste</span><span class="tile__meta">#8fd36a</span><span class="tile__note">liga com 8 times</span></figcaption>
+        </figure><figure class="tile tile--flag" style="--tile-accent:#bd6cff">
+          <div class="tile__stage" style="background:linear-gradient(150deg,#bd6cff2e,transparent 70%),var(--ink)">
+            <img src="/assetas/avatars/logos/district-oeste-logo.png" alt="Oeste" loading="lazy" />
+          </div>
+          <figcaption><span class="tile__code">Oeste</span><span class="tile__meta">#bd6cff</span><span class="tile__note">liga com 8 times</span></figcaption>
+        </figure><figure class="tile tile--flag" style="--tile-accent:#94a3b8">
+          <div class="tile__stage" style="background:linear-gradient(150deg,#94a3b82e,transparent 70%),var(--ink)">
+            <span style="font-family:var(--mono);font-size:11px;color:#94a3b8;letter-spacing:.16em">SEM CLUBE</span>
+          </div>
+          <figcaption><span class="tile__code">Livre</span><span class="tile__meta">#94a3b8</span><span class="tile__note">agente livre</span></figcaption>
+        </figure>
+    </div>
+  </section>
+
+  <section id="catalogo">
+    <div class="sec__head"><span class="sec__num">03</span><h2>Catalogo</h2></div>
+    <p class="sec__lede">Tudo lido dos arquivos reais em <code>public/assetas/avatars/</code> e das constantes em <code>src/constants/</code>. Os codigos sao os mesmos que o motor usa, entao da pra apontar direto: "M07 esta alto demais", "boot_34 nao combina com a raridade".</p>
+
+    <h3 class="sub">Cabelos masculinos <em>17 pecas &middot; hairId 1 a 17</em></h3>
+    <div class="grid grid--avatar">
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/hair_1.png" alt="hair_1.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M01</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/f6-removebg-preview.png" alt="f6-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M02</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/f9-removebg-preview.png" alt="f9-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M03</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__9_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__9_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M04</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__10_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__10_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M05</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__11_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__11_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M06</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__12_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__12_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M07</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__13_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__13_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M08</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:-0.75%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__14_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__14_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M09</span>
+            <span class="tile__meta">offset 0 / -0.75</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__15_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__15_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M10</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__18_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__18_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M11</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__19_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__19_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M12</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__20_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__20_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M13</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__21_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__21_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M14</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__22_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__22_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M15</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__23_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__23_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M16</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__24_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__24_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M17</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure></div>
+    <p class="sub-note">Marcados como "sem ajuste" usam o offset padrao do genero. So uma peca masculina tem correcao individual hoje: a M09.</p>
+
+    <h3 class="sub">Cabelos femininos <em>15 pecas &middot; hairId 1 a 15</em></h3>
+    <div class="grid grid--avatar">
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:-0.3%;top:-1.8%" src="/assetas/avatars/hair/fem/f1-removebg-preview.png" alt="f1-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F01</span>
+            <span class="tile__meta">offset -0.3 / -1.8</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.75%;top:0%" src="/assetas/avatars/hair/fem/f2-removebg-preview.png" alt="f2-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F02</span>
+            <span class="tile__meta">offset 0.75 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:-0.5%;top:0%" src="/assetas/avatars/hair/fem/f3-removebg-preview.png" alt="f3-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F03</span>
+            <span class="tile__meta">offset -0.5 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.75%;top:-0.75%" src="/assetas/avatars/hair/fem/f4-removebg-preview.png" alt="f4-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F04</span>
+            <span class="tile__meta">offset 0.75 / -0.75</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.5%;top:0%" src="/assetas/avatars/hair/fem/f7-removebg-preview.png" alt="f7-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F05</span>
+            <span class="tile__meta">offset 0.5 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.5%;top:0%" src="/assetas/avatars/hair/fem/f8-removebg-preview.png" alt="f8-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F06</span>
+            <span class="tile__meta">offset 0.5 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.75%;top:0%" src="/assetas/avatars/hair/fem/f10-removebg-preview.png" alt="f10-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F07</span>
+            <span class="tile__meta">offset 0.75 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.5%;top:0%" src="/assetas/avatars/hair/fem/f11-removebg-preview.png" alt="f11-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F08</span>
+            <span class="tile__meta">offset 0.5 / 0</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.25%;top:-0.75%" src="/assetas/avatars/hair/fem/f13-removebg-preview.png" alt="f13-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F09</span>
+            <span class="tile__meta">offset 0.25 / -0.75</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.75%;top:-0.75%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__5_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__5_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F10</span>
+            <span class="tile__meta">offset 0.75 / -0.75</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:-1%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__6_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__6_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F11</span>
+            <span class="tile__meta">offset 0 / -1</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.75%;top:-0.75%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__7_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__7_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F12</span>
+            <span class="tile__meta">offset 0.75 / -0.75</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__8_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__8_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F13</span>
+            <span class="tile__meta">sem ajuste</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.25%;top:-0.5%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__9_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__9_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F14</span>
+            <span class="tile__meta">offset 0.25 / -0.5</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0.25%;top:-0.25%" src="/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__10_-removebg-preview.png" alt="Cópia_de_Design_sem_nome__10_-removebg-preview.png" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F15</span>
+            <span class="tile__meta">offset 0.25 / -0.25</span>
+          </figcaption>
+        </figure></div>
+    <p class="sub-note">Catorze das quinze tem offset calibrado. F03 e a unica sem ajuste individual, junto com o default do genero em x -0.5.</p>
+
+    <h3 class="sub">Corpos <em>6 pecas &middot; bodyId 1 a 3 por genero</em></h3>
+    <div class="grid grid--avatar">
+      
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:-0.3%;top:-1.8%" src="/assetas/avatars/hair/fem/f1-removebg-preview.png" alt="F_1" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F_1</span>
+            <span class="tile__meta">body_f_1.png</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_2.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:-0.3%;top:-1.8%" src="/assetas/avatars/hair/fem/f1-removebg-preview.png" alt="F_2" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F_2</span>
+            <span class="tile__meta">body_f_2.png</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_f_3.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:-0.3%;top:-1.8%" src="/assetas/avatars/hair/fem/f1-removebg-preview.png" alt="F_3" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">F_3</span>
+            <span class="tile__meta">body_f_3.png</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_1.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/hair_1.png" alt="M_1" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M_1</span>
+            <span class="tile__meta">body_m_1.png</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_2.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/hair_1.png" alt="M_2" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M_2</span>
+            <span class="tile__meta">body_m_2.png</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--avatar">
+          <div class="tile__stage stack">
+            <img class="ly" style="z-index:1" src="/assetas/avatars/bodies/body_m_3.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:2" src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="" loading="lazy" />
+            <img class="ly" style="z-index:3;left:0%;top:0%" src="/assetas/avatars/hair/masc/hair_1.png" alt="M_3" loading="lazy" />
+            
+          </div>
+          <figcaption>
+            <span class="tile__code">M_3</span>
+            <span class="tile__meta">body_m_3.png</span>
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Chuteiras <em>30 modelos &middot; 5 raridades</em></h3>
+    <div class="grid grid--boot">
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_01.png" alt="Velocity Cyan" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_01</span>
+            <span class="tile__name">Velocity Cyan</span>
+            <span class="tile__meta">Comum &middot; 12 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_02.png" alt="Orbit Violet" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_02</span>
+            <span class="tile__name">Orbit Violet</span>
+            <span class="tile__meta">Comum &middot; 12 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_03.png" alt="Static Aqua" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_03</span>
+            <span class="tile__name">Static Aqua</span>
+            <span class="tile__meta">Comum &middot; 13 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_04.png" alt="Blade Silver" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_04</span>
+            <span class="tile__name">Blade Silver</span>
+            <span class="tile__meta">Comum &middot; 13 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_05.png" alt="Sky Pulse" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_05</span>
+            <span class="tile__name">Sky Pulse</span>
+            <span class="tile__meta">Comum &middot; 14 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_06.png" alt="Solar Gold" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_06</span>
+            <span class="tile__name">Solar Gold</span>
+            <span class="tile__meta">Comum &middot; 14 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_07.png" alt="Frost Edge" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_07</span>
+            <span class="tile__name">Frost Edge</span>
+            <span class="tile__meta">Comum &middot; 14 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_08.png" alt="Mint Flow" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_08</span>
+            <span class="tile__name">Mint Flow</span>
+            <span class="tile__meta">Comum &middot; 15 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_09.png" alt="Inferno Red" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_09</span>
+            <span class="tile__name">Inferno Red</span>
+            <span class="tile__meta">Comum &middot; 15 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_10.png" alt="Night Sprint" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_10</span>
+            <span class="tile__name">Night Sprint</span>
+            <span class="tile__meta">Comum &middot; 15 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_11.png" alt="Copper Touch" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_11</span>
+            <span class="tile__name">Copper Touch</span>
+            <span class="tile__meta">Comum &middot; 16 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_12.png" alt="Graph Surge" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_12</span>
+            <span class="tile__name">Graph Surge</span>
+            <span class="tile__meta">Comum &middot; 16 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_13.png" alt="Cloud White" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_13</span>
+            <span class="tile__name">Cloud White</span>
+            <span class="tile__meta">Comum &middot; 16 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8b948c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_14.png" alt="Deep Current" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_14</span>
+            <span class="tile__name">Deep Current</span>
+            <span class="tile__meta">Comum &middot; 17 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_21.png" alt="Rune Flash" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_21</span>
+            <span class="tile__name">Rune Flash</span>
+            <span class="tile__meta">Incomum &middot; 18 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_23.png" alt="Arc Sigil" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_23</span>
+            <span class="tile__name">Arc Sigil</span>
+            <span class="tile__meta">Incomum &middot; 19 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_24.png" alt="Void Core" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_24</span>
+            <span class="tile__name">Void Core</span>
+            <span class="tile__meta">Incomum &middot; 19 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_25.png" alt="Lotus Veil" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_25</span>
+            <span class="tile__name">Lotus Veil</span>
+            <span class="tile__meta">Incomum &middot; 20 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_26.png" alt="Blaze Crest" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_26</span>
+            <span class="tile__name">Blaze Crest</span>
+            <span class="tile__meta">Incomum &middot; 20 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#8fd36a">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_27.png" alt="Verdant Shell" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_27</span>
+            <span class="tile__name">Verdant Shell</span>
+            <span class="tile__meta">Incomum &middot; 21 ouro</span>
+            <span class="tile__note">so visual</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_31.png" alt="Nebula Drive" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_31</span>
+            <span class="tile__name">Nebula Drive</span>
+            <span class="tile__meta">Rara &middot; 23 ouro</span>
+            <span class="tile__note">+10% ganho</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_32.png" alt="Prism Cryst" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_32</span>
+            <span class="tile__name">Prism Cryst</span>
+            <span class="tile__meta">Rara &middot; 24 ouro</span>
+            <span class="tile__note">+8% ganho &middot; -10% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_33.png" alt="Chrono Mesh" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_33</span>
+            <span class="tile__name">Chrono Mesh</span>
+            <span class="tile__meta">Rara &middot; 24 ouro</span>
+            <span class="tile__note">+12% ganho</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_34.png" alt="Crown Gleam" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_34</span>
+            <span class="tile__name">Crown Gleam</span>
+            <span class="tile__meta">Rara &middot; 25 ouro</span>
+            <span class="tile__note">-18% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_35.png" alt="Tide Breaker" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_35</span>
+            <span class="tile__name">Tide Breaker</span>
+            <span class="tile__meta">Rara &middot; 25 ouro</span>
+            <span class="tile__note">+15% ganho</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_36.png" alt="Obsidian Reef" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_36</span>
+            <span class="tile__name">Obsidian Reef</span>
+            <span class="tile__meta">Rara &middot; 26 ouro</span>
+            <span class="tile__note">-22% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#bd6cff">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_41.png" alt="Halo Dominion" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_41</span>
+            <span class="tile__name">Halo Dominion</span>
+            <span class="tile__meta">Epica &middot; 16 frag</span>
+            <span class="tile__note">+18% ganho &middot; -20% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#bd6cff">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_42.png" alt="Ice Seraph" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_42</span>
+            <span class="tile__name">Ice Seraph</span>
+            <span class="tile__meta">Epica &middot; 17 frag</span>
+            <span class="tile__note">+22% ganho &middot; -16% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#f0a43c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_43.png" alt="Winged Crown" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_43</span>
+            <span class="tile__name">Winged Crown</span>
+            <span class="tile__meta">Lendaria &middot; 20 frag</span>
+            <span class="tile__note">+16% ganho &middot; -30% perda</span>
+          </figcaption>
+        </figure>
+        <figure class="tile tile--boot" style="--tile-accent:#f0a43c">
+          <div class="tile__stage"><img src="/assetas/avatars/boots/boot_44.png" alt="Solar Relic" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">boot_44</span>
+            <span class="tile__name">Solar Relic</span>
+            <span class="tile__meta">Lendaria &middot; 22 frag</span>
+            <span class="tile__note">+20% ganho &middot; -28% perda</span>
+          </figcaption>
+        </figure></div>
+    <p class="sub-note">O bonus so mexe na evolucao pos-jogo, nunca no rating bruto, e por isso a colecao nao vira pay-to-win. Hoje, porem, so <code>boot_01</code> e <code>boot_02</code> nascem sorteadas em jogadores: as outras 28 dependem de compra.</p>
+
+    <h3 class="sub">Uniformes de time <em>32 slots &middot; pareados 1:1 com o escudo</em></h3>
+    <div class="grid grid--sq">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-01-uniform.png" alt="t_1" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_1</span>
+            
+            <span class="tile__meta">team-01-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-02-uniform.png" alt="t_2" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_2</span>
+            
+            <span class="tile__meta">team-02-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-03-uniform.png" alt="t_3" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_3</span>
+            
+            <span class="tile__meta">team-03-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-04-uniform.png" alt="t_4" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_4</span>
+            
+            <span class="tile__meta">team-04-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-05-uniform.png" alt="t_5" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_5</span>
+            
+            <span class="tile__meta">team-05-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-06-uniform.png" alt="t_6" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_6</span>
+            
+            <span class="tile__meta">team-06-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-07-uniform.png" alt="t_7" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_7</span>
+            
+            <span class="tile__meta">team-07-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-08-uniform.png" alt="t_8" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_8</span>
+            
+            <span class="tile__meta">team-08-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-09-uniform.png" alt="t_9" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_9</span>
+            
+            <span class="tile__meta">team-09-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-10-uniform.png" alt="t_10" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_10</span>
+            
+            <span class="tile__meta">team-10-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-11-uniform.png" alt="t_11" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_11</span>
+            
+            <span class="tile__meta">team-11-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-12-uniform.png" alt="t_12" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_12</span>
+            
+            <span class="tile__meta">team-12-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-13-uniform.png" alt="t_13" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_13</span>
+            
+            <span class="tile__meta">team-13-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-14-uniform.png" alt="t_14" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_14</span>
+            
+            <span class="tile__meta">team-14-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-15-uniform.png" alt="t_15" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_15</span>
+            
+            <span class="tile__meta">team-15-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-16-uniform.png" alt="t_16" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_16</span>
+            
+            <span class="tile__meta">team-16-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-17-uniform.png" alt="t_17" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_17</span>
+            
+            <span class="tile__meta">team-17-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-18-uniform.png" alt="t_18" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_18</span>
+            
+            <span class="tile__meta">team-18-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-19-uniform.png" alt="t_19" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_19</span>
+            
+            <span class="tile__meta">team-19-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-20-uniform.png" alt="t_20" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_20</span>
+            
+            <span class="tile__meta">team-20-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-21-uniform.png" alt="t_21" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_21</span>
+            
+            <span class="tile__meta">team-21-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-22-uniform.png" alt="t_22" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_22</span>
+            
+            <span class="tile__meta">team-22-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-23-uniform.png" alt="t_23" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_23</span>
+            
+            <span class="tile__meta">team-23-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-24-uniform.png" alt="t_24" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_24</span>
+            
+            <span class="tile__meta">team-24-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-25-uniform.png" alt="t_25" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_25</span>
+            
+            <span class="tile__meta">team-25-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-26-uniform.png" alt="t_26" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_26</span>
+            
+            <span class="tile__meta">team-26-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-27-uniform.png" alt="t_27" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_27</span>
+            
+            <span class="tile__meta">team-27-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-28-uniform.png" alt="t_28" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_28</span>
+            
+            <span class="tile__meta">team-28-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-29-uniform.png" alt="t_29" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_29</span>
+            
+            <span class="tile__meta">team-29-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-30-uniform.png" alt="t_30" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_30</span>
+            
+            <span class="tile__meta">team-30-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-31-uniform.png" alt="t_31" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_31</span>
+            
+            <span class="tile__meta">team-31-uniform</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/team-32-uniform.png" alt="t_32" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_32</span>
+            
+            <span class="tile__meta">team-32-uniform</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Uniformes de distrito e da loja <em>5 skins vendidas</em></h3>
+    <div class="grid grid--sq">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/district-leste-uniform.png" alt="LESTE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">LESTE</span>
+            
+            <span class="tile__meta">selecao / agente livre</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/district-norte-uniform.png" alt="NORTE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">NORTE</span>
+            
+            <span class="tile__meta">selecao / agente livre</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/district-oeste-uniform.png" alt="OESTE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">OESTE</span>
+            
+            <span class="tile__meta">selecao / agente livre</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/district-sul-uniform.png" alt="SUL" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">SUL</span>
+            
+            <span class="tile__meta">selecao / agente livre</span>
+            
+          </figcaption>
+        </figure>
+      
+        <figure class="tile" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-circuit-chrome.png" alt="Circuit Chrome" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">kit_circuit_chrome</span>
+            <span class="tile__name">Circuit Chrome</span>
+            <span class="tile__meta">Rara &amp;middot; 24 ouro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-holo-wave.png" alt="Holo Wave" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">kit_holo_wave</span>
+            <span class="tile__name">Holo Wave</span>
+            <span class="tile__meta">Rara &amp;middot; 26 ouro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-carbon-grid.png" alt="Carbon Grid" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">kit_carbon_grid</span>
+            <span class="tile__name">Carbon Grid</span>
+            <span class="tile__meta">Rara &amp;middot; 27 ouro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#bd6cff">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-pulse-white.png" alt="Pulse White" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">kit_pulse_white</span>
+            <span class="tile__name">Pulse White</span>
+            <span class="tile__meta">Epica &amp;middot; 18 frag</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#bd6cff">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-neon-flux.png" alt="Neon Flux" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">kit_neon_flux</span>
+            <span class="tile__name">Neon Flux</span>
+            <span class="tile__meta">Epica &amp;middot; 20 frag</span>
+            
+          </figcaption>
+        </figure>
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/store-kit-special-six.png" alt="orfao" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">orfao</span>
+            
+            <span class="tile__meta">store-kit-special-six</span>
+            <span class="tile__note">no disco, fora do catalogo</span>
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/unused-uniform-20-alt.png" alt="orfao" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">orfao</span>
+            
+            <span class="tile__meta">unused-uniform-20-alt</span>
+            <span class="tile__note">no disco, fora do catalogo</span>
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/uniforms/unused-uniform-34.png" alt="orfao" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">orfao</span>
+            
+            <span class="tile__meta">unused-uniform-34</span>
+            <span class="tile__note">no disco, fora do catalogo</span>
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Escudos de time <em>32 slots</em></h3>
+    <div class="grid grid--sq">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-01-logo.png" alt="t_1" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_1</span>
+            
+            <span class="tile__meta">team-01-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-02-logo.png" alt="t_2" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_2</span>
+            
+            <span class="tile__meta">team-02-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-03-logo.png" alt="t_3" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_3</span>
+            
+            <span class="tile__meta">team-03-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-04-logo.png" alt="t_4" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_4</span>
+            
+            <span class="tile__meta">team-04-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-05-logo.png" alt="t_5" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_5</span>
+            
+            <span class="tile__meta">team-05-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-06-logo.png" alt="t_6" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_6</span>
+            
+            <span class="tile__meta">team-06-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-07-logo.png" alt="t_7" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_7</span>
+            
+            <span class="tile__meta">team-07-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-08-logo.png" alt="t_8" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_8</span>
+            
+            <span class="tile__meta">team-08-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-09-logo.png" alt="t_9" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_9</span>
+            
+            <span class="tile__meta">team-09-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-10-logo.png" alt="t_10" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_10</span>
+            
+            <span class="tile__meta">team-10-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-11-logo.png" alt="t_11" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_11</span>
+            
+            <span class="tile__meta">team-11-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-12-logo.png" alt="t_12" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_12</span>
+            
+            <span class="tile__meta">team-12-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-13-logo.png" alt="t_13" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_13</span>
+            
+            <span class="tile__meta">team-13-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-14-logo.png" alt="t_14" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_14</span>
+            
+            <span class="tile__meta">team-14-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-15-logo.png" alt="t_15" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_15</span>
+            
+            <span class="tile__meta">team-15-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-16-logo.png" alt="t_16" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_16</span>
+            
+            <span class="tile__meta">team-16-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-17-logo.png" alt="t_17" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_17</span>
+            
+            <span class="tile__meta">team-17-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-18-logo.png" alt="t_18" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_18</span>
+            
+            <span class="tile__meta">team-18-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-19-logo.png" alt="t_19" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_19</span>
+            
+            <span class="tile__meta">team-19-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-20-logo.png" alt="t_20" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_20</span>
+            
+            <span class="tile__meta">team-20-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-21-logo.png" alt="t_21" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_21</span>
+            
+            <span class="tile__meta">team-21-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-22-logo.png" alt="t_22" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_22</span>
+            
+            <span class="tile__meta">team-22-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-23-logo.png" alt="t_23" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_23</span>
+            
+            <span class="tile__meta">team-23-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-24-logo.png" alt="t_24" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_24</span>
+            
+            <span class="tile__meta">team-24-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-25-logo.png" alt="t_25" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_25</span>
+            
+            <span class="tile__meta">team-25-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-26-logo.png" alt="t_26" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_26</span>
+            
+            <span class="tile__meta">team-26-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-27-logo.png" alt="t_27" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_27</span>
+            
+            <span class="tile__meta">team-27-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-28-logo.png" alt="t_28" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_28</span>
+            
+            <span class="tile__meta">team-28-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-29-logo.png" alt="t_29" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_29</span>
+            
+            <span class="tile__meta">team-29-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-30-logo.png" alt="t_30" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_30</span>
+            
+            <span class="tile__meta">team-30-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-31-logo.png" alt="t_31" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_31</span>
+            
+            <span class="tile__meta">team-31-logo</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/team-32-logo.png" alt="t_32" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">t_32</span>
+            
+            <span class="tile__meta">team-32-logo</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Escudos de fundador <em>10 pecas &middot; sorteadas pelo id do clube</em></h3>
+    <div class="grid grid--sq">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-01.png" alt="F01" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F01</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-02.png" alt="F02" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F02</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-03.png" alt="F03" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F03</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-04.png" alt="F04" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F04</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-05.png" alt="F05" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F05</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-06.png" alt="F06" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F06</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-07.png" alt="F07" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F07</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-08.png" alt="F08" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F08</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-09.png" alt="F09" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F09</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/founder-logo-10.png" alt="F10" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">F10</span>
+            
+            <span class="tile__meta">clube fundado</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Escudos da loja <em>5 itens &middot; 2 sem arquivo</em></h3>
+    <div class="grid grid--wide">
+      
+        <figure class="tile" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/store-logo-quantum-vault.png" alt="Quantum Vault" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">logo_quantum_vault</span>
+            <span class="tile__name">Quantum Vault</span>
+            <span class="tile__meta">Rara &amp;middot; 22 ouro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#38d7c6">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/store-logo-holo-tiger.png" alt="Holo Tiger" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">logo_holo_tiger</span>
+            <span class="tile__name">Holo Tiger</span>
+            <span class="tile__meta">Rara &amp;middot; 23 ouro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile" style="--tile-accent:#bd6cff">
+          <div class="tile__stage"><img src="/assetas/avatars/logos/store-logo-blackout-crown.png" alt="Blackout Crown" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">logo_blackout_crown</span>
+            <span class="tile__name">Blackout Crown</span>
+            <span class="tile__meta">Epica &amp;middot; 16 frag</span>
+            
+          </figcaption>
+        </figure><figure class="tile tile--missing tile--flag" style="--tile-accent:var(--crit)">
+            <div class="tile__stage"></div>
+            <figcaption><span class="tile__code">logo_pulse_hex</span><span class="tile__name">Pulse Hex</span>
+            <span class="tile__meta">Epica &middot; 17 frag</span>
+            <span class="tile__note" style="color:var(--crit)">store-logo-pulse-hex.png nao existe</span></figcaption></figure><figure class="tile tile--missing tile--flag" style="--tile-accent:var(--crit)">
+            <div class="tile__stage"></div>
+            <figcaption><span class="tile__code">logo_solar_wire</span><span class="tile__name">Solar Wire</span>
+            <span class="tile__meta">Epica &middot; 18 frag</span>
+            <span class="tile__note" style="color:var(--crit)">store-logo-solar-wire.png nao existe</span></figcaption></figure>
+    </div>
+
+    <h3 class="sub">Trofeus <em>7 pecas</em></h3>
+    <div class="grid grid--wide">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-district-cup.png" alt="district cup" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">district cup</span>
+            
+            <span class="tile__meta">competicao global</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-elite-cup.png" alt="elite cup" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">elite cup</span>
+            
+            <span class="tile__meta">competicao global</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-league-leste.png" alt="league leste" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">league leste</span>
+            
+            <span class="tile__meta">liga de distrito</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-league-norte.png" alt="league norte" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">league norte</span>
+            
+            <span class="tile__meta">liga de distrito</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-league-oeste.png" alt="league oeste" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">league oeste</span>
+            
+            <span class="tile__meta">liga de distrito</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-league-sul.png" alt="league sul" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">league sul</span>
+            
+            <span class="tile__meta">liga de distrito</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/trophies/trophy-manager-of-season.png" alt="manager of season" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">manager of season</span>
+            
+            <span class="tile__meta">competicao global</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">Passe e perfil <em>3 pecas + 3 itens de manager</em></h3>
+    <div class="grid grid--wide">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/pass/badge-elite-original-s1.png" alt="badge-elite-original-s1" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">badge-elite-original-s1</span>
+            
+            <span class="tile__meta">recompensa final</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/pass/pass-circuit-neon-01.png" alt="pass-circuit-neon-01" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">pass-circuit-neon-01</span>
+            
+            <span class="tile__meta">circuito</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/pass/pass-circuit-neon-banner.png" alt="pass-circuit-neon-banner" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">pass-circuit-neon-banner</span>
+            
+            <span class="tile__meta">circuito</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Item de manager</th><th>Tipo</th><th>Raridade</th><th class="num">Preco</th><th>Efeito</th></tr></thead>
+      <tbody><tr><td class="name">Apito de Fundador</td><td>ACCESSORY</td><td>Rara</td><td class="num">32 ouro</td><td>Marca publica de prestigio. Bonus leve de reputacao visual entre mundos.</td></tr><tr><td class="name">Lente de Scout</td><td>ACCESSORY</td><td>Epica</td><td class="num">12 frag</td><td>Futuro bonus leve de leitura e filtros. Nao aumenta rating nem resultado de partida.</td></tr><tr><td class="name">Elite Original S1</td><td>BADGE</td><td>Lendaria</td><td class="num">premio</td><td>Item de perfil atravessando mundos. Valor de historia, nao de poder.</td></tr></tbody>
+    </table></div>
+    <p class="sub-note">Os dois acessorios ainda usam <code>/logo.png</code> como imagem: nunca ganharam arte propria.</p>
+
+    <h3 class="sub">Icones de fusao <em>8 svg &middot; as skills derivadas do pentagono</em></h3>
+    <div class="grid grid--sq">
+      
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-drive.svg" alt="DRIVE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">DRIVE</span>
+            
+            <span class="tile__meta">linha</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-execute.svg" alt="EXECUTE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">EXECUTE</span>
+            
+            <span class="tile__meta">linha</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-goal-position.svg" alt="GOAL-POSITION" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">GOAL-POSITION</span>
+            
+            <span class="tile__meta">goleiro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-goal-reflex.svg" alt="GOAL-REFLEX" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">GOAL-REFLEX</span>
+            
+            <span class="tile__meta">goleiro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-goal-wall.svg" alt="GOAL-WALL" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">GOAL-WALL</span>
+            
+            <span class="tile__meta">goleiro</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-link.svg" alt="LINK" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">LINK</span>
+            
+            <span class="tile__meta">linha</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-react.svg" alt="REACT" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">REACT</span>
+            
+            <span class="tile__meta">linha</span>
+            
+          </figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="tile__stage"><img src="/assetas/avatars/fusion-icons/fusion-space.svg" alt="SPACE" loading="lazy" /></div>
+          <figcaption>
+            <span class="tile__code">SPACE</span>
+            
+            <span class="tile__meta">linha</span>
+            
+          </figcaption>
+        </figure>
+    </div>
+
+    <h3 class="sub">DNA do jogador <em>31 tracos em 4 slots</em></h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Slot</th><th>Traco</th><th>Efeito</th></tr></thead>
+      <tbody><tr><td class="name" style="color:#8b948c">Slot 1 - DNA Base</td><td class="name">Ofensivo</td><td>Aumenta a agressividade e presença na área adversária (+1%).</td></tr><tr><td class="name" style="color:#8b948c"></td><td class="name">Folego</td><td>Melhora a resistência física básica em corridas curtas (+1%).</td></tr><tr><td class="name" style="color:#8b948c"></td><td class="name">Passe Bronze</td><td>Precisão técnica em passes curtos de conexão (+1%).</td></tr><tr><td class="name" style="color:#8b948c"></td><td class="name">Finaliz Bronze</td><td>Capacidade básica de conclusão de jogadas (+1%).</td></tr><tr><td class="name" style="color:#8b948c"></td><td class="name">Def Bronze</td><td>Senso de cobertura e bote básico defensivo (+1%).</td></tr><tr><td class="name" style="color:#38d7c6">Slot 2 - DNA Elite</td><td class="name">Consistência</td><td>Mantém a performance estável independente da fadiga (+3%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Versatilidade</td><td>Capacidade de atuar bem em diferentes setores (+3%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Defesa Prata</td><td>Intercepções eficientes e botes precisos (+3%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Finaliz Prata</td><td>Poder de chute e precisão em ângulos difíceis (+3%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Passe Prata</td><td>Visão de jogo para passes em profundidade (+3%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Finaliz Ouro</td><td>Finalizador letal com alta precisão sob pressão (+5%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Passe Ouro</td><td>Mestre das assistências e passes que quebram linhas (+5%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Defesa Ouro</td><td>Muralha intransponível com botes cirúrgicos (+5%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Liderança</td><td>Eleva a moral dos companheiros e reduz a pressão (+5%).</td></tr><tr><td class="name" style="color:#38d7c6"></td><td class="name">Folego Ouro</td><td>Pulmão extra para manter alta intensidade o jogo todo (+5%).</td></tr><tr><td class="name" style="color:#bd6cff">Slot 3 - DNA Potencial</td><td class="name">Finaliz Lendária</td><td>Instinto de gol absoluto. Quase infalível na área (+8%).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Passe Lendária</td><td>Precisão cirúrgica. Encontra brechas impossíveis (+8%).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Defesa Lendária</td><td>O defensor definitivo. Antecipação perfeita (+8%).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Máquina</td><td>Performance sobre-humana e dreno de fôlego reduzido (+4% Geral, -10% Dreno).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Catalisador</td><td>Aura de bônus que potencializa o seu setor (+3% Setorial).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Gênio</td><td>A evolução não é limitada pelo teto de elite (Sem redutor pós-800).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Clutch</td><td>Aumenta consideravelmente o poder em jogos decisivos (+7%).</td></tr><tr><td class="name" style="color:#bd6cff"></td><td class="name">Protagonista</td><td>Poder máximo quando a intensidade do jogo é alta (+10%).</td></tr><tr><td class="name" style="color:#ff5f70">Slot 4 - Fardos</td><td class="name">Displicente</td><td>Pode errar jogadas fáceis por excesso de confiança (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Pavio Curto</td><td>Propensão a cartões e descontrole emocional (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Preguiçoso</td><td>Baixo empenho defensivo em momentos de transição (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Vidro</td><td>Maior sensibilidade a choques físicos e fadiga (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Inconstante</td><td>Performance que oscila drasticamente entre tempos (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Estático</td><td>Dificuldade de movimentação sem a bola (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Individualista</td><td>Dificulta a fluidez do jogo coletivo (-4%).</td></tr><tr><td class="name" style="color:#ff5f70"></td><td class="name">Boêmio</td><td>Recuperação de stamina mais lenta entre jogos (-4%).</td></tr></tbody>
+    </table></div>
+
+    <h3 class="sub">Origens do manager <em>4 tracos iniciais</em></h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Origem</th><th>Estilo preferido</th><th>Leitura</th></tr></thead>
+      <tbody><tr><td class="name">Arquiteto Tatico</td><td>Tiki-Taka</td><td>Enxerga padroes antes do jogo abrir. Boa identidade para managers de treino e ajuste fino.</td></tr><tr><td class="name">Negociador Frio</td><td>Equilibrado</td><td>Fala pouco, pesa muito. Origem voltada a mercado, proposta e leitura de oportunidade.</td></tr><tr><td class="name">Olheiro de Rua</td><td>Vertical</td><td>Acha valor antes da vitrine. Combina com manager que vive de garimpar jogador.</td></tr><tr><td class="name">Simbolo Local</td><td>Gegenpressing</td><td>Chega com torcida, bairro e historia. Menos tecnica fria, mais peso social.</td></tr></tbody>
+    </table></div>
+
+    <h3 class="sub">Economia <em>2 moedas &middot; 4 produtos reais</em></h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Produto</th><th>Tipo</th><th class="num">Preco</th><th>Entrega</th></tr></thead>
+      <tbody><tr><td class="name">Bolsa de Ouro</td><td>consumivel</td><td class="num">R$ 4,90</td><td>100 ouro</td></tr><tr><td class="name">Cofre de Ouro</td><td>consumivel</td><td class="num">R$ 12,90</td><td>300 ouro</td></tr><tr><td class="name">Tesouro Elite</td><td>consumivel</td><td class="num">R$ 24,90</td><td>700 ouro</td></tr><tr><td class="name">Passe do Circuito</td><td>assinatura</td><td class="num">R$ 19,90</td><td>90 dias</td></tr></tbody>
+    </table></div>
+    <p class="sub-note">Ouro e fragmento tambem caem no fim de cada temporada: 40 de base, ate 35 a mais por titulo de liga, 25 pela Copa Elite, e o teto do servidor e 250 ouro e 40 fragmentos por temporada.</p>
+  </section>
+
+  <section id="atritos">
+    <div class="sec__head"><span class="sec__num">04</span><h2>Inconsistencias e atritos</h2></div>
+    <p class="sec__lede">Achados desta leitura, verificados um a um no codigo e nos arquivos. A suite esta verde (111 testes, 25 arquivos) e o <code>tsc</code> passa limpo, entao nada disso aparece como falha: sao coisas que so a leitura pega. Os cards em verde ja foram corrigidos nesta passada.</p>
+    <div class="findings">
+        <article class="finding finding--done" style="--sev:#57d99a">
+          <header class="finding__head">
+            <span class="chip chip--sev">Resolvido</span>
+            <span class="chip">Visual</span>
+            <span class="chip chip--was">era critico</span>
+            <h4>Tres das cinco telas principais estavam sem fundo</h4>
+          </header>
+          <p class="finding__where"><code>src/components/Dashboard.tsx:292</code></p>
+          <p class="finding__body">O mapa de fundos aponta para <code>/calendar.jpg</code>, <code>/mundo.jpg</code> e <code>/carreira.jpg</code>, mas esses tres arquivos estao na raiz do repositorio, nao em <code>public/</code>. Confirmei que nao entram no build: <code>dist/</code> e <code>android/app/src/main/assets/public/</code> so tem <code>home.jpg</code> e <code>elenco.jpg</code>. Calendario, Mundo e Carreira renderizam sobre o preto liso enquanto Home e Elenco tem arte.</p>
+          <p class="finding__fix"><span>Corrigido</span> Os tres jpg foram movidos para public/ e ja aparecem no dist. Ainda vale otimizar: mundo.jpg tem 409 KB.</p>
+        </article>
+        <article class="finding finding--done" style="--sev:#57d99a">
+          <header class="finding__head">
+            <span class="chip chip--sev">Resolvido</span>
+            <span class="chip">Texto</span>
+            <span class="chip chip--was">era critico</span>
+            <h4>O onboarding inteiro estava com acento quebrado</h4>
+          </header>
+          <p class="finding__where"><code>src/components/NewGameFlow.tsx (20 linhas) + src/hooks/useTransfers.ts (4)</code></p>
+          <p class="finding__body">A primeira tela que todo jogador novo ve mostra <code>Protocolo de SucessÃ£o Ativo</code>, <code>DisponÃ­vel</code>, <code>OrÃ§amento Inicial</code> e o botao final <code>Entrar na GÃªnese</code>. Sao arquivos salvos em UTF-8 com BOM cujo conteudo foi gravado como latin-1 em algum momento. Os toasts de troca em <code>useTransfers</code> tem o mesmo problema.</p>
+          <p class="finding__fix"><span>Corrigido</span> 22 linhas reescritas nos dois arquivos, tres bullets restaurados e o BOM removido de ambos. Confirmado no bundle de producao.</p>
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Economia</span>
+            
+            <h4>O passe de 90 dias nunca expira</h4>
+          </header>
+          <p class="finding__where"><code>supabase/migrations/20260421002000_meta_store_rpcs.sql:304</code></p>
+          <p class="finding__body">Primeiro a boa noticia, porque eu tinha errado nisso: <strong>a compra funciona</strong>. A Edge Function valida o token na Google, a <code>grant_mobile_purchase</code> grava <code>premium_active = true</code> e <code>premium_until = agora + 90 dias</code>. O <code>ends_at</code> do circuito, que diz 20 de julho, <strong>nao e lido por consulta nenhuma</strong> do projeto: tudo filtra por <code>is_active</code>, e nada nunca desliga essa flag. Entao quem comprar hoje recebe o premium normalmente. O problema e o outro lado: <code>premium_until</code> e gravado e <strong>nunca lido</strong>, nem no SQL nem no app, e <code>premium_active</code> nunca volta para false. Os 90 dias que o produto anuncia na loja viram acesso permanente.</p>
+          <p class="finding__fix"><span>Caminho</span> Ou ler premium_until ao carregar o perfil, ou parar de vender como assinatura de 90 dias.</p>
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Economia</span>
+            
+            <h4>O prazo do circuito que aparece na tela e inventado no cliente</h4>
+          </header>
+          <p class="finding__where"><code>src/utils/store.ts:47</code></p>
+          <p class="finding__body"><code>createDefaultStoreState()</code> monta <code>endsAt = agora + 90 dias</code> no navegador. O servidor tem a data real em <code>circuit_definitions</code>. As duas nunca conversam, entao o contador que o jogador ve reinicia sozinho e nao corresponde a nada.</p>
+          <p class="finding__fix"><span>Caminho</span> Ler endsAt do snapshot do servidor em loadMetaStoreSnapshot, como ja e feito com premiumActive.</p>
+        </article>
+        <article class="finding" style="--sev:#ff5f70">
+          <header class="finding__head">
+            <span class="chip chip--sev">Critico</span>
+            <span class="chip">Economia</span>
+            
+            <h4>A trava da recompensa de temporada depende de existir circuito ativo</h4>
+          </header>
+          <p class="finding__where"><code>supabase/migrations/20260421001000_season_rewards.sql</code></p>
+          <p class="finding__body">Hoje isso <strong>esta funcionando</strong>: existe uma linha ativa em <code>circuit_definitions</code> e nada nunca a desliga, entao a checagem roda e a recompensa sai uma vez so por temporada. O risco e estrutural. Toda a checagem <code>ALREADY_GRANTED</code> mora dentro de <code>if v_active_circuit_id is not null</code>, mas o <code>update profiles_meta set gold_balance = gold_balance + p_gold</code> esta <strong>fora</strong> desse bloco. No dia em que alguem desativar o circuito, ou criar o circuito 02 sem ativar, a funcao vira um deposito repetivel de ate 250 ouro por chamada, sem nenhum aviso.</p>
+          <p class="finding__fix"><span>Caminho</span> Mover a checagem para fora do if, gravando a claim numa tabela que nao dependa de circuito. E uma mudanca de dez linhas que remove uma armadilha permanente.</p>
+        </article>
+        <article class="finding" style="--sev:#ff5f70">
+          <header class="finding__head">
+            <span class="chip chip--sev">Critico</span>
+            <span class="chip">Loja</span>
+            
+            <h4>Dois itens epicos da loja tem imagem 404</h4>
+          </header>
+          <p class="finding__where"><code>src/constants/storeCatalog.ts</code></p>
+          <p class="finding__body"><code>logo_pulse_hex</code> e <code>logo_solar_wire</code> apontam para <code>store-logo-pulse-hex.png</code> e <code>store-logo-solar-wire.png</code>, que nao existem em <code>public/assetas/avatars/logos/</code>. Sao os dois itens mais caros da vitrine de logos, vendidos por fragmento. O <code>assetMapping.test.ts</code> cobre os 32 times e os 4 distritos, mas nunca varre o catalogo da loja, entao a suite passa verde.</p>
+          <p class="finding__fix"><span>Caminho</span> Produzir os dois PNG ou remover os itens, e estender o teste de asset para STORE_ITEMS.</p>
+        </article></div>
+    <h3 class="sub">Atritos medios <em>9 abertos de 12</em></h3>
+    <div class="findings">
+        <article class="finding finding--done" style="--sev:#57d99a">
+          <header class="finding__head">
+            <span class="chip chip--sev">Resolvido</span>
+            <span class="chip">Onboarding</span>
+            <span class="chip chip--was">era medio</span>
+            <h4>Fundar clube rebobinava o relogio do mundo</h4>
+          </header>
+          <p class="finding__where"><code>src/components/NewGameFlow.tsx:469</code></p>
+          <p class="finding__body"><code>handleFinishFounder</code> terminava escrevendo <code>currentDay: -1</code> no estado do mundo. Para um mundo recem-criado isso nao fazia nada, porque o <code>generateInitialState</code> ja nasce em -1. Mas fundar clube tambem e permitido durante o Genesis, nos dias 0 a 2, e ali a linha jogava o dia compartilhado de volta para antes da abertura do draft. Como o estado do mundo e salvo para todos, o relogio de todo participante voltava junto.</p>
+          <p class="finding__fix"><span>Corrigido</span> A linha saiu. O caminho de herdeiro nunca mexeu em currentDay, entao agora as duas portas de entrada se comportam igual.</p>
+        </article>
+        <article class="finding finding--done" style="--sev:#57d99a">
+          <header class="finding__head">
+            <span class="chip chip--sev">Resolvido</span>
+            <span class="chip">Onboarding</span>
+            <span class="chip chip--was">era medio</span>
+            <h4>As duas portas de entrada discordavam sobre clube livre</h4>
+          </header>
+          <p class="finding__where"><code>src/components/NewGameFlow.tsx:88</code></p>
+          <p class="finding__body">O onboarding considerava um clube disponivel com <code>manager.isNPC !== false</code>. O painel de observador usava uma regra mais estrita, que tambem olha o formato do id: NPC nasce como <code>m_...</code>, humano carrega o id do Supabase. Um manager humano vindo de save antigo, sem <code>isNPC</code> gravado, passava por NPC na primeira tela e o clube dele aparecia como vaga aberta.</p>
+          <p class="finding__fix"><span>Corrigido</span> A regra virou um helper unico, isHumanManager em utils/managerProfile, usado pelas duas telas. De quebra, availableHeirTeams e replaceableTeams eram dois useMemo identicos e viraram um.</p>
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Onboarding</span>
+            
+            <h4>O draft do fundador e codigo morto que a documentacao ainda promete</h4>
+          </header>
+          <p class="finding__where"><code>src/components/NewGameFlow.tsx:111</code></p>
+          <p class="finding__body">O componente calcula lista filtrada de atletas, selecao de 15, teto de score, travas de posicao e limite de tres jogadores acima de 900. Nada disso e renderizado, e <code>isDraftValid</code> nao e lido em lugar nenhum. <code>handleFinishFounder</code> cria o clube com <code>squad: []</code> e nunca toca em <code>selectedPlayerIds</code>. Na pratica o fundador nasce sem elenco e preenche pelo Draft Genesis, que e outro sistema, no DraftPanel. Isso esta correto para a arquitetura de hoje, mas sobraram cerca de 120 linhas mortas, um import de <code>refillTeamRoster</code> que nunca e chamado, e o <code>documentacao.md</code> ainda descreve as travas antigas de 2 GK, 5 DEF, 5 MID, 3 ATK que nao existem em lugar nenhum.</p>
+          <p class="finding__fix"><span>Caminho</span> Apagar o bloco morto e alinhar o documentacao.md com o Draft Genesis real.</p>
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Conteudo</span>
+            
+            <h4>28 das 30 chuteiras nunca aparecem em campo</h4>
+          </header>
+          <p class="finding__where"><code>src/engine/generator.ts:148</code></p>
+          <p class="finding__body"><code>generateName()</code> sorteia <code>bootId: randomInt(1, 2)</code>. Todo jogador do mundo nasce com boot_01 ou boot_02. Os outros 28 modelos, 2,2 MB de arte, so existem para quem comprar na loja.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Avatar</span>
+            
+            <h4>Jogadores legitimos tem o visual re-sorteado</h4>
+          </header>
+          <p class="finding__where"><code>src/components/PlayerAvatar.tsx:26</code></p>
+          <p class="finding__body"><code>isLegacyDefaultAppearance</code> trata a combinacao bodyId 1 + hairId 1 + bootId 1 como save antigo e re-sorteia genero, corpo e cabelo a partir do id. Mas essa combinacao e perfeitamente sorteavel pelo gerador atual, entao cerca de 1 em cada 100 jogadores aparece diferente do que esta salvo.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Fluxo</span>
+            
+            <h4>A loja esta dois niveis abaixo da navegacao</h4>
+          </header>
+          <p class="finding__where"><code>src/components/dashboard/CareerTab.tsx:101</code></p>
+          <p class="finding__body">O caminho e Carreira, depois a secao Loja. Nada na Home, no Elenco ou no jogador aponta para la. A moeda ganha no fim da temporada chega por toast e some.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Peso</span>
+            
+            <h4>16 MB de PNG viajam no APK</h4>
+          </header>
+          <p class="finding__where"><code>public/assetas/</code></p>
+          <p class="finding__body">Os 32 escudos somam 6,7 MB, os uniformes 4 MB. <code>team-09-logo.png</code> sozinho tem 202 KB para ser exibido a 40 px. Nenhum asset passou por otimizacao. O bundle principal ainda tem 1,9 MB de JS e 284 KB de CSS, e o recharts (281 KB) e carregado so pelo radar do jogador.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Codigo morto</span>
+            
+            <h4>Arquivos e assets que ninguem importa</h4>
+          </header>
+          <p class="finding__where"><code>varios</code></p>
+          <p class="finding__body"><code>src/engine/gameLogic.ts.tmp</code> (copia antiga de 2.7k linhas), <code>DatabaseTab.tsx</code>, <code>NewsFeed.tsx</code>, <code>Match2DViewer.tsx</code> (substituido pelo MatchBroadcastViewer), <code>public/sw.js</code> (so desregistrado, nunca registrado), <code>store-kit-special-six.png</code>, <code>unused-uniform-20-alt.png</code> e <code>unused-uniform-34.png</code>.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Codigo</span>
+            
+            <h4>A lista gigante de icones foi copiada entre as abas</h4>
+          </header>
+          <p class="finding__where"><code>src/components/dashboard/*.tsx</code></p>
+          <p class="finding__body">O mesmo import de 34 a 43 icones do lucide aparece em todas as abas. Em <code>SquadTab</code> 32 dos 36 nao sao usados; em <code>CompetitionTab</code>, 28 de 34. E tree-shakeavel, entao o custo e de leitura, nao de bytes, mas denuncia copia e cola entre telas que ja divergiram.</p>
+          
+        </article>
+        <article class="finding finding--done" style="--sev:#57d99a">
+          <header class="finding__head">
+            <span class="chip chip--sev">Resolvido</span>
+            <span class="chip">Mobile</span>
+            <span class="chip chip--was">era medio</span>
+            <h4>Header e nav inferior ignoravam a safe area</h4>
+          </header>
+          <p class="finding__where"><code>src/components/Dashboard.tsx:712</code></p>
+          <p class="finding__body">Um unico arquivo do projeto tratava safe area, o <code>ToastContainer</code>. O header era <code>fixed top-2</code> e a navegacao <code>fixed bottom-2</code>, sem recuo nenhum, num app distribuido como Capacitor Android.</p>
+          <p class="finding__fix"><span>Corrigido</span> Utilitarios .safe-top e .safe-bottom no index.css, aplicados no header e na nav, mais viewport-fit=cover no index.html. Em aparelho sem recorte env() devolve 0, entao nada muda.</p>
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">A11y</span>
+            
+            <h4>252 botoes para 18 aria-label</h4>
+          </header>
+          <p class="finding__where"><code>src/components/</code></p>
+          <p class="finding__body">Boa parte da navegacao e icone puro. Leitor de tela anuncia apenas "botao". As 39 imagens tem alt, o que ja e melhor que a media.</p>
+          
+        </article>
+        <article class="finding" style="--sev:#f0a43c">
+          <header class="finding__head">
+            <span class="chip chip--sev">Medio</span>
+            <span class="chip">Design</span>
+            
+            <h4>O botao de avancar dia contradiz o proprio design doc</h4>
+          </header>
+          <p class="finding__where"><code>src/hooks/useGameDay.ts:37</code></p>
+          <p class="finding__body"><code>src/docs/nextsteps.md</code> diz, em caixa alta, que o sistema e ao vivo e que nao existe botao de avancar. <code>handleAdvanceDay</code> existe, e exposto em seis abas e so o criador pode usar. Num mundo com varios humanos, isso significa que o relogio de todo mundo depende de uma pessoa clicar.</p>
+          
+        </article></div>
+    <div class="callout"><b>Nota.</b> A auditoria de agosto continua util como mapa de backend, mas boa parte dela ja foi resolvida: os 38 erros de tipo sumiram, a suite nao estoura mais o timeout, o code splitting existe (9 pontos de lazy) e a tabela <code>notifications</code> inexistente nao e mais escrita. O que sobrou de la esta acima.</div>
+  </section>
+
+  <section id="melhorias">
+    <div class="sec__head"><span class="sec__num">05</span><h2>Para levar o mundo mais longe</h2></div>
+    <p class="sec__lede">A observacao que organiza tudo aqui: <strong>o motor ja simula muito mais mundo do que a tela mostra</strong>. Pentagono, skills de fusao, 31 tracos com percentual real, memoria tatica por clube, legado com estilo assinatura, historico de clubes por atleta, pico de carreira. Quase nada disso vira historia. As ideias abaixo quase todas gastam dado que ja existe.</p>
+    <div class="ideas">
+        <article class="idea" style="--idea:#38d7c6">
+          <header class="idea__head">
+            <span class="idea__horizon">Semana</span>
+            <span class="idea__effort">esforco baixo</span>
+          </header>
+          <h4>Transformar o historico do jogador em dossie</h4>
+          <p><code>PlayerHistory</code> ja guarda <code>seasonSnapshots</code>, <code>clubEvents</code>, <code>peakRating</code>, <code>legacyTag</code> e <code>formerClubCount</code>. Nada disso vira narrativa na tela. Uma linha do tempo por atleta ("Kael Voss, 3 clubes, pico 871 na temporada 2052, dois titulos") converte numero em personagem sem escrever uma linha de motor novo.</p>
+        </article>
+        <article class="idea" style="--idea:#38d7c6">
+          <header class="idea__head">
+            <span class="idea__horizon">Semana</span>
+            <span class="idea__effort">esforco baixo</span>
+          </header>
+          <h4>Chuteira como premio, nao como compra</h4>
+          <p>Hoje 28 modelos so existem na vitrine e a vitrine esta escondida. Entregar uma chuteira rara ao artilheiro da liga, ao MVP e ao campeao faz a colecao aparecer em campo, da motivo para abrir a loja e cria o primeiro item que o jogador nao pode comprar, so ganhar.</p>
+        </article>
+        <article class="idea" style="--idea:#38d7c6">
+          <header class="idea__head">
+            <span class="idea__horizon">Semana</span>
+            <span class="idea__effort">esforco baixo</span>
+          </header>
+          <h4>Explicar o placar</h4>
+          <p>O <code>MatchEngine</code> ja calcula estilo (Tiki-Taka da mid 1.3, Blitzkrieg drena 1.5x), quimica, stamina e mando de 5%. O pos-jogo mostra o resultado, nao a causa. Tres linhas de leitura tatica ("seu meio dominou por 1.3 contra 1.0", "voce caiu depois dos 70 porque o Blitzkrieg drenou") transformam o relatorio em aula e dao motivo para mexer na tatica antes do proximo jogo.</p>
+        </article>
+        <article class="idea" style="--idea:#38d7c6">
+          <header class="idea__head">
+            <span class="idea__horizon">Semana</span>
+            <span class="idea__effort">esforco baixo</span>
+          </header>
+          <h4>Rivalidade de distrito</h4>
+          <p>Cada clube ganha um rival fixo. O jogo contra ele vira manchete automatica, mexe mais em satisfacao e alimenta um contador de serie historica. Custa pouquissimo e e o tipo de detalhe que faz o jogador lembrar do adversario pelo nome.</p>
+        </article>
+        <article class="idea" style="--idea:#8fd36a">
+          <header class="idea__head">
+            <span class="idea__horizon">Mes</span>
+            <span class="idea__effort">esforco medio</span>
+          </header>
+          <h4>O jornal do distrito</h4>
+          <p>O <code>newsService</code> ja produz noticia por rodada com tipo e importancia. Hoje sai como lista. Agrupar por rodada numa capa de jornal, com manchete, escudo e tres chamadas, usa conteudo que ja existe e da ao mundo a sensacao de que a liga acontece sem voce.</p>
+        </article>
+        <article class="idea" style="--idea:#8fd36a">
+          <header class="idea__head">
+            <span class="idea__horizon">Mes</span>
+            <span class="idea__effort">esforco medio</span>
+          </header>
+          <h4>Dar o que fazer nos dias sem jogo</h4>
+          <p><code>MATCH_INTERVAL_DAYS = 2</code>, entao metade dos dias da temporada nao tem partida. Uma decisao por dia, com duas ou tres opcoes que mexem em satisfacao e quimica, e o loop diario que falta. E tambem o gancho natural para notificacao local, que o app ja tem instalada.</p>
+        </article>
+        <article class="idea" style="--idea:#8fd36a">
+          <header class="idea__head">
+            <span class="idea__horizon">Mes</span>
+            <span class="idea__effort">esforco medio</span>
+          </header>
+          <h4>Contrato com prazo e salario</h4>
+          <p><code>Contract</code> hoje so tem <code>teamId</code>. O power cap e a unica restricao de elenco, e ele e generoso. Prazo e salario criam a decisao que falta: segurar o craque, renovar cedo, ou vender enquanto vale. E o eixo que separa um simulador de tabela de um jogo de gestao.</p>
+        </article>
+        <article class="idea" style="--idea:#8fd36a">
+          <header class="idea__head">
+            <span class="idea__horizon">Mes</span>
+            <span class="idea__effort">esforco medio</span>
+          </header>
+          <h4>Hall da Fama por mundo</h4>
+          <p><code>rank1000PlayerId</code>, <code>peakRating</code> e o historico de <code>SeasonReport</code> ja existem. Uma pagina por mundo com quem passou de 900, os campeoes de cada temporada e os recordes da casa da memoria ao servidor e um motivo para o veterano voltar depois de seis temporadas.</p>
+        </article>
+        <article class="idea" style="--idea:#bd6cff">
+          <header class="idea__head">
+            <span class="idea__horizon">Trimestre</span>
+            <span class="idea__effort">esforco alto</span>
+          </header>
+          <h4>Fechar as fases 3 e 4 do viewer 2D</h4>
+          <p>O <code>MatchBroadcastViewer</code> ja esta integrado ao pos-jogo, com lances, comentario e torcida sintetizada em Web Audio. Pelo proprio plano de julho, falta o motor emitir sequencias nativas (recuperou, passou, chutou) em vez de coreografar em cima de eventos pobres. Essa e a maior alavanca de "quero jogar" do projeto: ver o gol em vez de ler o gol. E o Match2DViewer antigo deve sair junto.</p>
+        </article>
+        <article class="idea" style="--idea:#bd6cff">
+          <header class="idea__head">
+            <span class="idea__horizon">Trimestre</span>
+            <span class="idea__effort">esforco alto</span>
+          </header>
+          <h4>Draft Genesis como evento ao vivo</h4>
+          <p>Os dias 0 a 2 resolvem por virada de dia, em silencio. O draft e o unico momento em que todos os humanos do mundo agem sobre o mesmo recurso ao mesmo tempo, e e o momento mais social que esse jogo pode ter. Contagem regressiva, disputa visivel ("tres managers querem esse atleta") e revelacao simultanea transformam uma tela de formulario em evento.</p>
+        </article>
+        <article class="idea" style="--idea:#bd6cff">
+          <header class="idea__head">
+            <span class="idea__horizon">Trimestre</span>
+            <span class="idea__effort">esforco alto</span>
+          </header>
+          <h4>Identidade do clube no onboarding</h4>
+          <p>O <code>TeamLogo</code> desenha 5 formas por 16 padroes com cores livres, e existem 10 escudos de fundador prontos. Deixar o jogador montar escudo e cores no fluxo de fundacao, e ver o resultado no uniforme do avatar na mesma tela, e identidade quase de graca, com tudo ja construido.</p>
+        </article>
+        <article class="idea" style="--idea:#f0a43c">
+          <header class="idea__head">
+            <span class="idea__horizon">Aberto</span>
+            <span class="idea__effort">esforco decisao</span>
+          </header>
+          <h4>A questao da idade</h4>
+          <p>O gerador diz, em comentario, que a idade foi removida. Sem envelhecimento nenhum atleta se aposenta, a renovacao do mundo fica por conta da Safety Net, e um save de seis temporadas termina com o mesmo elenco mais forte. Idade traz escassez, sucessao e nostalgia, mas tambem traz churn de elenco que voces podem ter cortado de proposito. Vale reabrir a decisao antes de investir em memoria de longo prazo como o Hall da Fama.</p>
+        </article></div>
+  </section>
+</main>
+
+<footer>Montado a partir do repositorio em 11 set 2026 &middot; 171 assets lidos de public/assetas/avatars &middot; catalogo gerado, nao transcrito</footer>
+
+<script>
+(function(){
+  var HAIR = {"M":[{"id":1,"file":"hair_1.png","src":"/assetas/avatars/hair/masc/hair_1.png","off":{"x":0,"y":0}},{"id":2,"file":"f6-removebg-preview.png","src":"/assetas/avatars/hair/masc/f6-removebg-preview.png","off":{"x":0,"y":0}},{"id":3,"file":"f9-removebg-preview.png","src":"/assetas/avatars/hair/masc/f9-removebg-preview.png","off":{"x":0,"y":0}},{"id":4,"file":"Cópia_de_Design_sem_nome__9_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__9_-removebg-preview.png","off":{"x":0,"y":0}},{"id":5,"file":"Cópia_de_Design_sem_nome__10_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__10_-removebg-preview.png","off":{"x":0,"y":0}},{"id":6,"file":"Cópia_de_Design_sem_nome__11_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__11_-removebg-preview.png","off":{"x":0,"y":0}},{"id":7,"file":"Cópia_de_Design_sem_nome__12_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__12_-removebg-preview.png","off":{"x":0,"y":0}},{"id":8,"file":"Cópia_de_Design_sem_nome__13_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__13_-removebg-preview.png","off":{"x":0,"y":0}},{"id":9,"file":"Cópia_de_Design_sem_nome__14_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__14_-removebg-preview.png","off":{"x":0,"y":-0.75}},{"id":10,"file":"Cópia_de_Design_sem_nome__15_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__15_-removebg-preview.png","off":{"x":0,"y":0}},{"id":11,"file":"Cópia_de_Design_sem_nome__18_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__18_-removebg-preview.png","off":{"x":0,"y":0}},{"id":12,"file":"Cópia_de_Design_sem_nome__19_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__19_-removebg-preview.png","off":{"x":0,"y":0}},{"id":13,"file":"Cópia_de_Design_sem_nome__20_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__20_-removebg-preview.png","off":{"x":0,"y":0}},{"id":14,"file":"Cópia_de_Design_sem_nome__21_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__21_-removebg-preview.png","off":{"x":0,"y":0}},{"id":15,"file":"Cópia_de_Design_sem_nome__22_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__22_-removebg-preview.png","off":{"x":0,"y":0}},{"id":16,"file":"Cópia_de_Design_sem_nome__23_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__23_-removebg-preview.png","off":{"x":0,"y":0}},{"id":17,"file":"Cópia_de_Design_sem_nome__24_-removebg-preview.png","src":"/assetas/avatars/hair/masc/C%C3%B3pia_de_Design_sem_nome__24_-removebg-preview.png","off":{"x":0,"y":0}}],"F":[{"id":1,"file":"f1-removebg-preview.png","src":"/assetas/avatars/hair/fem/f1-removebg-preview.png","off":{"x":-0.3,"y":-1.8}},{"id":2,"file":"f2-removebg-preview.png","src":"/assetas/avatars/hair/fem/f2-removebg-preview.png","off":{"x":0.75,"y":0}},{"id":3,"file":"f3-removebg-preview.png","src":"/assetas/avatars/hair/fem/f3-removebg-preview.png","off":{"x":-0.5,"y":0}},{"id":4,"file":"f4-removebg-preview.png","src":"/assetas/avatars/hair/fem/f4-removebg-preview.png","off":{"x":0.75,"y":-0.75}},{"id":5,"file":"f7-removebg-preview.png","src":"/assetas/avatars/hair/fem/f7-removebg-preview.png","off":{"x":0.5,"y":0}},{"id":6,"file":"f8-removebg-preview.png","src":"/assetas/avatars/hair/fem/f8-removebg-preview.png","off":{"x":0.5,"y":0}},{"id":7,"file":"f10-removebg-preview.png","src":"/assetas/avatars/hair/fem/f10-removebg-preview.png","off":{"x":0.75,"y":0}},{"id":8,"file":"f11-removebg-preview.png","src":"/assetas/avatars/hair/fem/f11-removebg-preview.png","off":{"x":0.5,"y":0}},{"id":9,"file":"f13-removebg-preview.png","src":"/assetas/avatars/hair/fem/f13-removebg-preview.png","off":{"x":0.25,"y":-0.75}},{"id":10,"file":"Cópia_de_Design_sem_nome__5_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__5_-removebg-preview.png","off":{"x":0.75,"y":-0.75}},{"id":11,"file":"Cópia_de_Design_sem_nome__6_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__6_-removebg-preview.png","off":{"x":0,"y":-1}},{"id":12,"file":"Cópia_de_Design_sem_nome__7_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__7_-removebg-preview.png","off":{"x":0.75,"y":-0.75}},{"id":13,"file":"Cópia_de_Design_sem_nome__8_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__8_-removebg-preview.png","off":{"x":0,"y":0}},{"id":14,"file":"Cópia_de_Design_sem_nome__9_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__9_-removebg-preview.png","off":{"x":0.25,"y":-0.5}},{"id":15,"file":"Cópia_de_Design_sem_nome__10_-removebg-preview.png","src":"/assetas/avatars/hair/fem/C%C3%B3pia_de_Design_sem_nome__10_-removebg-preview.png","off":{"x":0.25,"y":-0.25}}]};
+  var BODIES = [{"code":"F1","gender":"F","src":"/assetas/avatars/bodies/body_f_1.png"},{"code":"F2","gender":"F","src":"/assetas/avatars/bodies/body_f_2.png"},{"code":"F3","gender":"F","src":"/assetas/avatars/bodies/body_f_3.png"},{"code":"M1","gender":"M","src":"/assetas/avatars/bodies/body_m_1.png"},{"code":"M2","gender":"M","src":"/assetas/avatars/bodies/body_m_2.png"},{"code":"M3","gender":"M","src":"/assetas/avatars/bodies/body_m_3.png"}];
+  var UNIS = [{"file":"district-leste-uniform.png","label":"district-leste-uniform","src":"/assetas/avatars/uniforms/district-leste-uniform.png"},{"file":"district-norte-uniform.png","label":"district-norte-uniform","src":"/assetas/avatars/uniforms/district-norte-uniform.png"},{"file":"district-oeste-uniform.png","label":"district-oeste-uniform","src":"/assetas/avatars/uniforms/district-oeste-uniform.png"},{"file":"district-sul-uniform.png","label":"district-sul-uniform","src":"/assetas/avatars/uniforms/district-sul-uniform.png"},{"file":"store-kit-carbon-grid.png","label":"store-kit-carbon-grid","src":"/assetas/avatars/uniforms/store-kit-carbon-grid.png"},{"file":"store-kit-circuit-chrome.png","label":"store-kit-circuit-chrome","src":"/assetas/avatars/uniforms/store-kit-circuit-chrome.png"},{"file":"store-kit-holo-wave.png","label":"store-kit-holo-wave","src":"/assetas/avatars/uniforms/store-kit-holo-wave.png"},{"file":"store-kit-neon-flux.png","label":"store-kit-neon-flux","src":"/assetas/avatars/uniforms/store-kit-neon-flux.png"},{"file":"store-kit-pulse-white.png","label":"store-kit-pulse-white","src":"/assetas/avatars/uniforms/store-kit-pulse-white.png"},{"file":"store-kit-special-six.png","label":"store-kit-special-six","src":"/assetas/avatars/uniforms/store-kit-special-six.png"},{"file":"team-01-uniform.png","label":"team-01-uniform","src":"/assetas/avatars/uniforms/team-01-uniform.png"},{"file":"team-02-uniform.png","label":"team-02-uniform","src":"/assetas/avatars/uniforms/team-02-uniform.png"},{"file":"team-03-uniform.png","label":"team-03-uniform","src":"/assetas/avatars/uniforms/team-03-uniform.png"},{"file":"team-04-uniform.png","label":"team-04-uniform","src":"/assetas/avatars/uniforms/team-04-uniform.png"},{"file":"team-05-uniform.png","label":"team-05-uniform","src":"/assetas/avatars/uniforms/team-05-uniform.png"},{"file":"team-06-uniform.png","label":"team-06-uniform","src":"/assetas/avatars/uniforms/team-06-uniform.png"},{"file":"team-07-uniform.png","label":"team-07-uniform","src":"/assetas/avatars/uniforms/team-07-uniform.png"},{"file":"team-08-uniform.png","label":"team-08-uniform","src":"/assetas/avatars/uniforms/team-08-uniform.png"},{"file":"team-09-uniform.png","label":"team-09-uniform","src":"/assetas/avatars/uniforms/team-09-uniform.png"},{"file":"team-10-uniform.png","label":"team-10-uniform","src":"/assetas/avatars/uniforms/team-10-uniform.png"},{"file":"team-11-uniform.png","label":"team-11-uniform","src":"/assetas/avatars/uniforms/team-11-uniform.png"},{"file":"team-12-uniform.png","label":"team-12-uniform","src":"/assetas/avatars/uniforms/team-12-uniform.png"},{"file":"team-13-uniform.png","label":"team-13-uniform","src":"/assetas/avatars/uniforms/team-13-uniform.png"},{"file":"team-14-uniform.png","label":"team-14-uniform","src":"/assetas/avatars/uniforms/team-14-uniform.png"},{"file":"team-15-uniform.png","label":"team-15-uniform","src":"/assetas/avatars/uniforms/team-15-uniform.png"},{"file":"team-16-uniform.png","label":"team-16-uniform","src":"/assetas/avatars/uniforms/team-16-uniform.png"},{"file":"team-17-uniform.png","label":"team-17-uniform","src":"/assetas/avatars/uniforms/team-17-uniform.png"},{"file":"team-18-uniform.png","label":"team-18-uniform","src":"/assetas/avatars/uniforms/team-18-uniform.png"},{"file":"team-19-uniform.png","label":"team-19-uniform","src":"/assetas/avatars/uniforms/team-19-uniform.png"},{"file":"team-20-uniform.png","label":"team-20-uniform","src":"/assetas/avatars/uniforms/team-20-uniform.png"},{"file":"team-21-uniform.png","label":"team-21-uniform","src":"/assetas/avatars/uniforms/team-21-uniform.png"},{"file":"team-22-uniform.png","label":"team-22-uniform","src":"/assetas/avatars/uniforms/team-22-uniform.png"},{"file":"team-23-uniform.png","label":"team-23-uniform","src":"/assetas/avatars/uniforms/team-23-uniform.png"},{"file":"team-24-uniform.png","label":"team-24-uniform","src":"/assetas/avatars/uniforms/team-24-uniform.png"},{"file":"team-25-uniform.png","label":"team-25-uniform","src":"/assetas/avatars/uniforms/team-25-uniform.png"},{"file":"team-26-uniform.png","label":"team-26-uniform","src":"/assetas/avatars/uniforms/team-26-uniform.png"},{"file":"team-27-uniform.png","label":"team-27-uniform","src":"/assetas/avatars/uniforms/team-27-uniform.png"},{"file":"team-28-uniform.png","label":"team-28-uniform","src":"/assetas/avatars/uniforms/team-28-uniform.png"},{"file":"team-29-uniform.png","label":"team-29-uniform","src":"/assetas/avatars/uniforms/team-29-uniform.png"},{"file":"team-30-uniform.png","label":"team-30-uniform","src":"/assetas/avatars/uniforms/team-30-uniform.png"},{"file":"team-31-uniform.png","label":"team-31-uniform","src":"/assetas/avatars/uniforms/team-31-uniform.png"},{"file":"team-32-uniform.png","label":"team-32-uniform","src":"/assetas/avatars/uniforms/team-32-uniform.png"},{"file":"unused-uniform-20-alt.png","label":"unused-uniform-20-alt","src":"/assetas/avatars/uniforms/unused-uniform-20-alt.png"},{"file":"unused-uniform-34.png","label":"unused-uniform-34","src":"/assetas/avatars/uniforms/unused-uniform-34.png"}];
+  var BOOTS = [{"id":"boot_01","name":"Velocity Cyan","src":"/assetas/avatars/boots/boot_01.png"},{"id":"boot_02","name":"Orbit Violet","src":"/assetas/avatars/boots/boot_02.png"},{"id":"boot_03","name":"Static Aqua","src":"/assetas/avatars/boots/boot_03.png"},{"id":"boot_04","name":"Blade Silver","src":"/assetas/avatars/boots/boot_04.png"},{"id":"boot_05","name":"Sky Pulse","src":"/assetas/avatars/boots/boot_05.png"},{"id":"boot_06","name":"Solar Gold","src":"/assetas/avatars/boots/boot_06.png"},{"id":"boot_07","name":"Frost Edge","src":"/assetas/avatars/boots/boot_07.png"},{"id":"boot_08","name":"Mint Flow","src":"/assetas/avatars/boots/boot_08.png"},{"id":"boot_09","name":"Inferno Red","src":"/assetas/avatars/boots/boot_09.png"},{"id":"boot_10","name":"Night Sprint","src":"/assetas/avatars/boots/boot_10.png"},{"id":"boot_11","name":"Copper Touch","src":"/assetas/avatars/boots/boot_11.png"},{"id":"boot_12","name":"Graph Surge","src":"/assetas/avatars/boots/boot_12.png"},{"id":"boot_13","name":"Cloud White","src":"/assetas/avatars/boots/boot_13.png"},{"id":"boot_14","name":"Deep Current","src":"/assetas/avatars/boots/boot_14.png"},{"id":"boot_21","name":"Rune Flash","src":"/assetas/avatars/boots/boot_21.png"},{"id":"boot_23","name":"Arc Sigil","src":"/assetas/avatars/boots/boot_23.png"},{"id":"boot_24","name":"Void Core","src":"/assetas/avatars/boots/boot_24.png"},{"id":"boot_25","name":"Lotus Veil","src":"/assetas/avatars/boots/boot_25.png"},{"id":"boot_26","name":"Blaze Crest","src":"/assetas/avatars/boots/boot_26.png"},{"id":"boot_27","name":"Verdant Shell","src":"/assetas/avatars/boots/boot_27.png"},{"id":"boot_31","name":"Nebula Drive","src":"/assetas/avatars/boots/boot_31.png"},{"id":"boot_32","name":"Prism Cryst","src":"/assetas/avatars/boots/boot_32.png"},{"id":"boot_33","name":"Chrono Mesh","src":"/assetas/avatars/boots/boot_33.png"},{"id":"boot_34","name":"Crown Gleam","src":"/assetas/avatars/boots/boot_34.png"},{"id":"boot_35","name":"Tide Breaker","src":"/assetas/avatars/boots/boot_35.png"},{"id":"boot_36","name":"Obsidian Reef","src":"/assetas/avatars/boots/boot_36.png"},{"id":"boot_41","name":"Halo Dominion","src":"/assetas/avatars/boots/boot_41.png"},{"id":"boot_42","name":"Ice Seraph","src":"/assetas/avatars/boots/boot_42.png"},{"id":"boot_43","name":"Winged Crown","src":"/assetas/avatars/boots/boot_43.png"},{"id":"boot_44","name":"Solar Relic","src":"/assetas/avatars/boots/boot_44.png"}];
+
+  var state = { gender:'M', body:0, hair:1, uni:0, boot:0 };
+  var $ = function(id){ return document.getElementById(id); };
+
+  var optBody = $('opt-body');
+  BODIES.forEach(function(b, i){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = b.code;
+    btn.setAttribute('aria-pressed', String(i === 0));
+    btn.addEventListener('click', function(){
+      state.body = i; state.gender = b.gender;
+      if (state.hair > HAIR[b.gender].length) state.hair = HAIR[b.gender].length;
+      $('in-hair').max = HAIR[b.gender].length;
+      render();
+    });
+    optBody.appendChild(btn);
+  });
+
+  ['in-hair','in-uni','in-boot'].forEach(function(id){
+    $(id).addEventListener('input', function(e){
+      var v = Number(e.target.value);
+      if (id === 'in-hair') state.hair = v;
+      if (id === 'in-uni') state.uni = v;
+      if (id === 'in-boot') state.boot = v;
+      render();
+    });
+  });
+
+  function render(){
+    var body = BODIES[state.body];
+    var hair = HAIR[state.gender][state.hair - 1];
+    var uni = UNIS[state.uni];
+    var boot = BOOTS[state.boot];
+    $('ly-body').src = body.src;
+    $('ly-uni').src = uni.src;
+    $('ly-hair').src = hair.src;
+    $('ly-hair').style.left = hair.off.x + '%';
+    $('ly-hair').style.top = hair.off.y + '%';
+    $('ly-boot').src = boot.src;
+    $('r-body').textContent = body.code;
+    $('r-hair').textContent = state.gender + String(hair.id).padStart(2,'0');
+    $('r-uni').textContent = uni.label;
+    $('r-boot').textContent = boot.id + ' \u00b7 ' + boot.name;
+    $('r-file').textContent = hair.file;
+    $('r-off').textContent = 'x ' + hair.off.x + ' / y ' + hair.off.y;
+    $('r-unifile').textContent = uni.file;
+    Array.prototype.forEach.call(optBody.children, function(btn, i){
+      btn.setAttribute('aria-pressed', String(i === state.body));
+    });
+  }
+  render();
+})();
+</script>
+
+</body>
+</html>

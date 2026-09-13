@@ -1113,7 +1113,23 @@ export const simulateAndRecordMatch = (state: GameState, match: Match, standings
 
   const legacyRatingsResult = simulateMatch(homeStats, awayStats, homeSelection.all, awaySelection.all);
   const matchSeed = `${state.worldId || state.world.id || 'world'}:${state.world.currentSeason || 2050}:${match.id}`;
-  const possessionResult = simulateNativeMatch2D(match, homeTeam, awayTeam, state.players, matchSeed).match.result;
+  const homeOutcomeTeam: Team = {
+    ...homeTeam,
+    chemistry: homeStats.chemistry,
+    tactics: {
+      ...homeTeam.tactics,
+      slots: homeCanUseActiveManagement ? (homeTeam.tactics.slots || []) : [],
+    },
+  };
+  const awayOutcomeTeam: Team = {
+    ...awayTeam,
+    chemistry: awayStats.chemistry,
+    tactics: {
+      ...awayTeam.tactics,
+      slots: awayCanUseActiveManagement ? (awayTeam.tactics.slots || []) : [],
+    },
+  };
+  const possessionResult = simulateNativeMatch2D(match, homeOutcomeTeam, awayOutcomeTeam, state.players, matchSeed).match.result;
   const result: MatchResult = possessionResult
     ? {
       ...possessionResult,
@@ -1515,10 +1531,14 @@ const maybeGenerateDailyWorldEvent = (state: GameState) => {
   });
 };
 
-const processTransferDay = (state: GameState) => {
+export const processTransferDay = (state: GameState) => {
   // --- Process AI Daily Routines ---
   Object.keys(state.teams).forEach(teamId => {
-    if (teamId !== state.userTeamId) {
+    const team = state.teams[teamId];
+    const manager = team?.managerId ? state.managers[team.managerId] : null;
+    const belongsToParticipant = (state.participants || []).some(participant => participant.teamId === teamId);
+    const isHumanControlled = belongsToParticipant || manager?.isNPC === false || teamId === state.userTeamId;
+    if (!isHumanControlled) {
       simulateAITeamDay(state, teamId);
     }
   });
@@ -2418,8 +2438,10 @@ export const advanceGameDay = (prevState: GameState, skipDateIncrement = false):
   const round = getRoundFromDay(dayNumber);
 
   // Phase Management
-  if (round >= 1 && round <= SEASON_ROUNDS) world.phase = 'REGULAR_SEASON';
-  else if (round > SEASON_ROUNDS && round <= TOTAL_ROUNDS) world.phase = 'ELITE_CUP';
+  const leagueLastDay = 2 + (SEASON_ROUNDS * MATCH_INTERVAL_DAYS) - 1;
+  const eliteCupEndDay = leagueLastDay + ELITE_CUP_ROUNDS;
+  if (dayNumber <= leagueLastDay) world.phase = 'REGULAR_SEASON';
+  else if (dayNumber <= eliteCupEndDay) world.phase = 'ELITE_CUP';
   else world.phase = 'OFFSEASON';
 
   processTrainingDay(state);
@@ -2623,6 +2645,79 @@ export const startNewSeason = (state: GameState): GameState => {
   }
 
   return finalState;
+};
+
+/**
+ * Advances a server-driven world by one day and rolls a completed offseason into
+ * the next season without requiring the creator to open the app.
+ */
+export const advanceAutomatedGameDay = (
+  state: GameState,
+  skipDateIncrement = false
+): GameState => {
+  const seasonComplete = state.world.phase === 'OFFSEASON'
+    && (state.world.currentDay || 0) >= SEASON_DAYS;
+  const activeState = seasonComplete ? startNewSeason(state) : state;
+  return advanceGameDay(activeState, skipDateIncrement);
+};
+
+/**
+ * Repairs worlds created before automatic season rollover existed. Their day
+ * counter continued growing in OFFSEASON; replay the overflow from the correct
+ * season boundary while preserving the world's current simulated date.
+ */
+export const repairLegacySeasonOverflow = (state: GameState): GameState => {
+  const currentDay = state.world.currentDay || 0;
+  if (state.world.phase !== 'OFFSEASON' || currentDay <= SEASON_DAYS) return state;
+
+  const overflowDays = currentDay - SEASON_DAYS;
+  const currentDate = new Date(state.world.currentDate);
+  if (!Number.isFinite(currentDate.getTime())) return state;
+
+  const boundaryDate = new Date(currentDate);
+  boundaryDate.setDate(boundaryDate.getDate() - overflowDays);
+
+  let repaired: GameState = {
+    ...state,
+    world: {
+      ...state.world,
+      currentDay: SEASON_DAYS,
+      currentDate: boundaryDate.toISOString(),
+    },
+  };
+
+  for (let day = 0; day < overflowDays; day += 1) {
+    repaired = advanceAutomatedGameDay(repaired);
+  }
+
+  return repaired;
+};
+
+/**
+ * Prepares an overflowed legacy world for gradual server catch-up. Rewinding
+ * both clocks preserves every pending day without replaying them in one worker.
+ */
+export const prepareLegacySeasonOverflowForCatchUp = (state: GameState): GameState => {
+  const currentDay = state.world.currentDay || 0;
+  if (state.world.phase !== 'OFFSEASON' || currentDay <= SEASON_DAYS) return state;
+
+  const overflowDays = currentDay - SEASON_DAYS;
+  const currentDate = new Date(state.world.currentDate);
+  const lastTick = new Date(state.world.serverClockLastTickAt || state.world.lastServerTickAt || '');
+  if (!Number.isFinite(currentDate.getTime()) || !Number.isFinite(lastTick.getTime())) return state;
+
+  currentDate.setDate(currentDate.getDate() - overflowDays);
+  lastTick.setDate(lastTick.getDate() - overflowDays);
+
+  return {
+    ...state,
+    world: {
+      ...state.world,
+      currentDay: SEASON_DAYS,
+      currentDate: currentDate.toISOString(),
+      serverClockLastTickAt: lastTick.toISOString(),
+    },
+  };
 };
 
 

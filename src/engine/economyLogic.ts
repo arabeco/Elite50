@@ -1,6 +1,7 @@
 ﻿import { Player, Team, MatchResult, GameState, TransferProposal, TradeOffer } from '../types';
 import { newsHeadlines } from './newsService';
 import { applyBootProgressionBonus } from '../utils/store';
+import { SQUAD_SIZE_MAX } from '../constants/gameConstants';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -180,6 +181,20 @@ export const processNightMarket = (
             return;
         }
 
+        const contractedTeam = player.contract.teamId ? teams[player.contract.teamId] : null;
+        const contractedManager = contractedTeam?.managerId ? state.managers?.[contractedTeam.managerId] : null;
+        const contractedToHumanClub = Boolean(contractedTeam) && (
+            contractedManager?.isNPC === false
+            || (state.participants || []).some(participant => participant.teamId === contractedTeam?.id)
+        );
+        if (contractedToHumanClub) {
+            playerProposals.forEach(prop => declineProposal(
+                prop,
+                `${player.nickname} pertence a um clube humano. A negociacao precisa ser feita por troca.`
+            ));
+            return;
+        }
+
         if (player.satisfaction >= 80) {
             playerProposals.forEach(prop => {
                 const toTeam = teams[prop.toTeamId];
@@ -192,6 +207,11 @@ export const processNightMarket = (
             .map(prop => {
                 const toTeam = teams[prop.toTeamId];
                 if (!toTeam) return null;
+
+                if (toTeam.squad.length >= SQUAD_SIZE_MAX) {
+                    declineProposal(prop, `${player.nickname} nao pode chegar agora: o elenco do ${toTeam.name} ja esta completo.`);
+                    return null;
+                }
 
                 const currentPower = toTeam.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
                 if (currentPower + player.totalRating > (toTeam.powerCap || 9000)) {

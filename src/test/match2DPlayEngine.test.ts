@@ -69,6 +69,27 @@ describe('native possession-chain match engine', () => {
     expect(wins).toBeGreaterThan(losses);
   }, 15_000);
 
+  it('lets mentality and equipped tactical cards change future outcomes', () => {
+    const baseline = makeTeam('home', 'Equilibrado', 720);
+    const opponent = makeTeam('away', 'Equilibrado', 720);
+    const tuned = { ...baseline.team, tactics: {
+      ...baseline.team.tactics,
+      mentality: 'Predadora' as const,
+      slots: [{ id: 'super-shot', name: 'Super Chute', effect: '+ ataque' }],
+    } };
+    const players = { ...baseline.players, ...opponent.players };
+    let baselineGoals = 0;
+    let tunedGoals = 0;
+
+    for (let index = 0; index < 120; index += 1) {
+      const seed = `decision-impact-${index}`;
+      baselineGoals += simulateNativeMatch2D(baseMatch, baseline.team, opponent.team, players, seed).match.result!.homeScore;
+      tunedGoals += simulateNativeMatch2D(baseMatch, tuned, opponent.team, players, seed).match.result!.homeScore;
+    }
+
+    expect(tunedGoals).toBeGreaterThan(baselineGoals);
+  }, 15_000);
+
   it('keeps a balanced batch inside football ranges', () => {
     const home = makeTeam('home', 'Gegenpressing', 720);
     const away = makeTeam('away', 'Tiki-Taka', 720);

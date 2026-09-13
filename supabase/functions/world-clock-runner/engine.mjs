@@ -1935,6 +1935,16 @@ var processNightMarket = (state, proposals, teams, players) => {
       playerProposals.forEach((prop) => declineProposal(prop));
       return;
     }
+    const contractedTeam = player.contract.teamId ? teams[player.contract.teamId] : null;
+    const contractedManager = contractedTeam?.managerId ? state.managers?.[contractedTeam.managerId] : null;
+    const contractedToHumanClub = Boolean(contractedTeam) && (contractedManager?.isNPC === false || (state.participants || []).some((participant) => participant.teamId === contractedTeam?.id));
+    if (contractedToHumanClub) {
+      playerProposals.forEach((prop) => declineProposal(
+        prop,
+        `${player.nickname} pertence a um clube humano. A negociacao precisa ser feita por troca.`
+      ));
+      return;
+    }
     if (player.satisfaction >= 80) {
       playerProposals.forEach((prop) => {
         const toTeam2 = teams[prop.toTeamId];
@@ -1945,6 +1955,10 @@ var processNightMarket = (state, proposals, teams, players) => {
     const valid = playerProposals.map((prop) => {
       const toTeam2 = teams[prop.toTeamId];
       if (!toTeam2) return null;
+      if (toTeam2.squad.length >= SQUAD_SIZE_MAX) {
+        declineProposal(prop, `${player.nickname} nao pode chegar agora: o elenco do ${toTeam2.name} ja esta completo.`);
+        return null;
+      }
       const currentPower = toTeam2.squad.reduce((sum, id) => sum + (players[id]?.totalRating || 0), 0);
       if (currentPower + player.totalRating > (toTeam2.powerCap || 9e3)) {
         declineProposal(prop, `${player.nickname} nao pode chegar agora: o ${toTeam2.name} ultrapassaria o Score Maximo.`);
@@ -2406,6 +2420,27 @@ var EXPECTED_ROLE = {
   defense: "ZAG",
   goalkeeper: "GOL"
 };
+var MENTALITY_SECTOR_EFFECT = {
+  Calculista: { attack: 1, midfield: 1, defense: 1, goalkeeper: 1 },
+  Emocional: { attack: 1.08, midfield: 1.03, defense: 0.92, goalkeeper: 0.96 },
+  Predadora: { attack: 1.06, midfield: 1.02, defense: 0.97, goalkeeper: 0.99 }
+};
+var tacticalCardSectorEffect = (team, sector) => {
+  let multiplier = 1;
+  (team.tactics?.slots || []).forEach((card) => {
+    if (!card) return;
+    const name = card.name || "";
+    if (sector === "attack" && name.includes("Ataque")) multiplier += 0.05;
+    if (sector === "defense" && name.includes("Defesa")) multiplier += 0.05;
+    if (sector === "midfield" && name.includes("Meio")) multiplier += 0.05;
+    if (sector === "goalkeeper" && name.includes("Goleiro")) multiplier += 0.05;
+    if (sector === "attack" && name === "Super Chute") multiplier += 0.1;
+    if (sector === "defense" && name === "Muralha") multiplier += 0.1;
+    if (sector === "midfield" && name === "Maestro") multiplier += 0.08;
+    if (name === "Bio-Otimiza\xE7\xE3o") multiplier += 0.04;
+  });
+  return multiplier;
+};
 var playerSectorSkill = (player, sector) => {
   const fusion = player.fusion || {};
   const values = SECTOR_FUSION_KEYS[sector].map((key) => fusion[key]).filter((value) => typeof value === "number" && value > 0);
@@ -2441,7 +2476,10 @@ var teamSectorStrength = (team, players, sector) => {
   const support = squad.filter((player) => supportRoles[sector]?.includes(player.role));
   const supportScore = support.length ? support.reduce((sum, player) => sum + playerSectorSkill(player, sector), 0) / support.length : specialistScore;
   const chemistry = 0.88 + (team.chemistry || 50) / 500;
-  return (specialistScore * (sector === "goalkeeper" ? 1 : 0.84) + supportScore * (sector === "goalkeeper" ? 0 : 0.16)) * chemistry;
+  const mentality = team.tactics?.mentality || "Calculista";
+  const mentalityEffect = MENTALITY_SECTOR_EFFECT[mentality]?.[sector] || 1;
+  const cardEffect = tacticalCardSectorEffect(team, sector);
+  return (specialistScore * (sector === "goalkeeper" ? 1 : 0.84) + supportScore * (sector === "goalkeeper" ? 0 : 0.16)) * chemistry * mentalityEffect * cardEffect;
 };
 var STYLE_PROFILE = {
   Equilibrado: { possession: 1, passRisk: 0, progression: 1, chance: 1, defense: 1, press: 1, transition: 1 },
@@ -3677,7 +3715,23 @@ var simulateAndRecordMatch = (state, match, standings) => {
   };
   const legacyRatingsResult = simulateMatch(homeStats, awayStats, homeSelection.all, awaySelection.all);
   const matchSeed = `${state.worldId || state.world.id || "world"}:${state.world.currentSeason || 2050}:${match.id}`;
-  const possessionResult = simulateNativeMatch2D(match, homeTeam, awayTeam, state.players, matchSeed).match.result;
+  const homeOutcomeTeam = {
+    ...homeTeam,
+    chemistry: homeStats.chemistry,
+    tactics: {
+      ...homeTeam.tactics,
+      slots: homeCanUseActiveManagement ? homeTeam.tactics.slots || [] : []
+    }
+  };
+  const awayOutcomeTeam = {
+    ...awayTeam,
+    chemistry: awayStats.chemistry,
+    tactics: {
+      ...awayTeam.tactics,
+      slots: awayCanUseActiveManagement ? awayTeam.tactics.slots || [] : []
+    }
+  };
+  const possessionResult = simulateNativeMatch2D(match, homeOutcomeTeam, awayOutcomeTeam, state.players, matchSeed).match.result;
   const result = possessionResult ? {
     ...possessionResult,
     ratings: legacyRatingsResult.ratings,
@@ -3975,7 +4029,11 @@ var maybeGenerateDailyWorldEvent = (state) => {
 };
 var processTransferDay = (state) => {
   Object.keys(state.teams).forEach((teamId) => {
-    if (teamId !== state.userTeamId) {
+    const team = state.teams[teamId];
+    const manager = team?.managerId ? state.managers[team.managerId] : null;
+    const belongsToParticipant = (state.participants || []).some((participant) => participant.teamId === teamId);
+    const isHumanControlled = belongsToParticipant || manager?.isNPC === false || teamId === state.userTeamId;
+    if (!isHumanControlled) {
       simulateAITeamDay(state, teamId);
     }
   });
@@ -4734,8 +4792,10 @@ var advanceGameDay = (prevState, skipDateIncrement = false) => {
   const dayNumber = getSeasonDayNumber(world.currentDate, world.seasonStartReal, world.currentDay);
   const isMatchDay = isSeasonMatchDay(dayNumber);
   const round = getRoundFromDay(dayNumber);
-  if (round >= 1 && round <= SEASON_ROUNDS) world.phase = "REGULAR_SEASON";
-  else if (round > SEASON_ROUNDS && round <= TOTAL_ROUNDS) world.phase = "ELITE_CUP";
+  const leagueLastDay = 2 + SEASON_ROUNDS * MATCH_INTERVAL_DAYS - 1;
+  const eliteCupEndDay = leagueLastDay + ELITE_CUP_ROUNDS;
+  if (dayNumber <= leagueLastDay) world.phase = "REGULAR_SEASON";
+  else if (dayNumber <= eliteCupEndDay) world.phase = "ELITE_CUP";
   else world.phase = "OFFSEASON";
   processTrainingDay(state);
   processEndOfDayChecks(state, dayNumber);
@@ -4893,7 +4953,53 @@ var startNewSeason = (state) => {
   }
   return finalState;
 };
+var advanceAutomatedGameDay = (state, skipDateIncrement = false) => {
+  const seasonComplete = state.world.phase === "OFFSEASON" && (state.world.currentDay || 0) >= SEASON_DAYS;
+  const activeState = seasonComplete ? startNewSeason(state) : state;
+  return advanceGameDay(activeState, skipDateIncrement);
+};
+var repairLegacySeasonOverflow = (state) => {
+  const currentDay = state.world.currentDay || 0;
+  if (state.world.phase !== "OFFSEASON" || currentDay <= SEASON_DAYS) return state;
+  const overflowDays = currentDay - SEASON_DAYS;
+  const currentDate = new Date(state.world.currentDate);
+  if (!Number.isFinite(currentDate.getTime())) return state;
+  const boundaryDate = new Date(currentDate);
+  boundaryDate.setDate(boundaryDate.getDate() - overflowDays);
+  let repaired = {
+    ...state,
+    world: {
+      ...state.world,
+      currentDay: SEASON_DAYS,
+      currentDate: boundaryDate.toISOString()
+    }
+  };
+  for (let day = 0; day < overflowDays; day += 1) {
+    repaired = advanceAutomatedGameDay(repaired);
+  }
+  return repaired;
+};
+var prepareLegacySeasonOverflowForCatchUp = (state) => {
+  const currentDay = state.world.currentDay || 0;
+  if (state.world.phase !== "OFFSEASON" || currentDay <= SEASON_DAYS) return state;
+  const overflowDays = currentDay - SEASON_DAYS;
+  const currentDate = new Date(state.world.currentDate);
+  const lastTick = new Date(state.world.serverClockLastTickAt || state.world.lastServerTickAt || "");
+  if (!Number.isFinite(currentDate.getTime()) || !Number.isFinite(lastTick.getTime())) return state;
+  currentDate.setDate(currentDate.getDate() - overflowDays);
+  lastTick.setDate(lastTick.getDate() - overflowDays);
+  return {
+    ...state,
+    world: {
+      ...state.world,
+      currentDay: SEASON_DAYS,
+      currentDate: currentDate.toISOString(),
+      serverClockLastTickAt: lastTick.toISOString()
+    }
+  };
+};
 export {
+  advanceAutomatedGameDay,
   advanceGameDay,
   applySafetyNet,
   autoCompleteDraft,
@@ -4907,6 +5013,8 @@ export {
   getSeasonDayNumber,
   getTeamPowerCap,
   isJoinWindowOpen,
+  prepareLegacySeasonOverflowForCatchUp,
+  repairLegacySeasonOverflow,
   resolveDraftConflict,
   simulateAndRecordMatch,
   startNewSeason,

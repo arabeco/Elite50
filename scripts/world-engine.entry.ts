@@ -6,6 +6,7 @@
  * Nao edite engine.mjs diretamente — ele e gerado.
  */
 export {
+  advanceAutomatedGameDay,
   advanceGameDay,
   applySafetyNet,
   autoCompleteDraft,
@@ -19,7 +20,9 @@ export {
   getSeasonDayNumber,
   getTeamPowerCap,
   isJoinWindowOpen,
+  prepareLegacySeasonOverflowForCatchUp,
   resolveDraftConflict,
+  repairLegacySeasonOverflow,
   simulateAndRecordMatch,
   startNewSeason,
   submitProposals,

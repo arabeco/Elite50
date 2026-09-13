@@ -45,7 +45,7 @@ const CurrencyBadge = ({ kind, value, compact = false }: { kind: 'GOLD' | 'FRAGM
       } ${
         isGold
           ? 'border-amber-300/35 bg-amber-400/12 text-amber-100'
-          : 'border-cyan-300/35 bg-cyan-400/12 text-cyan-100'
+          : 'border-mineral-300/35 bg-mineral-400/12 text-mineral-100'
       }`}
     >
       <svg viewBox="0 0 24 24" className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} shrink-0`} aria-hidden="true">
@@ -98,7 +98,7 @@ export const CareerTab = (props: any) => {
   const [isCareerModalOpen, setIsCareerModalOpen] = useState(false);
   const [gmRandomPlayer, setGmRandomPlayer] = useState<Player | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [careerSection, setCareerSection] = useState<'store' | 'inventory' | 'circuit' | 'profile' | 'settings'>('store');
+  const [careerSection, setCareerSection] = useState<'store' | 'inventory' | 'circuit' | 'seasons' | 'profile' | 'settings'>('store');
   const [selectedStoreItem, setSelectedStoreItem] = useState<StoreItem | null>(null);
   const [selectedGoldPack, setSelectedGoldPack] = useState<BillingCatalogEntry | null>(null);
   const [isBillingBusy, setIsBillingBusy] = useState(false);
@@ -116,6 +116,49 @@ export const CareerTab = (props: any) => {
   const shopLogos = STORE_ITEMS.filter(item => item.category === 'LOGO');
   const shopProfileItems = STORE_ITEMS.filter(item => item.category === 'ACCESSORY' || item.category === 'BADGE');
   const userManager = state.userManagerId ? state.managers[state.userManagerId] : null;
+  const currentLeagueEntry = Object.entries(dashData.leaguesData || {}).find(([, league]: [string, any]) =>
+    (league?.standings || []).some((row: any) => row.teamId === userTeam?.id)
+  );
+  const currentLeagueStanding = currentLeagueEntry?.[1]?.standings?.find((row: any) => row.teamId === userTeam?.id);
+  const currentLeagueSize = currentLeagueEntry?.[1]?.standings?.length || 0;
+  const eliteCupMatches = [
+    ...(state.world.eliteCup?.bracket?.round1 || []),
+    ...(state.world.eliteCup?.bracket?.quarters || []),
+    ...(state.world.eliteCup?.bracket?.semis || []),
+    ...(state.world.eliteCup?.bracket?.final ? [state.world.eliteCup.bracket.final] : []),
+  ];
+  const userEliteMatches = eliteCupMatches
+    .filter(match => match.homeTeamId === userTeam?.id || match.awayTeamId === userTeam?.id)
+    .sort((a, b) => a.round - b.round);
+  const latestUserEliteMatch = userEliteMatches[userEliteMatches.length - 1];
+  const eliteStageLabel = (round?: number) => round === 1 ? 'Oitavas' : round === 2 ? 'Quartas' : round === 3 ? 'Semifinal' : round === 4 ? 'Final' : 'Aguardando';
+  const userLostLatestEliteMatch = !!latestUserEliteMatch?.played && (
+    (latestUserEliteMatch.homeTeamId === userTeam?.id && latestUserEliteMatch.homeScore < latestUserEliteMatch.awayScore)
+    || (latestUserEliteMatch.awayTeamId === userTeam?.id && latestUserEliteMatch.awayScore < latestUserEliteMatch.homeScore)
+  );
+  const eliteStatus = state.world.eliteCup?.winnerId === userTeam?.id
+    ? 'Campeão'
+    : userLostLatestEliteMatch
+      ? `Eliminado - ${eliteStageLabel(latestUserEliteMatch.round)}`
+      : latestUserEliteMatch
+        ? `${latestUserEliteMatch.played ? 'Classificado' : 'Em disputa'} - ${eliteStageLabel(latestUserEliteMatch.round)}`
+        : (state.world.eliteCup?.teams || []).includes(userTeam?.id || '')
+          ? 'Classificado'
+          : (state.world.eliteCup?.teams || []).length > 0
+            ? 'Não classificado'
+            : 'Aguardando';
+  const managedDistrict = Object.entries(state.world.districtCup?.managerAssignments || {})
+    .find(([, managerId]) => managerId === state.userManagerId)?.[0];
+  const managedDistrictTeamId = managedDistrict ? `d_${managedDistrict.toLowerCase()}` : null;
+  const districtStatus = managedDistrictTeamId
+    ? state.world.districtCup?.winnerId === managedDistrictTeamId
+      ? 'Campeão'
+      : state.world.districtCup?.winnerId
+        ? 'Encerrada'
+        : state.world.districtCup?.round > 0
+          ? `Rodada ${state.world.districtCup.round}`
+          : 'Convocação aceita'
+    : 'Sem seleção';
   const isBeforeKickoff = state.world.status === 'LOBBY' && state.world.currentDay < 0;
   const worldClockDisplayDate = useMemo(() => {
     const baseDate = new Date(
@@ -666,43 +709,38 @@ export const CareerTab = (props: any) => {
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 sm:pb-0">
-      <div className="rounded-2xl border border-white/10 bg-black/35 p-2">
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {[
-            { id: 'store' as const, label: 'Loja', icon: ShoppingCart },
-            { id: 'inventory' as const, label: 'Inventario', icon: Briefcase },
-            { id: 'circuit' as const, label: 'Circuito', icon: Crown },
-            { id: 'profile' as const, label: 'Perfil', icon: Trophy },
-            { id: 'settings' as const, label: 'Config', icon: Sliders },
-          ].map(section => (
-            <button
-              key={section.id}
-              type="button"
-              onClick={() => setCareerSection(section.id)}
-              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-[9px] font-black uppercase tracking-[0.22em] transition ${
-                careerSection === section.id
-                  ? 'border border-cyan-400/35 bg-cyan-500/12 text-cyan-100'
-                  : 'border border-white/5 bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/80'
-              }`}
-            >
-              <section.icon size={14} />
-              {section.label}
-            </button>
-          ))}
-        </div>
+      <div className="sport-tabs hide-scrollbar">
+        {[
+          { id: 'store' as const, label: 'Loja', icon: ShoppingCart },
+          { id: 'inventory' as const, label: 'Inventario', icon: Briefcase },
+          { id: 'circuit' as const, label: 'Circuito', icon: Crown },
+          { id: 'seasons' as const, label: 'Temporadas', icon: Calendar },
+          { id: 'profile' as const, label: 'Perfil', icon: Trophy },
+          { id: 'settings' as const, label: 'Config', icon: Sliders },
+        ].map(section => (
+          <button
+            key={section.id}
+            type="button"
+            aria-pressed={careerSection === section.id}
+            onClick={() => setCareerSection(section.id)}
+          >
+            <section.icon size={15} aria-hidden="true" />
+            {section.label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Left Column - Team Context */}
         <div className="lg:col-span-8 space-y-4 sm:space-y-6">
           {/* User Team Card */}
-          <div className="glass-card-neon white-gradient-sheen border-cyan-500/30 p-3 sm:p-5 rounded-2xl sm:rounded-[2rem] shadow-[0_0_30px_rgba(34,211,238,0.1)] relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl -mr-12 -mt-12 group-hover:bg-cyan-500/10 transition-colors duration-700" />
+          <div className="glass-card-neon white-gradient-sheen border-mineral-500/30 p-3 sm:p-5 rounded-2xl sm:rounded-[2rem] shadow-none relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-mineral-500/5 rounded-full blur-2xl -mr-12 -mt-12 group-hover:bg-mineral-500/10 transition-colors duration-700" />
 
             <div className="flex items-center gap-4 sm:gap-6 relative z-10">
               <div className="relative">
-                <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full animate-pulse" />
-                <div className="w-14 h-14 sm:w-20 sm:h-20 glass-card rounded-xl sm:rounded-2xl flex items-center justify-center border border-cyan-500/30">
+                <div className="absolute inset-0 bg-mineral-500/20 blur-xl rounded-full animate-pulse" />
+                <div className="w-14 h-14 sm:w-20 sm:h-20 glass-card rounded-xl sm:rounded-2xl flex items-center justify-center border border-mineral-500/30">
                   {userTeam ? (
                     <TeamLogo
                       primaryColor={userTeam.logo?.primary || '#fff'}
@@ -712,7 +750,7 @@ export const CareerTab = (props: any) => {
                       size={window.innerWidth < 640 ? 36 : 56}
                     />
                   ) : (
-                    <Users size={window.innerWidth < 640 ? 24 : 36} className="text-cyan-400/50" />
+                    <Users size={window.innerWidth < 640 ? 24 : 36} className="text-mineral-400/50" />
                   )}
                 </div>
               </div>
@@ -722,9 +760,9 @@ export const CareerTab = (props: any) => {
                   <h2 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tight neon-text-cyan truncate">
                     {userTeam?.name || 'SEM CLUBE'}
                   </h2>
-                  <div className="bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
-                    <Trophy size={8} className="text-cyan-400" />
-                    <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest">
+                  <div className="bg-mineral-500/10 border border-mineral-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                    <Trophy size={8} className="text-mineral-400" />
+                    <span className="text-[7px] sm:text-[9px] font-black text-mineral-400 uppercase tracking-widest">
                       {userTeam?.district || 'DISTRITO'}
                     </span>
                   </div>
@@ -733,7 +771,7 @@ export const CareerTab = (props: any) => {
                   <div className="flex items-center gap-1">
                     <Star size={8} className="text-yellow-400 fill-yellow-400" />
                     <span className="text-[10px] sm:text-sm font-mono font-black text-white">4.8</span>
-                    <span className="text-[7px] text-cyan-400/50 uppercase tracking-widest ml-1">Reputação</span>
+                    <span className="text-[7px] text-mineral-400/50 uppercase tracking-widest ml-1">Reputação</span>
                   </div>
                 </div>
               </div>
@@ -757,7 +795,7 @@ export const CareerTab = (props: any) => {
                 </div>
                 <div className="flex flex-col gap-1 border-x border-white/5 px-2">
                   <span className="text-[7px] text-white/30 font-bold uppercase tracking-widest">Mente</span>
-                  <span className="text-[9px] sm:text-[10px] font-black text-fuchsia-400 uppercase italic truncate">{userTeam?.tactics.mentality}</span>
+                  <span className="text-[9px] sm:text-[10px] font-black text-mineral-400 uppercase italic truncate">{userTeam?.tactics.mentality}</span>
                 </div>
                 <div className="flex flex-col gap-1 items-end">
                   <span className="text-[7px] text-white/30 font-bold uppercase tracking-widest text-right">Ataque</span>
@@ -792,10 +830,10 @@ export const CareerTab = (props: any) => {
         {/* Right Column - Side Panels */}
         <div className="lg:col-span-4 space-y-4 sm:space-y-6">
           {/* Calendar Mini View */}
-          <div className="glass-card-neon white-gradient-sheen border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.1)] p-3 sm:p-5 rounded-2xl">
+          <div className="glass-card-neon white-gradient-sheen border-mineral-500/20 shadow-none p-3 sm:p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg glass-card flex items-center justify-center text-cyan-400 border border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                <div className="w-8 h-8 rounded-lg glass-card flex items-center justify-center text-mineral-400 border border-mineral-500/30 shadow-none">
                   <Calendar size={14} />
                 </div>
                 <h3 className="text-[9px] sm:text-[11px] font-black text-white uppercase tracking-widest">Calendário</h3>
@@ -824,7 +862,7 @@ export const CareerTab = (props: any) => {
                           <span className="text-[9px] sm:text-[11px] font-black text-white uppercase truncate max-w-[100px]">
                             {opponent?.name || 'DESCONHECIDO'}
                           </span>
-                          <span className="text-[7px] sm:text-[8px] text-cyan-400/50 font-black uppercase tracking-widest">
+                          <span className="text-[7px] sm:text-[8px] text-mineral-400/50 font-black uppercase tracking-widest">
                             {isBeforeKickoff ? '--/--' : new Date(match.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                           </span>
                         </div>
@@ -867,7 +905,7 @@ export const CareerTab = (props: any) => {
 
                       <div className="flex items-center gap-4">
                         <div className="flex-1 bg-white/5 border border-white/10 p-2 rounded-lg flex flex-col items-center justify-center">
-                          <span className="text-[10px] text-cyan-400 font-bold mb-1">Eles dão</span>
+                          <span className="text-[10px] text-mineral-400 font-bold mb-1">Eles dão</span>
                           <span className="text-sm font-black text-white">{offeredPlayer.nickname}</span>
                           <span className="text-xs text-white/50">{offeredPlayer.totalRating} pts</span>
                         </div>
@@ -939,9 +977,11 @@ export const CareerTab = (props: any) => {
                       ? <ShoppingCart size={14} />
                       : careerSection === 'inventory'
                         ? <Briefcase size={14} />
-                        : careerSection === 'circuit'
-                          ? <Crown size={14} />
-                          : careerSection === 'settings'
+                      : careerSection === 'circuit'
+                        ? <Crown size={14} />
+                        : careerSection === 'seasons'
+                          ? <Calendar size={14} />
+                        : careerSection === 'settings'
                             ? <Sliders size={14} />
                             : <Trophy size={14} />}
                   </div>
@@ -952,6 +992,8 @@ export const CareerTab = (props: any) => {
                         ? 'Inventario'
                         : careerSection === 'circuit'
                           ? 'Circuito'
+                          : careerSection === 'seasons'
+                            ? 'Temporadas'
                           : careerSection === 'settings'
                             ? 'Config'
                             : 'Perfil'}
@@ -973,6 +1015,11 @@ export const CareerTab = (props: any) => {
                     <>
                       <StoreKeyword>Global</StoreKeyword>
                       <StoreKeyword>90 dias</StoreKeyword>
+                    </>
+                  ) : careerSection === 'seasons' ? (
+                    <>
+                      <StoreKeyword>Campanha</StoreKeyword>
+                      <StoreKeyword>Arquivo</StoreKeyword>
                     </>
                   ) : careerSection === 'settings' ? (
                     <>
@@ -1025,10 +1072,10 @@ export const CareerTab = (props: any) => {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
+                <div className="rounded-xl border border-mineral-500/25 bg-mineral-500/10 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">{APP_CIRCUIT.name}</p>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">{APP_CIRCUIT.name}</p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <StoreKeyword>3 temporadas</StoreKeyword>
                         <StoreKeyword>90 dias</StoreKeyword>
@@ -1084,7 +1131,7 @@ export const CareerTab = (props: any) => {
                             type="button"
                             className={`group min-w-0 rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06] ${
                               owned
-                                ? 'border-cyan-400/25 bg-cyan-500/10'
+                                ? 'border-mineral-400/25 bg-mineral-500/10'
                                 : 'border-white/10 bg-black/35'
                             }`}
                             onClick={() => setSelectedStoreItem(item)}
@@ -1105,7 +1152,7 @@ export const CareerTab = (props: any) => {
                                     isEquipped
                                       ? 'border-amber-300/35 bg-amber-400/15 text-amber-100'
                                       : owned
-                                        ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
+                                        ? 'border-mineral-400/30 bg-mineral-500/10 text-mineral-100'
                                         : 'border-white/10 bg-white/[0.03] text-white/45'
                                   }`}>
                                     {isEquipped ? 'Equipado' : owned ? 'Seu' : item.rarity}
@@ -1113,7 +1160,7 @@ export const CareerTab = (props: any) => {
                                 </div>
                                 <div className="mt-2 flex items-center justify-between gap-2">
                                   {owned ? (
-                                    <span className="rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-cyan-100">
+                                    <span className="rounded-lg border border-mineral-400/25 bg-mineral-400/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-mineral-100">
                                       Comprado
                                     </span>
                                   ) : (
@@ -1121,14 +1168,14 @@ export const CareerTab = (props: any) => {
                                   )}
                                   <span className={`rounded-lg px-2 py-1 text-[7px] font-black uppercase tracking-widest ${
                                     owned
-                                      ? 'bg-cyan-400/15 text-cyan-100'
+                                      ? 'bg-mineral-400/15 text-mineral-100'
                                       : 'bg-amber-400/15 text-amber-100'
                                   }`}>
                                     {actionLabel}
                                   </span>
                                 </div>
                                 {item.effectLabel && (
-                                  <p className="mt-2 line-clamp-1 text-[7px] font-black uppercase tracking-widest text-cyan-200/80">
+                                  <p className="mt-2 line-clamp-1 text-[7px] font-black uppercase tracking-widest text-mineral-200/80">
                                     {item.effectLabel}
                                   </p>
                                 )}
@@ -1149,20 +1196,20 @@ export const CareerTab = (props: any) => {
 
             {careerSection === 'circuit' && (
               <div className="space-y-3">
-                <div className="relative overflow-hidden rounded-[1.75rem] border border-cyan-400/20 bg-black/45 p-4 shadow-[0_0_35px_rgba(34,211,238,0.12)]">
+                <div className="relative overflow-hidden rounded-[1.75rem] border border-mineral-400/20 bg-black/45 p-4 shadow-none">
                   <img
                     src={APP_CIRCUIT.bannerImagePath}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover opacity-30"
                   />
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_36%)]" />
-                  <div className="absolute -right-10 top-2 h-28 w-28 rounded-full bg-cyan-400/10 blur-3xl" />
-                  <div className="absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-fuchsia-500/10 blur-3xl" />
+                  <div className="absolute -right-10 top-2 h-28 w-28 rounded-full bg-mineral-400/10 blur-3xl" />
+                  <div className="absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-mineral-500/10 blur-3xl" />
 
                   <div className="relative z-10 space-y-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-[7px] font-black uppercase tracking-[0.3em] text-cyan-100">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-mineral-400/25 bg-mineral-500/10 px-3 py-1 text-[7px] font-black uppercase tracking-[0.3em] text-mineral-100">
                           <Crown size={12} />
                           Passe do Circuito
                         </div>
@@ -1176,11 +1223,11 @@ export const CareerTab = (props: any) => {
                           <StoreKeyword>Oraculo</StoreKeyword>
                         </div>
                       </div>
-                      <div className="hidden h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-black/45 shadow-inner sm:flex">
+                      <div className="hidden h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-mineral-300/20 bg-black/45 shadow-inner sm:flex">
                         <img src={APP_CIRCUIT.passIconPath} alt="" className="h-full w-full object-contain p-2" />
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-right shadow-inner">
-                        <p className="text-[7px] font-black uppercase tracking-[0.25em] text-cyan-200">Progresso</p>
+                        <p className="text-[7px] font-black uppercase tracking-[0.25em] text-mineral-200">Progresso</p>
                         <p className="mt-1 text-3xl font-black italic text-white">{viewCircuit.seasonRunsCompleted}/{viewCircuit.targetSeasonRuns}</p>
                         <p className="text-[7px] font-black uppercase tracking-[0.22em] text-white/35">temporadas</p>
                       </div>
@@ -1212,7 +1259,7 @@ export const CareerTab = (props: any) => {
                         type="button"
                         onClick={() => setSelectedGoldPack(getBillingProduct('passe_circuito_neon_01'))}
                         disabled={viewCircuit.premiumActive}
-                        className="rounded-2xl border border-cyan-400/30 bg-cyan-500/12 px-4 py-3 text-[9px] font-black uppercase tracking-[0.28em] text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.15)] transition hover:bg-cyan-500/18"
+                        className="rounded-2xl border border-mineral-400/30 bg-mineral-500/12 px-4 py-3 text-[9px] font-black uppercase tracking-[0.28em] text-mineral-100 shadow-none transition hover:bg-mineral-500/18"
                       >
                         {viewCircuit.premiumActive ? 'Passe ativo' : 'Ativar premium'}
                       </button>
@@ -1227,9 +1274,9 @@ export const CareerTab = (props: any) => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-[1.5rem] border border-cyan-400/15 bg-black/35 p-4 shadow-[0_0_18px_rgba(34,211,238,0.08)]">
+                  <div className="rounded-[1.5rem] border border-mineral-400/15 bg-black/35 p-4 shadow-none">
                     <div className="flex items-center justify-between">
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">Trilha gratis</p>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">Trilha gratis</p>
                       <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-white/45">base</span>
                     </div>
                     <div className="mt-3 space-y-2">
@@ -1245,10 +1292,10 @@ export const CareerTab = (props: any) => {
                     </div>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-fuchsia-400/15 bg-black/35 p-4 shadow-[0_0_18px_rgba(168,85,247,0.08)]">
+                  <div className="rounded-[1.5rem] border border-mineral-400/15 bg-black/35 p-4 shadow-[0_0_18px_rgba(168,85,247,0.08)]">
                     <div className="flex items-center justify-between">
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-fuchsia-200">Trilha premium</p>
-                      <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-2 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-fuchsia-100">Passe</span>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">Trilha premium</p>
+                      <span className="rounded-full border border-mineral-400/20 bg-mineral-500/10 px-2 py-1 text-[7px] font-black uppercase tracking-[0.22em] text-mineral-100">Passe</span>
                     </div>
                     <div className="mt-3 space-y-2">
                       {[
@@ -1298,6 +1345,107 @@ export const CareerTab = (props: any) => {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {careerSection === 'seasons' && (
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-mineral-400/25 bg-mineral-500/10 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">Campanha atual</p>
+                      <h3 className="mt-1 text-2xl font-black uppercase italic text-white">Temporada {state.world.currentSeason}</h3>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white/55">
+                      Dia {state.world.currentDay}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-300/20 bg-black/30 p-3">
+                      <div className="flex items-center gap-2 text-emerald-200">
+                        <Trophy size={14} />
+                        <p className="text-[8px] font-black uppercase tracking-widest">{currentLeagueEntry?.[1]?.name || 'Liga'}</p>
+                      </div>
+                      <p className="mt-2 text-2xl font-black italic text-white">
+                        {currentLeagueStanding ? `${currentLeagueStanding.position}º` : '--'}
+                        <span className="ml-1 text-[9px] text-white/30">/ {currentLeagueSize || '--'}</span>
+                      </p>
+                      <p className="text-[8px] font-black uppercase tracking-widest text-white/35">
+                        {currentLeagueStanding?.points ?? 0} pts
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-mineral-300/20 bg-black/30 p-3">
+                      <div className="flex items-center gap-2 text-mineral-200">
+                        <Crown size={14} />
+                        <p className="text-[8px] font-black uppercase tracking-widest">Copa Elite</p>
+                      </div>
+                      <p className="mt-3 text-sm font-black uppercase italic text-white">{eliteStatus}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-amber-300/20 bg-black/30 p-3">
+                      <div className="flex items-center gap-2 text-amber-200">
+                        <Globe size={14} />
+                        <p className="text-[8px] font-black uppercase tracking-widest">Copa Distritos</p>
+                      </div>
+                      <p className="mt-3 text-sm font-black uppercase italic text-white">{districtStatus}</p>
+                      {managedDistrict && (
+                        <p className="mt-1 text-[7px] font-black uppercase tracking-widest text-white/30">{managedDistrict}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/35">
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-white/55">Arquivo de temporadas</p>
+                    <span className="text-[8px] font-black text-white/25">{state.world.history?.length || 0}</span>
+                  </div>
+                  {(state.world.history || []).length > 0 ? (
+                    <div className="divide-y divide-white/[0.05]">
+                      {[...(state.world.history || [])].sort((a, b) => b.season - a.season).map(report => {
+                        const leagueResult = Object.entries(report.finalStandings || {}).find(([, rows]) =>
+                          (rows || []).some(row => row.teamId === userTeam?.id)
+                        );
+                        const sortedRows = leagueResult
+                          ? [...leagueResult[1]].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst))
+                          : [];
+                        const finalPosition = sortedRows.findIndex(row => row.teamId === userTeam?.id);
+                        const wonElite = report.eliteCupWinnerId === userTeam?.id;
+                        const wonDistrict = managedDistrictTeamId && report.districtCupWinnerId === managedDistrictTeamId;
+
+                        return (
+                          <button
+                            key={report.season}
+                            type="button"
+                            onClick={() => props.onOpenSeasonReport?.(report.season)}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.05]"
+                          >
+                            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-mineral-300/20 bg-mineral-400/10 text-mineral-100">
+                              <Trophy size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-black uppercase italic text-white">Temporada {report.season}</p>
+                              <div className="mt-1 flex flex-wrap gap-1.5">
+                                <span className="text-[7px] font-black uppercase tracking-widest text-white/40">
+                                  {finalPosition >= 0 ? `${finalPosition + 1}º ${leagueResult?.[0]}` : 'Sem posição'}
+                                </span>
+                                {wonElite && <span className="text-[7px] font-black uppercase tracking-widest text-mineral-200">Elite</span>}
+                                {wonDistrict && <span className="text-[7px] font-black uppercase tracking-widest text-amber-200">Distritos</span>}
+                              </div>
+                            </div>
+                            <ChevronRight size={17} className="shrink-0 text-white/25" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-[8px] font-black uppercase tracking-widest text-white/25">
+                      Primeiro recap ao fim da temporada
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1425,10 +1573,10 @@ export const CareerTab = (props: any) => {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                <div className="rounded-xl border border-mineral-400/20 bg-mineral-500/10 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-100">Acessorios de manager</p>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-100">Acessorios de manager</p>
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/45">
                         Itens do perfil atravessam mundos. Bonus aqui e leve, de identidade e leitura, nao de placar.
                       </p>
@@ -1449,7 +1597,7 @@ export const CareerTab = (props: any) => {
                             isEquipped
                               ? 'border-amber-300/35 bg-amber-400/12'
                               : owned
-                                ? 'border-cyan-300/35 bg-cyan-300/12'
+                                ? 'border-mineral-300/35 bg-mineral-300/12'
                               : 'border-white/10 bg-black/35 hover:bg-white/[0.05]'
                           }`}
                         >
@@ -1483,15 +1631,15 @@ export const CareerTab = (props: any) => {
 
             {careerSection === 'settings' && (
               <div className="space-y-3">
-                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
+                <div className="rounded-2xl border border-mineral-400/20 bg-mineral-500/10 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">Preferencias</p>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">Preferencias</p>
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/40">
                         Ajustes simples para deixar o app menos barulhento.
                       </p>
                     </div>
-                    <Sliders size={18} className="text-cyan-200" />
+                    <Sliders size={18} className="text-mineral-200" />
                   </div>
 
                   <div className="mt-4 grid gap-2">
@@ -1524,7 +1672,7 @@ export const CareerTab = (props: any) => {
                       onClick={() => updateInitialHelpEnabled(!initialHelpEnabled)}
                       className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
                         initialHelpEnabled
-                          ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
+                          ? 'border-mineral-400/25 bg-mineral-500/10 text-mineral-100'
                           : 'border-white/10 bg-white/[0.04] text-white/55'
                       }`}
                     >
@@ -1536,7 +1684,7 @@ export const CareerTab = (props: any) => {
                       onClick={() => updateMatchNotificationsEnabled(!matchNotificationsEnabled)}
                       className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
                         matchNotificationsEnabled
-                          ? 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-100'
+                          ? 'border-mineral-400/25 bg-mineral-500/10 text-mineral-100'
                           : 'border-white/10 bg-white/[0.04] text-white/55'
                       }`}
                     >
@@ -1599,19 +1747,19 @@ export const CareerTab = (props: any) => {
             </h3>
 
             {state.isCreator && (
-              <div className="relative z-10 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
+              <div className="relative z-10 rounded-xl border border-mineral-500/25 bg-mineral-500/10 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-200">Codigo do mundo</p>
+                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-200">Codigo do mundo</p>
                     <p className="mt-1 font-mono text-lg font-black tracking-[0.18em] text-white">{worldJoinCode}</p>
-                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-cyan-100/45">
+                    <p className="mt-1 text-[7px] font-bold uppercase tracking-widest text-mineral-100/45">
                       Envie para alguem entrar como observador quando a entrada por codigo estiver ativa.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleCopyJoinCode}
-                    className="shrink-0 rounded-xl border border-cyan-400/30 bg-black/35 p-3 text-cyan-200 transition hover:bg-cyan-400 hover:text-black"
+                    className="shrink-0 rounded-xl border border-mineral-400/30 bg-black/35 p-3 text-mineral-200 transition hover:bg-mineral-400 hover:text-black"
                     title="Copiar codigo"
                   >
                     <Copy size={16} />
@@ -1661,8 +1809,8 @@ export const CareerTab = (props: any) => {
         <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-[2rem] space-y-3 sm:space-y-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isPaused ? 'bg-amber-500/10 border-amber-500/30' : 'bg-cyan-500/10 border-cyan-500/30'}`}>
-                <Clock size={window.innerWidth < 640 ? 16 : 20} className={isPaused ? 'text-amber-500' : 'text-cyan-400 animate-pulse'} />
+              <div className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isPaused ? 'bg-amber-500/10 border-amber-500/30' : 'bg-mineral-500/10 border-mineral-500/30'}`}>
+                <Clock size={window.innerWidth < 640 ? 16 : 20} className={isPaused ? 'text-amber-500' : 'text-mineral-400 animate-pulse'} />
               </div>
               <div>
                 <h4 className="text-[10px] sm:text-xs font-black text-white uppercase tracking-widest">Relógio Global</h4>
@@ -1674,7 +1822,7 @@ export const CareerTab = (props: any) => {
                 <span>{worldClockDisplayDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}</span>
                 <span className="text-xs opacity-40">{worldClockDisplayDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              <div className="text-[8px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest mt-1">
+              <div className="text-[8px] sm:text-[9px] font-black text-mineral-400 uppercase tracking-widest mt-1">
                 Dia da Season: {worldSeasonDay}
               </div>
             </div>
@@ -1683,7 +1831,7 @@ export const CareerTab = (props: any) => {
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <button
               onClick={togglePause}
-              className={`py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${isPaused ? 'bg-cyan-500 text-black hover:bg-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
+              className={`py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${isPaused ? 'bg-mineral-500 text-black hover:bg-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
             >
               {isPaused ? <Play size={12} fill="currentColor" /> : <Clock size={12} />}
               {isPaused ? 'RETOMAR' : 'PAUSAR'}
@@ -1703,7 +1851,7 @@ export const CareerTab = (props: any) => {
               return (
                 <button
                   onClick={handleStartNewSeason}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-emerald-500 border border-emerald-400 p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all group hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.3)] animate-pulse"
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-mineral-500 to-emerald-500 border border-emerald-400 p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all group hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.3)] animate-pulse"
                 >
                   <Award size={16} className="text-black" />
                   <span className="text-[10px] sm:text-xs font-black text-black uppercase tracking-widest">Pular Offseason</span>
@@ -1748,7 +1896,7 @@ export const CareerTab = (props: any) => {
         <div className="md:col-span-2 glass-card border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-2xl">
           <div className="flex items-center justify-between mb-3 sm:mb-5">
             <h3 className="text-[9px] sm:text-[11px] font-black text-white/60 uppercase tracking-[0.2em] flex items-center gap-2 sm:gap-3">
-              <TrendingUp size={window.innerWidth < 640 ? 12 : 16} className="text-cyan-400" />
+              <TrendingUp size={window.innerWidth < 640 ? 12 : 16} className="text-mineral-400" />
               Evolução (pts)
             </h3>
             <span className="text-[8px] sm:text-[10px] text-emerald-400 font-black bg-emerald-500/10 px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg border border-emerald-500/20 italic">+12%</span>
@@ -1766,7 +1914,7 @@ export const CareerTab = (props: any) => {
             {[30, 45, 40, 55, 60, 50, 65, 75, 70, 85, 90, 80].map((h, i) => (
               <div key={i} className="w-full bg-white/5 rounded-t-[2px] sm:rounded-t-xl relative group z-10 overflow-hidden">
                 <div
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-cyan-600 to-cyan-400 group-hover:from-white group-hover:to-white transition-all rounded-t-[2px] sm:rounded-t-xl shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-mineral-600 to-mineral-400 group-hover:from-white group-hover:to-white transition-all rounded-t-[2px] sm:rounded-t-xl shadow-none"
                   style={{ height: `${h}%` }}
                 />
               </div>
@@ -1980,7 +2128,7 @@ export const CareerTab = (props: any) => {
                       {pack.goldAmount ? (
                         <CurrencyBadge kind="GOLD" value={pack.goldAmount} compact />
                       ) : (
-                        <span className="rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-fuchsia-100">Passe</span>
+                        <span className="rounded-full border border-mineral-300/25 bg-mineral-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-mineral-100">Passe</span>
                       )}
                     </div>
                     <p className="mt-2 text-[8px] font-black uppercase tracking-widest text-white/45">{formatBrl(pack.brlPrice)}</p>
@@ -1988,7 +2136,7 @@ export const CareerTab = (props: any) => {
                 ))}
               </div>
 
-              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3">
+              <div className="rounded-xl border border-mineral-400/20 bg-mineral-400/10 p-3">
                 <div className="flex flex-wrap gap-1.5">
                   <StoreKeyword>Cosmetico</StoreKeyword>
                   <StoreKeyword>Sem vitoria comprada</StoreKeyword>

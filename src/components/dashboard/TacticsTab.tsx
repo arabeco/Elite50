@@ -77,13 +77,13 @@ export const TacticsTab = (props: any) => {
       {/* Estilo de Jogo & Mentalidade */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
         {/* Play Style Card */}
-        <div className="glass-card-neon white-gradient-sheen relative group overflow-hidden rounded-2xl sm:rounded-[2rem] border-cyan-500/30 p-3 sm:p-6 transition-all duration-500 hover:border-cyan-500/50 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
+        <div className="glass-card-neon white-gradient-sheen relative group overflow-hidden rounded-2xl sm:rounded-[2rem] border-mineral-500/30 p-3 sm:p-6 transition-all duration-500 hover:border-mineral-500/50 shadow-none">
           <div className="absolute top-0 right-0 p-3 opacity-10">
-            <Zap size={window.innerWidth < 640 ? 32 : 48} className="text-cyan-400" />
+            <Zap size={window.innerWidth < 640 ? 32 : 48} className="text-mineral-400" />
           </div>
 
           <div className="relative z-10 space-y-3">
-            <h3 className="text-[10px] sm:text-xs font-black text-cyan-400 uppercase tracking-[0.2em] italic">ESTILO DE JOGO</h3>
+            <h3 className="text-[10px] sm:text-xs font-black text-mineral-400 uppercase tracking-[0.2em] italic">ESTILO DE JOGO</h3>
 
             {!isPlayStyleModalOpen ? (
               <button
@@ -91,7 +91,7 @@ export const TacticsTab = (props: any) => {
                 className="w-full flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors"
               >
                 <span className="text-sm sm:text-lg font-black text-white uppercase italic">{tactics.playStyle}</span>
-                <ChevronDown size={16} className="text-cyan-400" />
+                <ChevronDown size={16} className="text-mineral-400" />
               </button>
             ) : (
               <div className="grid grid-cols-2 gap-2 animate-in fade-in zoom-in-95 duration-200">
@@ -103,7 +103,7 @@ export const TacticsTab = (props: any) => {
                       setIsPlayStyleModalOpen(false);
                     }}
                     className={`py-2 px-2 rounded-lg border text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${tactics.playStyle === style
-                      ? 'bg-cyan-500 border-cyan-400 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]'
+                      ? 'bg-mineral-500 border-mineral-400 text-black shadow-none'
                       : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white'
                       }`}
                   >
@@ -169,8 +169,8 @@ export const TacticsTab = (props: any) => {
 
       {/* Sliders Táticos */}
       <section className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
-          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Identidade</p>
+        <div className="rounded-2xl border border-mineral-400/20 bg-mineral-500/10 p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-mineral-200">Identidade</p>
           <p className="mt-1 text-sm font-black uppercase italic text-white">{tactics.playStyle}</p>
           <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-white/35">Define como o time tenta vencer.</p>
         </div>
@@ -214,7 +214,7 @@ export const TacticsTab = (props: any) => {
           {/* Intensidade */}
           <div className="space-y-2">
             <div className="flex justify-between items-center px-1">
-              <span className="text-[10px] text-cyan-400 font-black uppercase tracking-widest italic">Intensidade • <span className="text-white">{tactics.intensity}</span></span>
+              <span className="text-[10px] text-mineral-400 font-black uppercase tracking-widest italic">Intensidade • <span className="text-white">{tactics.intensity}</span></span>
               <span className="text-[8px] text-white/30 font-bold uppercase tracking-widest">Pressão {tactics.intensity <= 30 ? 'Baixa' : tactics.intensity >= 70 ? 'Sufocante' : 'Moderada'}</span>
             </div>
             <div className="relative h-4 flex items-center">
@@ -228,7 +228,7 @@ export const TacticsTab = (props: any) => {
                 className="w-full h-1 bg-transparent appearance-none cursor-pointer accent-cyan-500 relative z-10"
               />
               <div
-                className="absolute h-1 bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.5)] transition-all pointer-events-none"
+                className="absolute h-1 bg-gradient-to-r from-mineral-600 to-mineral-400 rounded-full shadow-none transition-all pointer-events-none"
                 style={{ width: `${tactics.intensity}%` }}
               />
             </div>
@@ -300,7 +300,7 @@ export const TacticsTab = (props: any) => {
             if (!player) return null;
             return (
               <div key={playerId} className="flex flex-col items-center gap-2 group">
-                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-white/10 bg-white/5 group-hover:border-cyan-500/40 transition-all shadow-lg">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-white/10 bg-white/5 group-hover:border-mineral-500/40 transition-all shadow-lg">
                   <PlayerAvatar player={player} size="md" mode="head" className="w-full h-full" />
                   <div className="absolute bottom-0 right-0 bg-black/80 text-white text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-tl-lg border-t border-l border-white/10">
                     {player.totalRating}
@@ -366,7 +366,7 @@ export const TacticsTab = (props: any) => {
         <button
           onClick={handleSaveTactic}
           disabled={isSaving}
-          className={`flex items-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 rounded-full text-white font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] italic transition-all group shadow-[0_0_30px_rgba(6,182,212,0.4)] ${isSaving ? 'bg-slate-600 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:scale-105 active:scale-95'}`}
+          className={`flex items-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 rounded-full text-white font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] italic transition-all group shadow-none ${isSaving ? 'bg-slate-600 cursor-not-allowed' : 'bg-gradient-to-r from-mineral-600 to-purple-600 hover:scale-105 active:scale-95'}`}
         >
           <Save size={window.innerWidth < 640 ? 16 : 20} className={isSaving ? "animate-pulse" : ""} />
           <span className="text-[9px] sm:text-xs">{isSaving ? 'Salvando...' : 'Salvar Tática'}</span>

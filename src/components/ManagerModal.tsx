@@ -8,6 +8,7 @@ import { getManagerCommandReadout } from '../utils/managerStats';
 import { getStoreState } from '../utils/store';
 import { STORE_ITEMS } from '../constants/storeCatalog';
 import { groupAchievementsByTrophy } from '../utils/trophyAssets';
+import { getDistrictTheme } from '../utils/districtTheme';
 
 interface ManagerModalProps {
     manager: Manager;
@@ -34,6 +35,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
     const commandReadout = getManagerCommandReadout(manager);
     const worldsPlayed = manager.career.worldIds?.length || (manager.career.historyTeamIds?.length ? 1 : 0);
     const trophyStacks = React.useMemo(() => groupAchievementsByTrophy(manager.achievements || []), [manager.achievements]);
+    const districtTheme = getDistrictTheme(userTeam?.district || manager.district);
     const tacticalMemoryRows = Object.entries(manager.tacticalMemory || {})
         .map(([style, value]) => [style, Number(value) || 0] as const)
         .sort(([, a], [, b]) => b - a)
@@ -49,10 +51,10 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative w-full max-w-lg max-h-[90vh] bg-slate-950/80 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-[0_0_50px_rgba(34,211,238,0.2)] flex flex-col overflow-hidden slim-scrollbar"
+                className={`relative w-full max-w-lg max-h-[90vh] bg-slate-950/80 backdrop-blur-2xl rounded-2xl border ${districtTheme.borderMuted} ${districtTheme.glow} flex flex-col overflow-hidden slim-scrollbar`}
             >
                 {/* Header/Banner */}
-                <div className="relative h-40 shrink-0 bg-gradient-to-br from-cyan-900/60 via-slate-900 to-slate-950 p-6 flex items-end">
+                <div className={`relative h-40 shrink-0 bg-gradient-to-br ${districtTheme.gradient} p-6 flex items-end`}>
                     <div className="absolute top-4 right-4">
                         <button
                             onClick={onClose}
@@ -63,22 +65,22 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                     </div>
 
                     <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
-                        <Shield size={300} className="text-cyan-500 absolute -top-20 -left-20 rotate-12" />
+                        <Shield size={300} className={`absolute -top-20 -left-20 rotate-12 ${districtTheme.text}`} />
                     </div>
 
                     <div className="relative z-10 flex items-center gap-6">
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 p-0.5 shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                        <div className={`w-20 h-20 rounded-2xl p-0.5 ${districtTheme.background} ${districtTheme.glow}`}>
                             <div className="w-full h-full rounded-[14px] bg-slate-950 flex items-center justify-center">
-                                <Shield size={40} className="text-cyan-400" />
+                                <Shield size={40} className={districtTheme.text} />
                             </div>
                         </div>
 
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${isHumanManager ? 'text-cyan-400' : 'text-violet-300'}`}>
+                                <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${isHumanManager ? districtTheme.text : 'text-violet-300'}`}>
                                     {isHumanManager ? 'Manager Humano' : 'Treinador IA'}
                                 </span>
-                                <div className="h-px w-8 bg-cyan-500/30" />
+                                <div className="h-px w-8" style={{ backgroundColor: `rgba(${districtTheme.rgb}, 0.35)` }} />
                             </div>
                             <h2 className="text-3xl font-black text-white uppercase tracking-tighter italic">
                                 {manager.name}
@@ -89,7 +91,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                                 <span className="text-xs font-bold text-emerald-400">LVL {Math.floor(manager.reputation / 10)}</span>
                                 <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                                     isHumanManager
-                                        ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-100'
+                                        ? 'border-mineral-400/30 bg-mineral-400/10 text-mineral-100'
                                         : 'border-violet-400/30 bg-violet-400/10 text-violet-100'
                                 }`}>
                                     {isHumanManager ? 'Perfil Global' : 'NPC do Mundo'}
@@ -103,8 +105,8 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                 <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
 
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/5 border border-white/5 rounded-xl p-4 relative overflow-hidden group hover:border-cyan-500/30 transition-colors">
-                            <div className="absolute top-0 right-0 p-3 opacity-10 text-cyan-400 group-hover:opacity-30 transition-opacity">
+                        <div className="bg-white/5 border border-white/5 rounded-xl p-4 relative overflow-hidden group hover:border-mineral-500/30 transition-colors">
+                            <div className="absolute top-0 right-0 p-3 opacity-10 text-mineral-400 group-hover:opacity-30 transition-opacity">
                                 <Target size={24} />
                             </div>
                             <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold mb-1">Score do Elenco</p>
@@ -114,7 +116,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                             </div>
                             <div className="mt-3 h-1.5 bg-black/40 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]"
+                                    className="h-full bg-gradient-to-r from-mineral-600 to-mineral-400 shadow-none"
                                     style={{ width: `${squadFillPercent}%` }}
                                 />
                             </div>
@@ -169,12 +171,12 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
 
                     <div className={`rounded-2xl border p-4 ${
                         isHumanManager
-                            ? 'border-cyan-400/18 bg-cyan-400/10'
+                            ? 'border-mineral-400/18 bg-mineral-400/10'
                             : 'border-violet-400/18 bg-violet-400/10'
                     }`}>
                         <div className="mb-3 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <Shield size={16} className={isHumanManager ? 'text-cyan-200' : 'text-violet-200'} />
+                                <Shield size={16} className={isHumanManager ? 'text-mineral-200' : 'text-violet-200'} />
                                 <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">
                                     {isHumanManager ? 'Perfil publico' : 'Ficha de IA'}
                                 </h3>
@@ -237,7 +239,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                                         key={trophy.key}
                                         className="flex items-center gap-4 p-3 bg-white/5 border border-white/5 rounded-xl group hover:bg-white/10 transition-all"
                                     >
-                                        <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg ${trophy.type === 'Clube' ? 'bg-cyan-500/10' : trophy.type === 'Distrito' ? 'bg-amber-500/10' : 'bg-purple-500/10'}`}>
+                                        <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg ${trophy.type === 'Clube' ? 'bg-mineral-500/10' : trophy.type === 'Distrito' ? 'bg-amber-500/10' : 'bg-purple-500/10'}`}>
                                             <img src={trophy.asset} alt="" className="h-12 w-12 object-contain" />
                                             {trophy.count > 1 && (
                                                 <span className="absolute -right-1 -top-1 rounded-full border border-black/50 bg-amber-300 px-1.5 py-0.5 text-[8px] font-black text-black">
@@ -250,7 +252,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                                             <p className="text-[9px] text-slate-500 uppercase tracking-widest">Ultima S{trophy.latestSeason} - {trophy.type}</p>
                                         </div>
                                         <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Zap size={14} className="text-cyan-400" />
+                                            <Zap size={14} className="text-mineral-400" />
                                         </div>
                                     </motion.div>
                                 ))
@@ -259,19 +261,19 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                     </div>
 
                     {/* Strategy & Attributes */}
-                    <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-2xl p-4">
+                    <div className="bg-mineral-900/10 border border-mineral-500/20 rounded-2xl p-4">
                         <div className="flex items-center gap-2 mb-4">
-                            <TrendingUp size={16} className="text-cyan-400" />
+                            <TrendingUp size={16} className="text-mineral-400" />
                             <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Atributos de Comando</h3>
                         </div>
                         <div className="space-y-3">
-                            <AttributeRow label="Evolução" value={manager.attributes.evolution} color="bg-cyan-500" />
+                            <AttributeRow label="Evolução" value={manager.attributes.evolution} color="bg-mineral-500" />
                             <AttributeRow label="Negociação" value={manager.attributes.negotiation} color="bg-emerald-500" />
                             <AttributeRow label="Scouting" value={manager.attributes.scout} color="bg-purple-500" />
                         </div>
                         <div className="mt-4 grid grid-cols-2 gap-2">
-                            <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/10 p-3">
-                                <p className="text-[8px] font-black uppercase tracking-widest text-cyan-100">Fechamento</p>
+                            <div className="rounded-xl border border-mineral-400/15 bg-mineral-400/10 p-3">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-mineral-100">Fechamento</p>
                                 <p className="mt-1 text-sm font-black italic text-white">+{commandReadout.seasonGoldBonusPct}% ouro</p>
                             </div>
                             <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/10 p-3">
@@ -317,7 +319,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ manager, onClose, on
                         )}
                         <button
                             onClick={onClose}
-                            className="px-8 py-2 bg-white text-black text-[10px] font-black uppercase tracking-[0.3em] rounded-full hover:bg-cyan-400 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                            className="px-8 py-2 bg-white text-black text-[10px] font-black uppercase tracking-[0.3em] rounded-full hover:bg-mineral-400 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)]"
                         >
                             Fechar Dossier
                         </button>

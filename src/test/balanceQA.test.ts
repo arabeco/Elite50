@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { processNightMarket, calculateAttractiveness, calculatePostMatchProgression, calculateTradeAcceptanceChance } from '../engine/economyLogic';
-import { calculateTeamPower } from '../engine/gameLogic';
+import { calculateTeamPower, processTransferDay } from '../engine/gameLogic';
 import { generateInitialState, generatePlayer } from '../engine/generator';
 import { simulateMatch, TeamStats } from '../engine/MatchEngine';
 import { GameState, Player, Team } from '../types';
@@ -257,7 +257,74 @@ describe('balance QA', () => {
     expect(declinedCap.proposals[0].status).toBe('DECLINED');
     expect(state.players[capBreaker.id].contract.teamId).toBe('source');
 
+    const fullSquad = makeSquad('full', 500);
+    while (fullSquad.length < 15) {
+      fullSquad.push(makePlayer(`full_${fullSquad.length}`, 'full', 500, 'MEI'));
+    }
+    const fullTeam = makeTeam('full', fullSquad, 12000);
+    state.teams.full = fullTeam;
+    fullSquad.forEach(player => { state.players[player.id] = player; });
+    const declinedFullSquad = processNightMarket(state, [{
+      id: 'p4',
+      playerId: capBreaker.id,
+      fromTeamId: 'source',
+      toTeamId: 'full',
+      value: capBreaker.totalRating,
+      date: new Date().toISOString(),
+      status: 'PENDING'
+    }], state.teams, state.players);
+
+    expect(declinedFullSquad.proposals[0].status).toBe('DECLINED');
+    expect(fullTeam.squad).toHaveLength(15);
+
+    const humanPlayer = makePlayer('human_player', 'human', 600, 'MEI');
+    const humanTeam = makeTeam('human', [humanPlayer], 10000);
+    humanTeam.managerId = 'human_manager';
+    state.teams.human = humanTeam;
+    state.players[humanPlayer.id] = humanPlayer;
+    state.managers = {
+      human_manager: { id: 'human_manager', isNPC: false } as any,
+    };
+    const declinedHumanPoach = processNightMarket(state, [{
+      id: 'p5',
+      playerId: humanPlayer.id,
+      fromTeamId: 'human',
+      toTeamId: 'target',
+      value: humanPlayer.totalRating,
+      date: new Date().toISOString(),
+      status: 'PENDING'
+    }], state.teams, state.players);
+
+    expect(declinedHumanPoach.proposals[0].status).toBe('DECLINED');
+    expect(humanPlayer.contract.teamId).toBe('human');
+
     vi.restoreAllMocks();
+  });
+
+  it('never lets the daily AI routine manage a participant club', () => {
+    const state = generateInitialState();
+    const creatorTeam = state.teams.t_1;
+    const participantTeam = state.teams.t_2;
+    const participantManager = state.managers[participantTeam.managerId!];
+    participantManager.isNPC = false;
+    state.userTeamId = creatorTeam.id;
+    state.participants = [{
+      userId: 'participant-user',
+      teamId: participantTeam.id,
+      managerId: participantManager.id,
+      isCreator: false,
+      isObserver: false,
+    }];
+    participantTeam.squad.forEach(playerId => {
+      state.players[playerId].satisfaction = 0;
+    });
+    const squadBefore = [...participantTeam.squad];
+    const randomMock = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    processTransferDay(state);
+
+    expect(participantTeam.squad).toEqual(squadBefore);
+    randomMock.mockRestore();
   });
 
   it('keeps trade acceptance fair by rating gap', () => {

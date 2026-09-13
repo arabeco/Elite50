@@ -10,6 +10,7 @@ import { getBootImagePath } from '../utils/store';
 import { getEliteBadgeLabel, getEliteTier, getPlayerGlobalRank } from '../utils/elitePlayers';
 import { runElitePlayerFeedback, runInteractionFeedback } from '../utils/uiFeedback';
 import { GENESIS_DRAFT_LAST_DAY } from '../constants/gameConstants';
+import { getDistrictTheme } from '../utils/districtTheme';
 
 interface PlayerCardProps {
   player: Player;
@@ -51,52 +52,14 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
   const isLegacyDefaultAppearance = player.appearance.bodyId === 1 && player.appearance.hairId === 1 && player.appearance.bootId === 1;
   const visualGender = isLegacyDefaultAppearance ? (visualSeed % 2 === 0 ? 'M' : 'F') : player.appearance.gender;
 
-  const getDistrictStyle = () => {
-    switch (player.district) {
-      case 'NORTE':
-        return {
-          bg: 'from-cyan-900/80 to-fuchsia-900/80',
-          border: 'border-cyan-400/50',
-          text: 'text-cyan-300',
-          shadow: 'shadow-[0_0_15px_rgba(34,211,238,0.2)]',
-          badge: 'bg-cyan-950 text-cyan-400 border-cyan-500/30'
-        };
-      case 'SUL':
-        return {
-          bg: 'from-orange-900/80 to-stone-800/80',
-          border: 'border-orange-500/50',
-          text: 'text-orange-400',
-          shadow: 'shadow-[0_0_15px_rgba(249,115,22,0.2)]',
-          badge: 'bg-orange-950 text-orange-400 border-orange-500/30'
-        };
-      case 'LESTE':
-        return {
-          bg: 'from-emerald-900/80 to-amber-900/80',
-          border: 'border-emerald-500/50',
-          text: 'text-emerald-400',
-          shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
-          badge: 'bg-emerald-950 text-emerald-400 border-emerald-500/30'
-        };
-      case 'OESTE':
-        return {
-          bg: 'from-purple-950/90 to-black/90',
-          border: 'border-purple-500/50',
-          text: 'text-purple-400',
-          shadow: 'shadow-[0_0_15px_rgba(168,85,247,0.2)]',
-          badge: 'bg-purple-950 text-purple-400 border-purple-500/30'
-        };
-      default:
-        return {
-          bg: 'from-slate-800/80 to-slate-900/80',
-          border: 'border-slate-500/50',
-          text: 'text-slate-300',
-          shadow: 'shadow-[0_0_10px_rgba(100,116,139,0.2)]',
-          badge: 'bg-slate-800 text-slate-400 border-slate-600/30'
-        };
-    }
+  const districtTheme = getDistrictTheme(player.district);
+  const style = {
+    bg: districtTheme.gradient,
+    border: districtTheme.borderMuted,
+    text: districtTheme.text,
+    shadow: districtTheme.glow,
+    badge: districtTheme.badge,
   };
-
-  const style = getDistrictStyle();
 
   if (variant === 'block') {
     return (

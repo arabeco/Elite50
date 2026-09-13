@@ -7,6 +7,7 @@ import { PlayerAvatar } from './PlayerAvatar';
 import { useGameDispatch, useGameState } from '../store/GameContext';
 import { getTeamLogoAssetPath, getTeamUniformFile } from '../utils/teamIdentity';
 import { groupAchievementsByTrophy } from '../utils/trophyAssets';
+import { getDistrictTheme } from '../utils/districtTheme';
 
 interface TeamModalProps {
   team: Team;
@@ -61,6 +62,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
   const visualPlayer = starPlayer || squadPlayers[0] || null;
   const teamUniformFile = getTeamUniformFile(team.id);
   const teamLogoAssetPath = getTeamLogoAssetPath(team.id);
+  const districtTheme = getDistrictTheme(team.district);
   const allMatches: Match[] = [
     ...(Object.values(state.world.leagues || {}) as LeagueState[]).flatMap(leagueState => leagueState.matches || []),
     ...(state.world.eliteCup?.bracket?.round1 || []),
@@ -102,7 +104,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6" onClick={onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
-        className="relative w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl sm:rounded-[2rem] border border-cyan-500/40 bg-slate-950/90 shadow-[0_0_60px_rgba(6,182,212,0.18)]"
+        className={`relative w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl sm:rounded-[2rem] border bg-slate-950/90 ${districtTheme.borderMuted} ${districtTheme.glow}`}
       >
         <button
           type="button"
@@ -112,8 +114,8 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
           <X size={18} />
         </button>
 
-        <div className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-cyan-950/40 via-slate-950 to-fuchsia-950/30 p-4 sm:p-6">
-          <div className="absolute right-0 top-0 h-48 w-48 translate-x-16 -translate-y-16 rounded-full bg-cyan-500/10 blur-[70px]" />
+        <div className={`relative overflow-hidden border-b border-white/10 bg-gradient-to-br ${districtTheme.gradient} p-4 sm:p-6`}>
+          <div className="absolute right-0 top-0 h-48 w-48 translate-x-16 -translate-y-16 rounded-full blur-[70px]" style={{ backgroundColor: `rgba(${districtTheme.rgb}, 0.14)` }} />
           <div className="relative z-10 flex items-center gap-4 sm:gap-6 pr-10">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-2xl sm:h-24 sm:w-24">
               <TeamLogo
@@ -127,7 +129,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
               />
             </div>
             <div className="min-w-0">
-              <p className="mb-1 text-[9px] font-black uppercase tracking-[0.3em] text-cyan-300">
+              <p className={`mb-1 text-[9px] font-black uppercase tracking-[0.3em] ${districtTheme.text}`}>
                 {team.district} - {team.league}
               </p>
               <h2 className="truncate text-2xl font-black uppercase italic tracking-tighter text-white sm:text-4xl">
@@ -163,7 +165,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
                   isHumanClub
-                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                    ? 'border-mineral-500/30 bg-mineral-500/10 text-mineral-200'
                     : 'border-white/10 bg-white/[0.04] text-slate-300'
                 }`}>
                   <Shield size={12} /> {isHumanClub ? 'Humano' : 'IA'}
@@ -174,7 +176,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                     onClick={() => onManagerClick?.(manager)}
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest transition active:scale-[0.98] ${
                       isHumanClub
-                        ? 'border-cyan-400/35 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15'
+                        ? 'border-mineral-400/35 bg-mineral-400/10 text-mineral-100 hover:bg-mineral-400/15'
                         : 'border-violet-400/25 bg-violet-400/10 text-violet-100 hover:bg-violet-400/15'
                     }`}
                   >
@@ -188,7 +190,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 type="button"
                 disabled={isSyncing}
                 onClick={handleClaimTeam}
-                className="ml-auto hidden shrink-0 rounded-xl border border-cyan-400/40 bg-cyan-400 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-cyan-300 disabled:opacity-50 sm:block"
+                className="ml-auto hidden shrink-0 rounded-xl border border-mineral-400/40 bg-mineral-400 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-mineral-300 disabled:opacity-50 sm:block"
               >
                 Assumir clube
               </button>
@@ -202,7 +204,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
               type="button"
               disabled={isSyncing}
               onClick={handleClaimTeam}
-              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-cyan-300 disabled:opacity-50 sm:hidden"
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-mineral-400/40 bg-mineral-400 px-4 py-3 text-[9px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-mineral-300 disabled:opacity-50 sm:hidden"
             >
               <Shield size={13} /> Assumir clube
             </button>
@@ -213,12 +215,12 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
               <p className="text-[7px] font-black uppercase tracking-widest text-white/30">Total</p>
               <p className="mt-1 text-2xl font-black italic text-white">{titles.total}</p>
             </div>
-            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
-              <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Ligas</p>
+            <div className="rounded-xl border border-mineral-500/20 bg-mineral-500/10 p-3">
+              <p className="text-[7px] font-black uppercase tracking-widest text-mineral-200">Ligas</p>
               <p className="mt-1 text-2xl font-black italic text-white">{titles.league}</p>
             </div>
-            <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-3">
-              <p className="text-[7px] font-black uppercase tracking-widest text-fuchsia-200">Copas</p>
+            <div className="rounded-xl border border-mineral-500/20 bg-mineral-500/10 p-3">
+              <p className="text-[7px] font-black uppercase tracking-widest text-mineral-200">Copas</p>
               <p className="mt-1 text-2xl font-black italic text-white">{titles.cup}</p>
             </div>
             <div className={`rounded-xl border p-3 ${
@@ -231,8 +233,8 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                 {seasonScoreDelta >= 0 ? '+' : ''}{seasonScoreDelta}
               </p>
             </div>
-            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
-              <p className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Score Atual</p>
+            <div className="rounded-xl border border-mineral-500/20 bg-mineral-500/10 p-3">
+              <p className="text-[7px] font-black uppercase tracking-widest text-mineral-200">Score Atual</p>
               <p className="mt-1 text-2xl font-black italic text-white">{totalRating}</p>
             </div>
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-3">
@@ -244,7 +246,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
 
           <div className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-mineral-300">
                 <Shield size={13} /> Identidade visual
               </div>
               <span className="text-[8px] font-black uppercase tracking-widest text-white/25">logo + uniforme</span>
@@ -288,13 +290,13 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Arquivo do logo</p>
-                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-cyan-100/85">
+                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-mineral-100/85">
                     {teamLogoAssetPath || team.logo?.symbolId || 'sem arquivo fixo'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                   <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Arquivo do uniforme</p>
-                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-cyan-100/85">
+                  <p className="mt-2 break-all text-[10px] font-bold leading-relaxed text-mineral-100/85">
                     {teamUniformFile ? `/assetas/avatars/uniforms/${teamUniformFile}` : 'uniforme distrital'}
                   </p>
                 </div>
@@ -310,7 +312,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
 
           <div className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-3">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+              <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-mineral-300">
                 <BarChart3 size={13} /> Evolucao do score
               </div>
               <span className="text-[8px] font-black uppercase tracking-widest text-white/25">forca atual do elenco</span>
@@ -324,13 +326,13 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                   <div key={item.label} className="rounded-xl border border-white/5 bg-white/[0.035] p-2">
                     <div className="flex h-20 items-end">
                       <div
-                        className={`w-full rounded-t-lg ${isCurrent ? 'bg-cyan-300' : 'bg-white/20'}`}
+                        className={`w-full rounded-t-lg ${isCurrent ? 'bg-mineral-300' : 'bg-white/20'}`}
                         style={{ height }}
                       />
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <span className="text-[7px] font-black uppercase tracking-widest text-white/35">{item.label}</span>
-                      <span className={`text-[10px] font-black italic ${isCurrent ? 'text-cyan-200' : 'text-white/70'}`}>{item.value}</span>
+                      <span className={`text-[10px] font-black italic ${isCurrent ? 'text-mineral-200' : 'text-white/70'}`}>{item.value}</span>
                     </div>
                   </div>
                 );
@@ -373,7 +375,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
 
             <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-mineral-300">
                   <CalendarDays size={13} /> Ultimos resultados
                 </div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-white/25">{recentMatches.length}/5</span>
@@ -451,7 +453,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                   type="button"
                   onClick={() => setRosterViewMode(mode.id as 'cards' | 'list')}
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
-                    rosterViewMode === mode.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
+                    rosterViewMode === mode.id ? 'bg-mineral-500 text-black' : 'text-white/45 hover:text-white'
                   }`}
                 >
                   <mode.icon size={12} />
@@ -499,7 +501,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({ team, players, onClose, on
                             <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
                             <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{player.name}</p>
                           </div>
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">{player.role}</span>
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-mineral-300">{player.role}</span>
                           <span className="text-lg font-black italic text-white">{player.totalRating}</span>
                         </button>
                       ))}

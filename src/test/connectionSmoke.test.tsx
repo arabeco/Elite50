@@ -71,7 +71,7 @@ const authenticatedSession = (userId = 'qa_user', email = 'qa@elite50.local') =>
 };
 
 const StateProbe = ({ autoLoadFirstWorld = false }: { autoLoadFirstWorld?: boolean }) => {
-  const { state, worlds, isOnline, loadGame, logout, isAuthenticated, saveGame, setState, setWorldId } = useGame();
+  const { state, worldId, worlds, isOnline, loadGame, logout, isAuthenticated, saveGame, setState, setWorldId } = useGame();
 
   React.useEffect(() => {
     if (!autoLoadFirstWorld) return;
@@ -93,7 +93,7 @@ const StateProbe = ({ autoLoadFirstWorld = false }: { autoLoadFirstWorld?: boole
   return (
     <div>
       <div data-testid="world-name">{state.world.name || 'sem-nome'}</div>
-      <div data-testid="world-id">{state.worldId || 'sem-id'}</div>
+      <div data-testid="world-id">{worldId || 'sem-id'}</div>
       <div data-testid="world-count">{worlds.length}</div>
       <div data-testid="world-sync">{worlds[0]?.isLocalOnly === false ? 'synced' : worlds[0]?.isLocalOnly === true ? 'local' : 'unknown'}</div>
       <div data-testid="online">{String(isOnline)}</div>
@@ -143,6 +143,7 @@ describe('connection smoke', () => {
     const cached = createCachedWorld('fallback_world', 'Fallback Bravo');
     saveLocalGameState(cached, 'fallback_world', 'qa_local');
     loadRemoteGameStateMock.mockRejectedValueOnce(new Error('network down'));
+    const user = (await import('@testing-library/user-event')).default.setup();
 
     render(
       <GameProvider>
@@ -155,9 +156,12 @@ describe('connection smoke', () => {
       expect(screen.getByTestId('world-id')).toHaveTextContent('fallback_world');
       expect(screen.getByTestId('online')).toHaveTextContent('false');
     });
+
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    expect(saveRemoteGameStateMock).not.toHaveBeenCalled();
   });
 
-  it('restores the preferred world automatically when a session exists', async () => {
+  it('keeps authenticated users in world selection until they choose a world', async () => {
     authenticatedSession();
     const cached = createCachedWorld('remote_world', 'Remote Prime');
     saveLocalGameState(cached, 'remote_world', 'qa_user');
@@ -173,17 +177,16 @@ describe('connection smoke', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('world-name')).toHaveTextContent('Remote Prime');
-      expect(screen.getByTestId('world-id')).toHaveTextContent('remote_world');
       expect(screen.getByTestId('world-count')).toHaveTextContent('1');
-      expect(screen.getByTestId('online')).toHaveTextContent('true');
+      expect(screen.getByTestId('world-id')).toHaveTextContent('sem-id');
     });
+    expect(loadRemoteGameStateMock).not.toHaveBeenCalled();
   });
 
-  it('prefers the newer local cache when remote world metadata is older', async () => {
+  it('always prefers the authoritative remote world when the server responds', async () => {
     authenticatedSession();
     const localState = createCachedWorld('priority_world', 'Local Newer');
-    const remoteState = createCachedWorld('priority_world', 'Remote Older');
+    const remoteState = createCachedWorld('priority_world', 'Remote Authoritative');
 
     saveLocalGameState(localState, 'priority_world', 'qa_user');
     listUserWorldsMock.mockResolvedValueOnce([
@@ -193,14 +196,35 @@ describe('connection smoke', () => {
 
     render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('world-name')).toHaveTextContent('Local Newer');
+      expect(screen.getByTestId('world-name')).toHaveTextContent('Remote Authoritative');
       expect(screen.getByTestId('world-id')).toHaveTextContent('priority_world');
+      expect(screen.getByTestId('online')).toHaveTextContent('true');
     });
+  });
+
+  it('does not open stale cache when an authenticated remote load fails', async () => {
+    authenticatedSession();
+    const localState = createCachedWorld('protected_world', 'Stale Local');
+    saveLocalGameState(localState, 'protected_world', 'qa_user');
+    listUserWorldsMock.mockResolvedValueOnce([
+      { id: 'protected_world', name: 'Protected World', updatedAt: new Date().toISOString(), userId: 'qa_user' },
+    ]);
+    loadRemoteGameStateMock.mockRejectedValueOnce(new Error('network down'));
+
+    render(
+      <GameProvider>
+        <StateProbe autoLoadFirstWorld />
+      </GameProvider>
+    );
+
+    await waitFor(() => expect(loadRemoteGameStateMock).toHaveBeenCalledWith('protected_world'));
+    expect(screen.getByTestId('world-id')).toHaveTextContent('sem-id');
+    expect(screen.getByTestId('world-name')).not.toHaveTextContent('Stale Local');
   });
 
   it('keeps the local world available after logout', async () => {
@@ -216,7 +240,7 @@ describe('connection smoke', () => {
 
     render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 
@@ -303,7 +327,7 @@ describe('connection smoke', () => {
 
     const secondRender = render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 
@@ -330,7 +354,7 @@ describe('connection smoke', () => {
 
     render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 
@@ -368,7 +392,7 @@ describe('connection smoke', () => {
 
     const creatorRender = render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 
@@ -389,7 +413,7 @@ describe('connection smoke', () => {
 
     render(
       <GameProvider>
-        <StateProbe />
+        <StateProbe autoLoadFirstWorld />
       </GameProvider>
     );
 

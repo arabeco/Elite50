@@ -89,7 +89,7 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
         data-onboarding="squad-power"
         className="bg-black/40 border border-white/10 rounded-2xl p-4 sm:p-6 mb-6 shadow-xl backdrop-blur-md relative overflow-hidden group"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+        <div className="absolute inset-0 bg-gradient-to-r from-mineral-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
           <div className="flex items-center gap-4">
@@ -120,7 +120,7 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
                   ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)]'
                   : dashData.totalPoints > dashData.powerCap * 0.9
                     ? 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.8)]'
-                    : 'bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.8)]'
+                    : 'bg-mineral-500 shadow-none'
                   }`}
                 style={{ width: `${Math.min(100, (dashData.totalPoints / dashData.powerCap) * 100)}%` }}
               />
@@ -135,7 +135,7 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
             <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.25em] text-white/30">Visualização</p>
             <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white/50">Troque entre cards e lista</p>
           </div>
-          <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
+          <div className="sport-tabs hide-scrollbar">
             {[
               { id: 'cards', label: 'Cards', icon: LayoutGrid },
               { id: 'list', label: 'Lista', icon: Rows3 },
@@ -143,14 +143,10 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
               <button
                 key={mode.id}
                 type="button"
+                aria-pressed={rosterViewMode === mode.id}
                 onClick={() => setRosterViewMode(mode.id as 'cards' | 'list')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
-                  rosterViewMode === mode.id
-                    ? 'bg-cyan-500 text-black'
-                    : 'text-white/45 hover:text-white'
-                }`}
               >
-                <mode.icon size={12} />
+                <mode.icon size={14} aria-hidden="true" />
                 {mode.label}
               </button>
             ))}
@@ -169,12 +165,6 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
         </div>
       )}
 
-      {props.lineupOnly && selectedPlayer && (
-        <PlayerModal
-          player={selectedPlayer}
-          onClose={() => setSelectedPlayer(null)}
-        />
-      )}
       {props.lineupOnly && selectedPlayer && (
         <PlayerModal
           player={selectedPlayer}
@@ -208,7 +198,7 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
                         <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">{player.role} • {player.district}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-lg font-black italic text-cyan-300">{player.totalRating}</p>
+                        <p className="text-lg font-black italic text-mineral-300">{player.totalRating}</p>
                         <p className="text-[8px] font-bold uppercase tracking-widest text-white/25">
                           {player.contract.teamId ? state.teams[player.contract.teamId]?.name || 'Clube' : 'Sem clube'}
                         </p>
@@ -228,8 +218,8 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
           <div key={pos} className="space-y-3 sm:space-y-6">
             <div className="flex items-center gap-3 sm:gap-4 px-1 sm:px-2">
               <div className={`w-1 sm:w-1.5 h-4 sm:h-6 rounded-full shadow-[0_0_10px_rgba(var(--color-glow),0.5)] ${pos === 'GOL' ? 'bg-amber-500 shadow-amber-500/50' :
-                pos === 'ZAG' ? 'bg-cyan-500 shadow-cyan-500/50' :
-                  pos === 'MEI' ? 'bg-fuchsia-500 shadow-fuchsia-500/50' : 'bg-red-500 shadow-red-500/50'
+                pos === 'ZAG' ? 'bg-mineral-500 shadow-mineral-500/50' :
+                  pos === 'MEI' ? 'bg-mineral-500 shadow-mineral-500/50' : 'bg-red-500 shadow-red-500/50'
                 }`} />
               <div className="flex flex-col">
                 <h3 className="text-[9px] sm:text-xs font-black text-white uppercase tracking-[0.2em] sm:tracking-[0.3em] neon-text-white">{

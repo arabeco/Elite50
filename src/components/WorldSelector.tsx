@@ -56,7 +56,7 @@ export const WorldSelector: React.FC = () => {
 
   const phaseToneClass = (tone: string) => {
     if (tone === 'amber') return 'border-amber-400/30 bg-amber-400/10 text-amber-200';
-    if (tone === 'cyan') return 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200';
+    if (tone === 'cyan') return 'border-mineral-400/30 bg-mineral-400/10 text-mineral-200';
     if (tone === 'emerald') return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
     if (tone === 'purple') return 'border-purple-400/30 bg-purple-400/10 text-purple-200';
     return 'border-white/10 bg-white/[0.04] text-slate-300';
@@ -166,25 +166,25 @@ export const WorldSelector: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#050814] text-slate-300 font-sans flex flex-col items-center p-4 sm:p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#101114] text-slate-300 font-sans flex flex-col items-center p-4 sm:p-6 relative overflow-hidden">
       {isSyncing && (
         <div className="fixed left-0 right-0 top-0 z-50 h-1 bg-white/10">
-          <div className="h-full w-1/2 animate-pulse rounded-r-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.8)]" />
+          <div className="h-full w-1/2 animate-pulse rounded-r-full bg-mineral-400 shadow-none" />
         </div>
       )}
       {/* Background Decor */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-cyan-500/10 blur-[120px] rounded-full" />
+        <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-mineral-500/10 blur-[120px] rounded-full" />
         <div className="absolute -bottom-[20%] -right-[10%] w-[60%] h-[60%] bg-purple-500/10 blur-[120px] rounded-full" />
       </div>
 
       <div className="relative z-10 w-full max-w-6xl">
         <div className="text-center mb-8">
-          <div className="inline-block p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-3xl mb-6 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
-            <Globe size={48} className="text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
+          <div className="inline-block p-4 bg-mineral-500/10 border border-mineral-500/20 rounded-3xl mb-6 shadow-none">
+            <Globe size={48} className="text-mineral-400 shadow-none" />
           </div>
           <h1 className="text-4xl font-black text-white uppercase tracking-[0.2em] mb-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-            Multiverso <span className="text-cyan-400">Elite</span>
+            Multiverso <span className="text-mineral-400">Elite</span>
           </h1>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Explore as linhas do tempo disponíveis</p>
         </div>
@@ -194,7 +194,7 @@ export const WorldSelector: React.FC = () => {
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
           <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200">
+              <span className="rounded-full border border-mineral-400/25 bg-mineral-400/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-mineral-200">
                 Criados {createdWorldCount}/{MAX_CREATED_WORLDS_PER_USER}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
@@ -211,7 +211,7 @@ export const WorldSelector: React.FC = () => {
             type="button"
             onClick={() => refreshWorlds()}
             disabled={isSyncing}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200 disabled:cursor-wait disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition hover:border-mineral-400/40 hover:text-mineral-200 disabled:cursor-wait disabled:opacity-50"
           >
             <RefreshCcw size={14} className={isSyncing ? 'animate-spin' : ''} />
             Atualizar
@@ -223,7 +223,7 @@ export const WorldSelector: React.FC = () => {
           <button
             onClick={() => setActiveTab('my-worlds')}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'my-worlds'
-              ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
+              ? 'bg-mineral-500 text-black shadow-lg shadow-mineral-500/20'
               : 'text-slate-500 hover:text-slate-300'
               }`}
           >
@@ -240,24 +240,24 @@ export const WorldSelector: React.FC = () => {
           </button>
         </div>
 
-        <div className="mb-5 rounded-2xl border border-cyan-500/25 bg-black/45 p-3 shadow-[0_0_24px_rgba(34,211,238,0.08)]">
+        <div className="mb-5 rounded-2xl border border-mineral-500/25 bg-black/45 p-3 shadow-none">
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
-              <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-300" />
+              <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-mineral-300" />
               <input
                 type="text"
                 value={joinCode}
                 onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                 onKeyDown={(event) => event.key === 'Enter' && handleJoinByCode()}
                 placeholder="ENTRAR POR CODIGO: ELITE-123456"
-                className="w-full rounded-xl border border-white/10 bg-black/45 py-3 pl-10 pr-4 text-xs font-black uppercase tracking-widest text-white outline-none transition placeholder:text-slate-700 focus:border-cyan-400/60"
+                className="w-full rounded-xl border border-white/10 bg-black/45 py-3 pl-10 pr-4 text-xs font-black uppercase tracking-widest text-white outline-none transition placeholder:text-slate-700 focus:border-mineral-400/60"
               />
             </div>
             <button
               type="button"
               disabled={isSyncing || !joinCode.trim()}
               onClick={handleJoinByCode}
-              className="rounded-xl border border-cyan-400/35 bg-cyan-400 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-mineral-400/35 bg-mineral-400 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-mineral-300 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Entrar
             </button>
@@ -268,16 +268,16 @@ export const WorldSelector: React.FC = () => {
           {activeTab === 'my-worlds' ? (
             <>
               {worlds.length === 0 && (
-                <div className="col-span-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[0.04] p-6">
+                <div className="col-span-full rounded-2xl border border-dashed border-mineral-400/20 bg-mineral-400/[0.04] p-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-200">Lobby limpo</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-mineral-200">Lobby limpo</p>
                       <h3 className="mt-2 text-xl font-black uppercase tracking-wider text-white">Crie ou entre em um mundo</h3>
                       <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-500">
                         Use codigo de convite ou abra uma comunidade. Mundo criado entra no lobby para escolher clube.
                       </p>
                     </div>
-                    <Globe size={42} className="text-cyan-300/50" />
+                    <Globe size={42} className="text-mineral-300/50" />
                   </div>
                 </div>
               )}
@@ -287,16 +287,16 @@ export const WorldSelector: React.FC = () => {
                 return (
                 <div
                   key={world.id}
-                  className="group relative bg-black/40 backdrop-blur-xl border border-white/5 hover:border-cyan-500/50 rounded-2xl p-6 text-left transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,211,238,0.1)] overflow-hidden"
+                  className="group relative bg-black/40 backdrop-blur-xl border border-white/5 hover:border-mineral-500/50 rounded-2xl p-6 text-left transition-all duration-300 hover:shadow-none overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
-                    <Globe size={64} className="text-cyan-400" />
+                    <Globe size={64} className="text-mineral-400" />
                   </div>
 
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0">
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider group-hover:text-cyan-400 transition-colors truncate">
+                        <h3 className="text-xl font-black text-white uppercase tracking-wider group-hover:text-mineral-400 transition-colors truncate">
                           {world.name}
                         </h3>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -366,24 +366,24 @@ export const WorldSelector: React.FC = () => {
                     onClick={() => handleSelectWorld(world.id)}
                     className="mt-6 w-full flex items-center justify-between group/enter"
                   >
-                    <span className="text-[10px] font-black text-cyan-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
+                    <span className="text-[10px] font-black text-mineral-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
                       Entrar no Mundo
                     </span>
-                    <ChevronRight size={16} className="text-cyan-500 transform group-hover:translate-x-1 transition-transform" />
+                    <ChevronRight size={16} className="text-mineral-500 transform group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
               )})}
 
               {isCreating ? (
-                <div className="bg-black/60 backdrop-blur-xl border border-cyan-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(34,211,238,0.15)] animate-in zoom-in-95 duration-300">
-                  <h3 className="text-sm font-black text-cyan-400 uppercase tracking-widest mb-4">Novo Universo</h3>
+                <div className="bg-black/60 backdrop-blur-xl border border-mineral-500/30 rounded-2xl p-6 shadow-none animate-in zoom-in-95 duration-300">
+                  <h3 className="text-sm font-black text-mineral-400 uppercase tracking-widest mb-4">Novo Universo</h3>
                   <input
                     autoFocus
                     type="text"
                     value={newWorldName}
                     onChange={(e) => setNewWorldName(e.target.value)}
                     placeholder="NOME DO MUNDO..."
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:border-cyan-500/50 focus:outline-none transition-all placeholder:text-slate-700 uppercase tracking-widest mb-4"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:border-mineral-500/50 focus:outline-none transition-all placeholder:text-slate-700 uppercase tracking-widest mb-4"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateWorld()}
                   />
                   <label className="mb-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -391,7 +391,7 @@ export const WorldSelector: React.FC = () => {
                       type="checkbox"
                       checked={isPublicWorld}
                       onChange={(e) => setIsPublicWorld(e.target.checked)}
-                      className="h-4 w-4 accent-cyan-400"
+                      className="h-4 w-4 accent-mineral-400"
                     />
                     Mostrar na comunidade
                   </label>
@@ -404,12 +404,12 @@ export const WorldSelector: React.FC = () => {
                         type="button"
                         onClick={() => setNewWorldClockProfile('REAL')}
                         className={`rounded-xl border px-3 py-3 text-left transition-all ${newWorldClockProfile === 'REAL'
-                          ? 'border-cyan-400/50 bg-cyan-500/12 text-white'
+                          ? 'border-mineral-400/50 bg-mineral-500/12 text-white'
                           : 'border-white/10 bg-black/30 text-slate-500 hover:border-white/20 hover:text-slate-300'
                           }`}
                       >
                         <div className="text-[10px] font-black uppercase tracking-widest">Real</div>
-                        <div className={`mt-1 text-[9px] font-bold uppercase tracking-wide ${newWorldClockProfile === 'REAL' ? 'text-cyan-200' : 'text-slate-600'}`}>1 dia = 24h</div>
+                        <div className={`mt-1 text-[9px] font-bold uppercase tracking-wide ${newWorldClockProfile === 'REAL' ? 'text-mineral-200' : 'text-slate-600'}`}>1 dia = 24h</div>
                       </button>
                       {canUseDevClock && (
                         <button
@@ -429,7 +429,7 @@ export const WorldSelector: React.FC = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={handleCreateWorld}
-                      className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-black font-black text-[10px] uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg shadow-cyan-500/20"
+                      className="flex-1 bg-mineral-500 hover:bg-mineral-400 text-black font-black text-[10px] uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg shadow-mineral-500/20"
                     >
                       Confirmar
                     </button>
@@ -454,18 +454,18 @@ export const WorldSelector: React.FC = () => {
                   className={`group rounded-2xl border border-dashed p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 ${
                     hasReachedCreatedWorldLimit
                       ? 'cursor-not-allowed border-amber-400/20 bg-amber-500/5'
-                      : 'bg-black/20 border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5'
+                      : 'bg-black/20 border-white/10 hover:border-mineral-500/50 hover:bg-mineral-500/5'
                   }`}
                 >
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
                     hasReachedCreatedWorldLimit
                       ? 'bg-amber-500/10'
-                      : 'bg-white/5 group-hover:bg-cyan-500/20 group-hover:scale-110'
+                      : 'bg-white/5 group-hover:bg-mineral-500/20 group-hover:scale-110'
                   }`}>
-                    <Plus size={24} className={hasReachedCreatedWorldLimit ? 'text-amber-300/60' : 'text-slate-500 group-hover:text-cyan-400'} />
+                    <Plus size={24} className={hasReachedCreatedWorldLimit ? 'text-amber-300/60' : 'text-slate-500 group-hover:text-mineral-400'} />
                   </div>
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${
-                    hasReachedCreatedWorldLimit ? 'text-amber-200/70' : 'text-slate-500 group-hover:text-cyan-400'
+                    hasReachedCreatedWorldLimit ? 'text-amber-200/70' : 'text-slate-500 group-hover:text-mineral-400'
                   }`}>
                     {hasReachedCreatedWorldLimit ? `Limite ${createdWorldCount}/${MAX_CREATED_WORLDS_PER_USER}` : 'Criar Novo Universo'}
                   </span>

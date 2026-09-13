@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react';
+import { RecruitmentPanel } from './RecruitmentPanel';
 import { useGame } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { useMatchSimulation } from '../../hooks/useMatchSimulation';
@@ -16,6 +17,7 @@ import { getMatchStatus } from '../../utils/matchUtils';
 import { Player, Team, GameNotification, ClubOffer, Match } from '../../types';
 import { GENESIS_DRAFT_LAST_DAY } from '../../constants/gameConstants';
 import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
+import { getDistrictFromLeagueKey, getDistrictTheme } from '../../utils/districtTheme';
 import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } from 'lucide-react';
 export const WorldTab = (props: any) => {
   const { state, setState } = useGame();
@@ -35,6 +37,7 @@ export const WorldTab = (props: any) => {
   const [activeCompetition, setActiveCompetition] = useState<'league' | 'elite' | 'district'>('league');
   const [activeLeagueTab, setActiveLeagueTab] = useState<'standings' | 'scorers' | 'all-teams'>('standings');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const initializedLeagueForTeamRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (activeWorldTab !== 'leagues') return;
@@ -50,15 +53,20 @@ export const WorldTab = (props: any) => {
           || key === userTeam.league;
       })
       : null;
-    const nextLeague = userLeagueKey || (keys.includes(activeLeague) ? activeLeague : keys[0]);
+    const teamKey = userTeam?.id || 'no-team';
+    const shouldInitializeForTeam = initializedLeagueForTeamRef.current !== teamKey;
+    const nextLeague = shouldInitializeForTeam
+      ? (userLeagueKey || keys[0])
+      : (keys.includes(activeLeague) ? activeLeague : keys[0]);
 
     if (nextLeague !== activeLeague) {
       setActiveLeague(nextLeague);
     }
-    if (activeLeagueTab !== 'standings') {
+    if (shouldInitializeForTeam) {
+      initializedLeagueForTeamRef.current = teamKey;
       setActiveLeagueTab('standings');
     }
-  }, [activeWorldTab, dashData.leaguesData, activeLeague, activeLeagueTab, userTeam]);
+  }, [activeWorldTab, dashData.leaguesData, activeLeague, userTeam]);
 
   // Market filters
   const [marketSearch, setMarketSearch] = useState('');
@@ -70,6 +78,7 @@ export const WorldTab = (props: any) => {
   const [marketOnlyExiled, setMarketOnlyExiled] = useState(false);
   const [marketPotentialMin, setMarketPotentialMin] = useState(0);
   const [marketLimit, setMarketLimit] = useState(50);
+  const [marketSort, setMarketSort] = useState<'interest' | 'power'>('interest');
   const [showMarketFilters, setShowMarketFilters] = useState(false);
   const [marketViewMode, setMarketViewMode] = useState<'cards' | 'list'>('cards');
   const [rankingSearch, setRankingSearch] = useState('');
@@ -84,7 +93,7 @@ export const WorldTab = (props: any) => {
   // Derived data
   const players = Object.values(state.players);
   const { leaguesData } = dashData as any;
-  const filteredMarketPlayers = players
+  const marketPlayers = players
     .filter(p => {
       const isExiled = !p.contract.teamId;
       const isOwnPlayer = Boolean(userTeam?.id && p.contract.teamId === userTeam.id);
@@ -99,6 +108,18 @@ export const WorldTab = (props: any) => {
       const matchesPotential = p.potential >= marketPotentialMin;
       return matchesSearch && matchesDistrict && matchesPosition && matchesPoints && matchesSatisfaction && matchesPotential;
     })
+    .sort((a, b) => {
+      if (marketSort === 'power') return b.totalRating - a.totalRating;
+
+      const interestScore = (player: Player) => {
+        const freeAgentBonus = player.contract.teamId ? 0 : 20;
+        const sameDistrictBonus = userTeam && (player.originDistrict || player.district) === userTeam.district ? 15 : 0;
+        return (100 - player.satisfaction) + freeAgentBonus + sameDistrictBonus;
+      };
+
+      return interestScore(b) - interestScore(a) || b.totalRating - a.totalRating;
+    });
+  const filteredMarketPlayers = marketPlayers
     .slice(0, marketLimit);
   const userSquadPlayers = userTeam ? userTeam.squad.map(id => state.players[id]).filter(Boolean) : [];
   const unhappySquadPlayers = [...userSquadPlayers]
@@ -272,7 +293,7 @@ export const WorldTab = (props: any) => {
           </button>
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl glass-card-neon border-white/5 flex items-center justify-center shadow-2xl relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-fuchsia-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute inset-0 bg-gradient-to-br from-mineral-500/10 to-mineral-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
               {team.logo ? (
                 <TeamLogo
                   primaryColor={team.logo.primary}
@@ -298,7 +319,7 @@ export const WorldTab = (props: any) => {
             <div>
               <h2 className="text-xl sm:text-4xl font-black text-white tracking-tight uppercase italic neon-text-white truncate max-w-[200px] sm:max-w-none">{team.name}</h2>
               <div className="flex items-center gap-2 mt-0.5 sm:mt-1">
-                <span className="text-cyan-400 font-black tracking-[0.15em] sm:tracking-[0.2em] text-[8px] sm:text-[10px] uppercase">Clube Profissional</span>
+                <span className="text-mineral-400 font-black tracking-[0.15em] sm:tracking-[0.2em] text-[8px] sm:text-[10px] uppercase">Clube Profissional</span>
                 <span className="w-1 h-1 rounded-full bg-white/20" />
                 <span className="text-white/40 font-bold tracking-widest text-[8px] sm:text-[10px] uppercase">{team.district}</span>
               </div>
@@ -306,17 +327,21 @@ export const WorldTab = (props: any) => {
           </div>
         </header>
 
-        <div className="flex gap-2 sm:gap-3 mb-2 sm:mb-4">
+        <div className="sport-tabs hide-scrollbar mb-2 sm:mb-4">
           <button
+            type="button"
+            aria-pressed={worldTeamSubTab === 'squad'}
             onClick={() => setWorldTeamSubTab('squad')}
-            className={`flex-1 sm:flex-none px-4 sm:px-8 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-[0.1em] sm:tracking-[0.2em] transition-all ${worldTeamSubTab === 'squad' ? 'glass-card-neon border-cyan-500/50 text-white shadow-[0_0_20px_rgba(34,211,238,0.2)]' : 'glass-card border-white/5 text-white/40 hover:text-white/60'}`}
           >
+            <Users size={15} aria-hidden="true" />
             Elenco
           </button>
           <button
+            type="button"
+            aria-pressed={worldTeamSubTab === 'tactics'}
             onClick={() => setWorldTeamSubTab('tactics')}
-            className={`flex-1 sm:flex-none px-4 sm:px-8 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-[0.1em] sm:tracking-[0.2em] transition-all ${worldTeamSubTab === 'tactics' ? 'glass-card-neon border-fuchsia-500/50 text-white shadow-[0_0_20px_rgba(217,70,239,0.2)]' : 'glass-card border-white/5 text-white/40 hover:text-white/60'}`}
           >
+            <Brain size={15} aria-hidden="true" />
             Tática
           </button>
         </div>
@@ -341,12 +366,12 @@ export const WorldTab = (props: any) => {
         )}
 
         {worldTeamSubTab === 'tactics' && (
-          <div className="glass-card-neon white-gradient-sheen border-cyan-500/20 rounded-2xl sm:rounded-[2rem] p-4 sm:p-8 shadow-[0_0_50px_rgba(34,211,238,0.1)] relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[100px] pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-fuchsia-500/5 blur-[100px] pointer-events-none" />
+          <div className="glass-card-neon white-gradient-sheen border-mineral-500/20 rounded-2xl sm:rounded-[2rem] p-4 sm:p-8 shadow-none relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-mineral-500/5 blur-[100px] pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-mineral-500/5 blur-[100px] pointer-events-none" />
 
             <h3 className="text-[10px] sm:text-xs font-black text-white/40 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-4 sm:mb-8 flex items-center gap-3">
-              <div className="w-4 sm:w-8 h-[1px] bg-cyan-500/50" />
+              <div className="w-4 sm:w-8 h-[1px] bg-mineral-500/50" />
               Formação e Estilo
             </h3>
 
@@ -362,7 +387,7 @@ export const WorldTab = (props: any) => {
                   <div className="text-5xl sm:text-7xl font-black text-white italic tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] mb-2 sm:mb-4 group-hover:scale-110 transition-transform duration-500">
                     {team.tactics.preferredFormation}
                   </div>
-                  <div className="text-[8px] sm:text-[10px] text-cyan-400 font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+                  <div className="text-[8px] sm:text-[10px] text-mineral-400 font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] shadow-none">
                     Formação Padrão
                   </div>
                 </div>
@@ -370,7 +395,7 @@ export const WorldTab = (props: any) => {
 
               <div className="space-y-4 sm:space-y-6">
                 <div className="glass-card border-white/5 rounded-2xl sm:rounded-3xl p-4 sm:p-6 hover:border-white/10 transition-all group">
-                  <div className="text-[8px] sm:text-[10px] text-white/40 font-black uppercase tracking-[0.2em] mb-1 sm:mb-2 group-hover:text-cyan-400 transition-colors">Estilo de Jogo</div>
+                  <div className="text-[8px] sm:text-[10px] text-white/40 font-black uppercase tracking-[0.2em] mb-1 sm:mb-2 group-hover:text-mineral-400 transition-colors">Estilo de Jogo</div>
                   <div className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">{team.tactics.playStyle}</div>
                 </div>
 
@@ -380,19 +405,19 @@ export const WorldTab = (props: any) => {
                     <div>
                       <div className="flex justify-between text-[8px] sm:text-[10px] font-black uppercase tracking-widest mb-2 sm:mb-3">
                         <span className="text-white/60">Agressividade</span>
-                        <span className="text-fuchsia-400 neon-text-fuchsia">80%</span>
+                        <span className="text-mineral-400 neon-text-fuchsia">80%</span>
                       </div>
                       <div className="h-1.5 sm:h-2 bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
-                        <div className="h-full bg-gradient-to-r from-fuchsia-600 to-fuchsia-400 rounded-full shadow-[0_0_15px_rgba(217,70,239,0.5)] w-[80%]" />
+                        <div className="h-full bg-gradient-to-r from-mineral-600 to-mineral-400 rounded-full shadow-none w-[80%]" />
                       </div>
                     </div>
                     <div>
                       <div className="flex justify-between text-[8px] sm:text-[10px] font-black uppercase tracking-widest mb-2 sm:mb-3">
                         <span className="text-white/60">Posse de Bola</span>
-                        <span className="text-cyan-400 neon-text-cyan">50%</span>
+                        <span className="text-mineral-400 neon-text-cyan">50%</span>
                       </div>
                       <div className="h-1.5 sm:h-2 bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
-                        <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.5)] w-[50%]" />
+                        <div className="h-full bg-gradient-to-r from-mineral-600 to-mineral-400 rounded-full shadow-none w-[50%]" />
                       </div>
                     </div>
                   </div>
@@ -408,23 +433,21 @@ export const WorldTab = (props: any) => {
   return (
     <div className="space-y-3 sm:space-y-6 animate-in fade-in duration-700 pb-24">
       {/* Navigation Tabs */}
-      <div data-onboarding="world-tabs" className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar py-2 px-1">
+      <div data-onboarding="world-tabs" className="sport-tabs hide-scrollbar">
         {[
-          { id: 'leagues', icon: Trophy, label: 'Ligas', color: 'emerald' },
-          { id: 'news', icon: Newspaper, label: 'Notícias', color: 'purple' },
-          { id: 'market', icon: ShoppingCart, label: 'Mercado', color: 'orange' },
-          { id: 'ranking', icon: Award, label: 'Ranking', color: 'cyan' },
-          { id: 'teams', icon: Users, label: 'Clubes', color: 'fuchsia' },
+          { id: 'leagues', icon: Trophy, label: 'Ligas' },
+          { id: 'news', icon: Newspaper, label: 'Notícias' },
+          { id: 'market', icon: ShoppingCart, label: 'Mercado' },
+          { id: 'ranking', icon: Award, label: 'Ranking' },
+          { id: 'teams', icon: Users, label: 'Clubes' },
         ].map(tab => (
           <button
             key={tab.id}
+            type="button"
+            aria-pressed={activeWorldTab === tab.id}
             onClick={() => setActiveWorldTab(tab.id as any)}
-            className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em] transition-all whitespace-nowrap backdrop-blur-xl border ${activeWorldTab === tab.id
-              ? `bg-${tab.color}-500/20 border-${tab.color}-500/50 text-white shadow-[0_0_20px_rgba(var(--color-glow),0.3)]`
-              : 'glass-card border-white/5 text-white/40 hover:text-white/60 hover:border-white/10'
-              }`}
           >
-            <tab.icon size={window.innerWidth < 640 ? 14 : 16} className={activeWorldTab === tab.id ? `text-${tab.color}-400` : ''} />
+            <tab.icon size={15} aria-hidden="true" />
             {tab.label}
           </button>
         ))}
@@ -437,14 +460,14 @@ export const WorldTab = (props: any) => {
               <div
                 key={notification.id}
                 className={`glass-card rounded-xl sm:rounded-2xl p-3 sm:p-5 flex gap-3 sm:gap-5 transition-all group hover:bg-white/5 ${!notification.read
-                  ? 'glass-card-neon border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1)]'
+                  ? 'glass-card-neon border-mineral-500/30 shadow-none'
                   : 'border-white/5'
                   }`}
               >
                 <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 border transition-all group-hover:scale-110 shadow-lg ${notification.type === 'transfer' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                  notification.type === 'match' ? 'bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400' :
+                  notification.type === 'match' ? 'bg-mineral-500/10 border-mineral-500/30 text-mineral-400' :
                     notification.type === 'crisis' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
-                      'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                      'bg-mineral-500/10 border-mineral-500/30 text-mineral-400'
                   }`}>
                   {notification.type === 'transfer' ? (
                     notification.message.includes('assinou com o') ? (() => {
@@ -510,8 +533,8 @@ export const WorldTab = (props: any) => {
                       <h3 className="font-black text-white uppercase tracking-wider text-[10px] sm:text-xs italic truncate max-w-[120px] sm:max-w-none">{notification.title}</h3>
                       {!notification.read && (
                         <div className="flex gap-1">
-                          <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,1)]" />
-                          <span className="text-[7px] sm:text-[8px] font-black text-cyan-400 uppercase tracking-widest hidden sm:inline">Novo</span>
+                          <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full bg-mineral-400 animate-pulse shadow-none" />
+                          <span className="text-[7px] sm:text-[8px] font-black text-mineral-400 uppercase tracking-widest hidden sm:inline">Novo</span>
                         </div>
                       )}
                     </div>
@@ -536,7 +559,7 @@ export const WorldTab = (props: any) => {
               </div>
             ))
           ) : (
-            <div className="glass-card-neon white-gradient-sheen rounded-2xl sm:rounded-[2rem] border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)] p-12 sm:p-20 flex flex-col items-center justify-center text-center">
+            <div className="glass-card-neon white-gradient-sheen rounded-2xl sm:rounded-[2rem] border-mineral-500/20 shadow-none p-12 sm:p-20 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/5 flex items-center justify-center text-white/10 mb-4 sm:mb-6">
                 <Newspaper size={window.innerWidth < 640 ? 32 : 48} />
               </div>
@@ -557,10 +580,10 @@ export const WorldTab = (props: any) => {
         return (
           <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {userTeam && userStanding && activeCompetition === 'league' && (
-              <section className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 sm:p-4">
+              <section style={{ borderColor: getDistrictTheme(userTeam.district).color }} className="rounded-2xl border bg-white/[0.03] p-3 sm:p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[8px] font-black uppercase tracking-[0.25em] text-emerald-200">Sua liga agora</p>
+                    <p style={{ color: getDistrictTheme(userTeam.district).color }} className="text-[8px] font-black uppercase tracking-[0.25em]">Sua liga agora</p>
                     <h3 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">
                       {activeLeagueData.name}
                     </h3>
@@ -576,7 +599,7 @@ export const WorldTab = (props: any) => {
                     </div>
                     <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
                       <p className="text-[7px] font-black uppercase tracking-widest text-white/35">SG</p>
-                      <p className="text-lg font-black italic text-white">{userStanding.goalsFor - userStanding.goalsAgainst}</p>
+                      <p className="text-lg font-black italic text-white">{Number.isFinite(userStanding.gd) ? userStanding.gd : 0}</p>
                     </div>
                   </div>
                 </div>
@@ -587,10 +610,10 @@ export const WorldTab = (props: any) => {
             <div className="grid grid-cols-2 gap-2 sm:gap-4 pb-2 px-1">
               <div
                 onClick={() => setActiveCompetition('elite')}
-                className={`w-full relative overflow-hidden glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-5 flex items-center gap-3 sm:gap-4 cursor-pointer transition-all group border-white/5 ${activeCompetition === 'elite' ? 'glass-card-neon border-fuchsia-500/50 shadow-[0_0_30px_rgba(217,70,239,0.2)]' : 'hover:border-white/10'}`}
+                className={`w-full relative overflow-hidden glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-5 flex items-center gap-3 sm:gap-4 cursor-pointer transition-all group border-white/5 ${activeCompetition === 'elite' ? 'glass-card-neon border-mineral-500/50 shadow-none' : 'hover:border-white/10'}`}
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className={`w-8 h-8 sm:w-14 sm:h-14 rounded-lg sm:rounded-2xl flex items-center justify-center border shrink-0 transition-all ${activeCompetition === 'elite' ? 'bg-fuchsia-500/20 border-fuchsia-500/50 text-fuchsia-400 shadow-[0_0_15px_rgba(217,70,239,0.3)]' : 'glass-card border-white/5 text-white/20'}`}>
+                <div className="absolute inset-0 bg-gradient-to-br from-mineral-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className={`w-8 h-8 sm:w-14 sm:h-14 rounded-lg sm:rounded-2xl flex items-center justify-center border shrink-0 transition-all ${activeCompetition === 'elite' ? 'bg-mineral-500/20 border-mineral-500/50 text-mineral-400 shadow-none' : 'glass-card border-white/5 text-white/20'}`}>
                   <Flame size={window.innerWidth < 640 ? 18 : 24} className={activeCompetition === 'elite' ? 'animate-pulse' : ''} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -598,16 +621,16 @@ export const WorldTab = (props: any) => {
                   <p className="text-[8px] sm:text-[9px] text-white/30 font-bold uppercase tracking-widest mt-0.5 sm:mt-1 truncate">Continental • Top 32</p>
                 </div>
                 {activeCompetition === 'elite' && (
-                  <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,1)]" />
+                  <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-mineral-500 shadow-none" />
                 )}
               </div>
 
               <div
                 onClick={() => setActiveCompetition('district')}
-                className={`w-full relative overflow-hidden glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-5 flex items-center gap-3 sm:gap-4 cursor-pointer transition-all group border-white/5 ${activeCompetition === 'district' ? 'glass-card-neon border-cyan-500/50 shadow-[0_0_30px_rgba(34,211,238,0.2)]' : 'hover:border-white/10'}`}
+                className={`w-full relative overflow-hidden glass-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-5 flex items-center gap-3 sm:gap-4 cursor-pointer transition-all group border-white/5 ${activeCompetition === 'district' ? 'glass-card-neon border-mineral-500/50 shadow-none' : 'hover:border-white/10'}`}
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className={`w-8 h-8 sm:w-14 sm:h-14 rounded-lg sm:rounded-2xl flex items-center justify-center border shrink-0 transition-all ${activeCompetition === 'district' ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'glass-card border-white/5 text-white/20'}`}>
+                <div className="absolute inset-0 bg-gradient-to-br from-mineral-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className={`w-8 h-8 sm:w-14 sm:h-14 rounded-lg sm:rounded-2xl flex items-center justify-center border shrink-0 transition-all ${activeCompetition === 'district' ? 'bg-mineral-500/20 border-mineral-500/50 text-mineral-400 shadow-none' : 'glass-card border-white/5 text-white/20'}`}>
                   <Globe size={window.innerWidth < 640 ? 18 : 24} className={activeCompetition === 'district' ? 'animate-pulse' : ''} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -615,7 +638,7 @@ export const WorldTab = (props: any) => {
                   <p className="text-[8px] sm:text-[9px] text-white/30 font-bold uppercase tracking-widest mt-0.5 sm:mt-1 truncate">Regional • Top 16</p>
                 </div>
                 {activeCompetition === 'district' && (
-                  <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(34,211,238,1)]" />
+                  <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-mineral-500 shadow-none" />
                 )}
               </div>
             </div>
@@ -627,66 +650,28 @@ export const WorldTab = (props: any) => {
                 if (!league) return null;
                 const isActive = activeLeague === leagueKey && activeCompetition === 'league';
 
-                const getClasses = () => {
-                  const keyStr = String(leagueKey);
-                  switch (true) {
-                    case keyStr.includes('norte') || keyStr.includes('cyan'):
-                      return {
-                        glow: 'rgba(34,211,238,0.4)',
-                        color: 'cyan',
-                        border: 'border-cyan-500/50',
-                        bg: 'bg-cyan-500/10'
-                      };
-                    case keyStr.includes('sul') || keyStr.includes('orange'):
-                      return {
-                        glow: 'rgba(249,115,22,0.4)',
-                        color: 'orange',
-                        border: 'border-orange-500/50',
-                        bg: 'bg-orange-500/10'
-                      };
-                    case keyStr.includes('leste') || keyStr.includes('green') || keyStr.includes('emerald'):
-                      return {
-                        glow: 'rgba(16,185,129,0.4)',
-                        color: 'emerald',
-                        border: 'border-emerald-500/50',
-                        bg: 'bg-emerald-500/10'
-                      };
-                    case keyStr.includes('oeste') || keyStr.includes('purple'):
-                      return {
-                        glow: 'rgba(168,85,247,0.4)',
-                        color: 'purple',
-                        border: 'border-purple-500/50',
-                        bg: 'bg-purple-500/10'
-                      };
-                    default:
-                      return {
-                        glow: 'rgba(255,255,255,0.4)',
-                        color: 'white',
-                        border: 'border-white/50',
-                        bg: 'bg-white/10'
-                      };
-                  }
-                };
-
-                const styles = getClasses();
+                const styles = getDistrictTheme(getDistrictFromLeagueKey(String(leagueKey)));
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={leagueKey}
+                    aria-label={`Ver ${league.name}`}
+                    aria-pressed={isActive}
                     onClick={() => {
                       setActiveLeague(leagueKey);
                       setActiveCompetition('league');
                     }}
-                    className={`w-full glass-card rounded-lg sm:rounded-2xl p-2 sm:p-4 cursor-pointer transition-all group flex flex-col items-center gap-1 sm:gap-3 border-white/5 ${isActive ? `glass-card-neon ${styles.border} ${styles.bg} shadow-[0_0_20px_${styles.glow}]` : 'hover:border-white/20'}`}
+                    className={`w-full glass-card rounded-lg sm:rounded-2xl p-2 sm:p-4 cursor-pointer transition-all group flex flex-col items-center gap-1 sm:gap-3 border-white/5 ${isActive ? `glass-card-neon ${styles.borderMuted} ${styles.background} ${styles.glow}` : 'hover:border-white/20'}`}
                   >
-                    <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center border transition-all ${isActive ? `${styles.bg} ${styles.border} text-${styles.color}-400` : 'glass-card border-white/5 text-white/20 group-hover:text-white/40'}`}>
+                    <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center border transition-all ${isActive ? `${styles.background} ${styles.borderMuted} ${styles.text}` : `${styles.borderMuted} ${styles.text} bg-black/20`}`}>
                       <Trophy size={window.innerWidth < 640 ? 14 : 20} />
                     </div>
                     <div className="text-center">
-                      <span className={`text-[7px] sm:text-[10px] font-black uppercase tracking-[0.05em] sm:tracking-[0.2em] block italic ${isActive ? `text-${styles.color}-400 neon-text-${styles.color}` : 'text-white/40 group-hover:text-white/60'}`}>{league.name.split(' ')[1] || league.name}</span>
-                      <span className="text-[5px] sm:text-[7px] text-white/10 font-black uppercase tracking-[0.1em] sm:tracking-[0.3em] mt-0.5 block italic truncate">{(league.teams?.length || 0)} CLB</span>
+                      <span className={`text-[7px] sm:text-[10px] font-black uppercase tracking-[0.05em] sm:tracking-[0.2em] block italic ${isActive ? styles.text : 'text-white/70 group-hover:text-white'}`}>{league.name.split(' ')[1] || league.name}</span>
+                      <span className="text-[5px] sm:text-[7px] text-white/45 font-black uppercase tracking-[0.1em] sm:tracking-[0.3em] mt-0.5 block italic truncate">{(league.teams?.length || 0)} CLB</span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -694,7 +679,7 @@ export const WorldTab = (props: any) => {
             {activeCompetition === 'league' && (
               <div className="space-y-3 sm:space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6 px-1">
-                  <div className="flex gap-1.5 sm:gap-2 glass-card p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border-white/5 w-full sm:w-auto overflow-x-auto hide-scrollbar">
+                  <div className="sport-tabs hide-scrollbar w-full sm:w-auto">
                     {[
                       { id: 'standings', label: 'Tabelas', icon: Trophy },
                       { id: 'scorers', label: 'Artilheiros', icon: Target },
@@ -702,19 +687,20 @@ export const WorldTab = (props: any) => {
                     ].map(tab => (
                       <button
                         key={tab.id}
+                        type="button"
+                        aria-pressed={activeLeagueTab === tab.id}
                         onClick={() => setActiveLeagueTab(tab.id as any)}
-                        className={`flex-1 sm:flex-none px-3 sm:px-5 py-2 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] transition-all flex items-center justify-center gap-1.5 sm:gap-2 italic whitespace-nowrap ${activeLeagueTab === tab.id ? 'glass-card-neon border-white/20 text-white shadow-lg' : 'text-white/30 hover:text-white/50'}`}
                       >
-                        <tab.icon size={window.innerWidth < 640 ? 12 : 14} />
+                        <tab.icon size={14} aria-hidden="true" />
                         {tab.label}
                       </button>
                     ))}
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                    <div className="glass-card-neon border-cyan-500/30 px-3 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl flex items-center gap-2 sm:gap-3 shadow-[0_0_15px_rgba(34,211,238,0.1)] flex-1 sm:flex-none">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(34,211,238,1)]" />
-                      <span className="text-cyan-400 font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] text-[9px] sm:text-[10px] italic truncate">
+                    <div className="glass-card-neon border-mineral-500/30 px-3 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl flex items-center gap-2 sm:gap-3 shadow-none flex-1 sm:flex-none">
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-mineral-500 animate-pulse shadow-none" />
+                      <span className="text-mineral-400 font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] text-[9px] sm:text-[10px] italic truncate">
                         {activeLeagueData?.name || 'LIGA'}
                       </span>
                     </div>
@@ -725,7 +711,7 @@ export const WorldTab = (props: any) => {
                           setActiveLeague(e.target.value);
                           setActiveCompetition('league');
                         }}
-                        className="w-full appearance-none bg-black/60 glass-card border border-white/10 rounded-lg sm:rounded-xl px-4 sm:px-6 py-2 sm:py-2 text-[9px] sm:text-[10px] text-white font-black focus:outline-none focus:border-cyan-500/50 transition-all uppercase tracking-[0.1em] sm:tracking-[0.2em] cursor-pointer pr-8 sm:pr-10 italic"
+                        className="w-full appearance-none bg-black/60 glass-card border border-white/10 rounded-lg sm:rounded-xl px-4 sm:px-6 py-2 sm:py-2 text-[9px] sm:text-[10px] text-white font-black focus:outline-none focus:border-mineral-500/50 transition-all uppercase tracking-[0.1em] sm:tracking-[0.2em] cursor-pointer pr-8 sm:pr-10 italic"
                       >
                         {Object.entries(state.world.leagues).map(([id, l]: [string, any]) => (
                           <option key={id} value={id} className="bg-slate-900">{l.name}</option>
@@ -798,8 +784,8 @@ export const WorldTab = (props: any) => {
                                   </div>
                                 </td>
                                 <td className="px-3 py-3 sm:px-8 sm:py-5 text-center hidden sm:table-cell">
-                                  <div className="inline-flex items-center gap-2 px-3 py-1 glass-card rounded-full border border-cyan-500/20">
-                                    <Zap size={10} className="text-cyan-400" />
+                                  <div className="inline-flex items-center gap-2 px-3 py-1 glass-card rounded-full border border-mineral-500/20">
+                                    <Zap size={10} className="text-mineral-400" />
                                     <span className="text-xs font-black text-white italic">{totalRating}</span>
                                   </div>
                                 </td>
@@ -885,10 +871,10 @@ export const WorldTab = (props: any) => {
                             )}
                           </div>
                           <div className="text-center w-full relative z-10">
-                            <span className="text-[10px] sm:text-xs font-black text-white uppercase italic truncate block tracking-tight group-hover:text-cyan-400 transition-colors">{row.team}</span>
+                            <span className="text-[10px] sm:text-xs font-black text-white uppercase italic truncate block tracking-tight group-hover:text-mineral-400 transition-colors">{row.team}</span>
                             <div className="flex items-center justify-center gap-2 mt-2 sm:mt-3">
-                              <div className="px-2 sm:px-3 py-0.5 sm:py-1 glass-card rounded-full border border-cyan-500/20 flex items-center gap-1.5 sm:gap-2">
-                                <Zap size={window.innerWidth < 640 ? 8 : 10} className="text-cyan-400" />
+                              <div className="px-2 sm:px-3 py-0.5 sm:py-1 glass-card rounded-full border border-mineral-500/20 flex items-center gap-1.5 sm:gap-2">
+                                <Zap size={window.innerWidth < 640 ? 8 : 10} className="text-mineral-400" />
                                 <span className="text-[9px] sm:text-[10px] text-white font-black italic">{totalRating}</span>
                               </div>
                             </div>
@@ -903,14 +889,14 @@ export const WorldTab = (props: any) => {
 
             {activeCompetition === 'elite' && (
               <div className="space-y-4 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="flex items-center justify-between glass-card-neon border-fuchsia-500/30 p-3 sm:p-4 rounded-xl sm:rounded-[2rem] shadow-[0_0_30px_rgba(217,70,239,0.1)]">
+                <div className="flex items-center justify-between glass-card-neon border-mineral-500/30 p-3 sm:p-4 rounded-xl sm:rounded-[2rem] shadow-none">
                   <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 glass-card rounded-xl flex items-center justify-center text-fuchsia-400 border border-fuchsia-500/30 shadow-[0_0_15px_rgba(217,70,239,0.3)]">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 glass-card rounded-xl flex items-center justify-center text-mineral-400 border border-mineral-500/30 shadow-none">
                       <Trophy size={window.innerWidth < 640 ? 20 : 24} />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-2xl font-black text-white uppercase italic tracking-tight neon-text-fuchsia">Copa Elite 2050</h3>
-                      <p className="text-[8px] sm:text-[10px] text-fuchsia-400/70 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1 italic">
+                      <h3 className="text-lg sm:text-2xl font-black text-white uppercase italic tracking-tight neon-text-fuchsia">Copa Elite {state.world.currentSeason}</h3>
+                      <p className="text-[8px] sm:text-[10px] text-mineral-400/70 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1 italic">
                         {state.world.eliteCup.winnerId ? 'Grande Final Finalizada' :
                           state.world.eliteCup.round === 0 ? 'Aguardando Início' :
                             `Fase Atual: ${state.world.eliteCup.round === 1 ? 'Oitavas de Final' : state.world.eliteCup.round === 2 ? 'Quartas de Final' : state.world.eliteCup.round === 3 ? 'Semifinais' : 'Grande Final'}`}
@@ -920,7 +906,7 @@ export const WorldTab = (props: any) => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3">
+                  <div className="rounded-xl border border-mineral-400/20 bg-mineral-500/10 p-3">
                     <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Times</p>
                     <p className="mt-1 text-xl font-black italic text-white">{eliteCupTeamIds.length || 0}</p>
                   </div>
@@ -950,7 +936,7 @@ export const WorldTab = (props: any) => {
                           key={teamId}
                           type="button"
                           onClick={() => setSelectedTeamView(teamId)}
-                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-fuchsia-400/40"
+                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-mineral-400/40"
                         >
                           <div className="h-6 w-6 shrink-0">
                             {team.logo ? (
@@ -976,7 +962,7 @@ export const WorldTab = (props: any) => {
                   {/* Round 1 */}
                   <div className="space-y-4 min-w-[280px]">
                     <div className="flex items-center gap-3 px-2">
-                      <div className="w-1 h-4 bg-fuchsia-500 rounded-full shadow-[0_0_10px_rgba(217,70,239,1)]" />
+                      <div className="w-1 h-4 bg-mineral-500 rounded-full shadow-none" />
                       <h4 className="text-xs font-black text-white uppercase tracking-[0.3em] italic">Oitavas</h4>
                     </div>
                     <div className="space-y-4 sm:space-y-6">
@@ -984,8 +970,8 @@ export const WorldTab = (props: any) => {
                         const hTeam = state.teams[match.homeTeamId];
                         const aTeam = state.teams[match.awayTeamId];
                         return (
-                          <div key={match.id} className="glass-card border-white/5 rounded-2xl p-4 transition-all hover:border-fuchsia-500/30 group">
-                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
+                          <div key={match.id} className="glass-card border-white/5 rounded-2xl p-4 transition-all hover:border-mineral-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-mineral-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -1044,7 +1030,7 @@ export const WorldTab = (props: any) => {
                   {/* Quarters */}
                   <div className="space-y-3 sm:space-y-4 min-w-[240px] sm:min-w-[280px]">
                     <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2">
-                      <div className="w-0.5 sm:w-1 h-3 sm:h-4 bg-fuchsia-500 rounded-full shadow-[0_0_10px_rgba(217,70,239,1)]" />
+                      <div className="w-0.5 sm:w-1 h-3 sm:h-4 bg-mineral-500 rounded-full shadow-none" />
                       <h4 className="text-[10px] sm:text-xs font-black text-white uppercase tracking-[0.2em] sm:tracking-[0.3em] italic">Quartas</h4>
                     </div>
                     <div className="space-y-2 sm:space-y-3">
@@ -1052,8 +1038,8 @@ export const WorldTab = (props: any) => {
                         const hTeam = state.teams[match.homeTeamId];
                         const aTeam = state.teams[match.awayTeamId];
                         return (
-                          <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-fuchsia-500/30 group">
-                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
+                          <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-mineral-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-mineral-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-2 sm:mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -1112,7 +1098,7 @@ export const WorldTab = (props: any) => {
                   {/* Semis */}
                   <div className="space-y-3 sm:space-y-4 min-w-[240px] sm:min-w-[280px]">
                     <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2">
-                      <div className="w-0.5 sm:w-1 h-3 sm:h-4 bg-fuchsia-500 rounded-full shadow-[0_0_10px_rgba(217,70,239,1)]" />
+                      <div className="w-0.5 sm:w-1 h-3 sm:h-4 bg-mineral-500 rounded-full shadow-none" />
                       <h4 className="text-[10px] sm:text-xs font-black text-white uppercase tracking-[0.2em] sm:tracking-[0.3em] italic">Semifinal</h4>
                     </div>
                     <div className="space-y-2 sm:space-y-3">
@@ -1120,8 +1106,8 @@ export const WorldTab = (props: any) => {
                         const hTeam = state.teams[match.homeTeamId];
                         const aTeam = state.teams[match.awayTeamId];
                         return (
-                          <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-fuchsia-500/30 group">
-                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-fuchsia-200/60">{formatMatchDateLabel(match)}</p>
+                          <div key={match.id} className="glass-card border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all hover:border-mineral-500/30 group">
+                            <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-mineral-200/60">{formatMatchDateLabel(match)}</p>
                             <div
                               onClick={() => setSelectedTeamView(match.homeTeamId)}
                               className={`flex justify-between items-center mb-2 sm:mb-3 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-all ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/30'}`}
@@ -1187,7 +1173,7 @@ export const WorldTab = (props: any) => {
                       const hTeam = state.teams[state.world.eliteCup.bracket.final.homeTeamId];
                       const aTeam = state.teams[state.world.eliteCup.bracket.final.awayTeamId];
                       return (
-                        <div className="bg-gradient-to-br from-fuchsia-900/40 to-black border border-yellow-500/50 rounded-xl sm:rounded-[2rem] p-4 sm:p-6 shadow-[0_0_30px_rgba(234,179,8,0.1)] relative overflow-hidden group">
+                        <div className="bg-gradient-to-br from-mineral-900/40 to-black border border-yellow-500/50 rounded-xl sm:rounded-[2rem] p-4 sm:p-6 shadow-[0_0_30px_rgba(234,179,8,0.1)] relative overflow-hidden group">
                           <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                           <p className="relative z-10 mb-3 text-[8px] font-black uppercase tracking-widest text-yellow-100/65">{formatMatchDateLabel(state.world.eliteCup.bracket.final)}</p>
                           <div
@@ -1248,14 +1234,14 @@ export const WorldTab = (props: any) => {
 
             {activeCompetition === 'district' && (
               <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="flex items-center justify-between glass-card-neon border-cyan-500/30 p-3 sm:p-4 rounded-xl sm:rounded-[2rem] shadow-[0_0_30px_rgba(34,211,238,0.1)]">
+                <div className="flex items-center justify-between glass-card-neon border-mineral-500/30 p-3 sm:p-4 rounded-xl sm:rounded-[2rem] shadow-none">
                   <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 glass-card rounded-xl flex items-center justify-center text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 glass-card rounded-xl flex items-center justify-center text-mineral-400 border border-mineral-500/30 shadow-none">
                       <Globe size={window.innerWidth < 640 ? 20 : 24} />
                     </div>
                     <div>
-                      <h3 className="text-lg sm:text-2xl font-black text-white uppercase italic tracking-tight neon-text-cyan">Copa Distritos</h3>
-                      <p className="text-[8px] sm:text-[10px] text-cyan-400/70 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1 italic">
+                      <h3 className="text-lg sm:text-2xl font-black text-white uppercase italic tracking-tight neon-text-cyan">Copa Distritos {state.world.currentSeason}</h3>
+                      <p className="text-[8px] sm:text-[10px] text-mineral-400/70 font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1 italic">
                         {state.world.districtCup.winnerId ? 'Campeão Definido!' :
                           state.world.districtCup.round === 0 ? 'Não Iniciada' :
                             state.world.districtCup.round <= 3 ? 'Fase de Grupos' : 'Final'}
@@ -1265,7 +1251,7 @@ export const WorldTab = (props: any) => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
+                  <div className="rounded-xl border border-mineral-400/20 bg-mineral-500/10 p-3">
                     <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Selecoes</p>
                     <p className="mt-1 text-xl font-black italic text-white">{districtCupTeamIds.length || 0}</p>
                   </div>
@@ -1294,9 +1280,9 @@ export const WorldTab = (props: any) => {
                           key={teamId}
                           type="button"
                           onClick={() => team && setSelectedTeamView(teamId)}
-                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-cyan-400/40"
+                          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-mineral-400/40"
                         >
-                          <Globe size={18} className="shrink-0 text-cyan-200/70" />
+                          <Globe size={18} className="shrink-0 text-mineral-200/70" />
                           <span className="max-w-[120px] truncate text-[9px] font-black uppercase italic text-white/70">{team?.name || teamId}</span>
                         </button>
                       );
@@ -1314,7 +1300,7 @@ export const WorldTab = (props: any) => {
                         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
                       return (
                         <div key={district} className="rounded-2xl border border-white/10 bg-black/35 p-4">
-                          <p className="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Selecao {district}</p>
+                          <p style={{ color: getDistrictTheme(district).color }} className="text-[8px] font-black uppercase tracking-[0.24em]">Selecao {district}</p>
                           <p className="mt-2 truncate text-sm font-black uppercase italic text-white">
                             {assignment?.name || (latestInvite ? state.managers[latestInvite.managerId]?.name : 'A definir')}
                           </p>
@@ -1336,10 +1322,10 @@ export const WorldTab = (props: any) => {
                 )}
 
                 {state.world.districtCup.round >= 1 && (
-                  <div className="bg-black/40 backdrop-blur-md border border-cyan-500/30 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(34,211,238,0.15)]">
+                  <div className="bg-black/40 backdrop-blur-md border border-mineral-500/30 rounded-2xl overflow-hidden shadow-none">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
-                        <thead className="bg-cyan-900/20 text-[8px] sm:text-[10px] uppercase tracking-[0.2em] sm:tracking-[0.3em] text-cyan-400 font-bold border-b border-cyan-500/20">
+                        <thead className="bg-mineral-900/20 text-[8px] sm:text-[10px] uppercase tracking-[0.2em] sm:tracking-[0.3em] text-mineral-400 font-bold border-b border-mineral-500/20">
                           <tr>
                             <th className="px-3 py-3 sm:px-6 sm:py-4">Pos</th>
                             <th className="px-3 py-3 sm:px-6 sm:py-4 w-full">Seleção</th>
@@ -1360,9 +1346,9 @@ export const WorldTab = (props: any) => {
                                 <tr
                                   key={row.teamId}
                                   onClick={() => setSelectedTeamView(row.teamId)}
-                                  className="hover:bg-cyan-500/5 transition-colors cursor-pointer group"
+                                  className="hover:bg-mineral-500/5 transition-colors cursor-pointer group"
                                 >
-                                  <td className="px-3 py-3 sm:px-6 sm:py-4 font-mono text-cyan-500/50 text-[10px] sm:text-xs">#{index + 1}</td>
+                                  <td className="px-3 py-3 sm:px-6 sm:py-4 font-mono text-mineral-500/50 text-[10px] sm:text-xs">#{index + 1}</td>
                                   <td className="px-3 py-3 sm:px-6 sm:py-4 font-bold text-white">
                                     <div className="flex items-center gap-2 sm:gap-3">
                                       <div className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 transition-transform group-hover:scale-110">
@@ -1377,10 +1363,10 @@ export const WorldTab = (props: any) => {
                                             size={window.innerWidth < 640 ? 16 : 20}
                                           />
                                         ) : (
-                                          <Globe size={window.innerWidth < 640 ? 14 : 16} className="text-cyan-600" />
+                                          <Globe size={window.innerWidth < 640 ? 14 : 16} className="text-mineral-600" />
                                         )}
                                       </div>
-                                      <span className="text-[10px] sm:text-xs uppercase italic truncate max-w-[80px] sm:max-w-none group-hover:text-cyan-400 transition-colors">{team?.name || row.teamId}</span>
+                                      <span className="text-[10px] sm:text-xs uppercase italic truncate max-w-[80px] sm:max-w-none group-hover:text-mineral-400 transition-colors">{team?.name || row.teamId}</span>
                                     </div>
                                   </td>
                                   <td className="px-2 py-3 sm:px-4 sm:py-4 text-center text-slate-400 text-[10px] sm:text-xs">{row.played}</td>
@@ -1388,7 +1374,7 @@ export const WorldTab = (props: any) => {
                                   <td className="px-2 py-3 sm:px-4 sm:py-4 text-center text-slate-500 text-[10px] sm:text-xs hidden sm:table-cell">{row.drawn}</td>
                                   <td className="px-2 py-3 sm:px-4 sm:py-4 text-center text-slate-500 text-[10px] sm:text-xs hidden sm:table-cell">{row.lost}</td>
                                   <td className="px-2 py-3 sm:px-4 sm:py-4 text-center text-slate-400 text-[10px] sm:text-xs">{row.goalsFor - row.goalsAgainst}</td>
-                                  <td className="px-3 py-3 sm:px-6 sm:py-4 text-center font-black text-cyan-400 text-[10px] sm:text-xs">{row.points}</td>
+                                  <td className="px-3 py-3 sm:px-6 sm:py-4 text-center font-black text-mineral-400 text-[10px] sm:text-xs">{row.points}</td>
                                 </tr>
                               );
                             })}
@@ -1404,13 +1390,13 @@ export const WorldTab = (props: any) => {
                       const home = state.teams[match.homeTeamId];
                       const away = state.teams[match.awayTeamId];
                       return (
-                        <div key={match.id} className="rounded-2xl border border-cyan-400/15 bg-black/35 p-3">
-                          <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-cyan-100/60">{formatMatchDateLabel(match)}</p>
+                        <div key={match.id} className="rounded-2xl border border-mineral-400/15 bg-black/35 p-3">
+                          <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-mineral-100/60">{formatMatchDateLabel(match)}</p>
                           <div className="flex items-center justify-between gap-3">
                             <button
                               type="button"
                               onClick={() => home && setSelectedTeamView(match.homeTeamId)}
-                              className="min-w-0 flex-1 truncate text-left text-[10px] font-black uppercase italic text-white/75 hover:text-cyan-200"
+                              className="min-w-0 flex-1 truncate text-left text-[10px] font-black uppercase italic text-white/75 hover:text-mineral-200"
                             >
                               {home?.name || match.homeTeamId}
                             </button>
@@ -1420,7 +1406,7 @@ export const WorldTab = (props: any) => {
                             <button
                               type="button"
                               onClick={() => away && setSelectedTeamView(match.awayTeamId)}
-                              className="min-w-0 flex-1 truncate text-right text-[10px] font-black uppercase italic text-white/75 hover:text-cyan-200"
+                              className="min-w-0 flex-1 truncate text-right text-[10px] font-black uppercase italic text-white/75 hover:text-mineral-200"
                             >
                               {away?.name || match.awayTeamId}
                             </button>
@@ -1516,417 +1502,16 @@ export const WorldTab = (props: any) => {
         );
       })()}
 
-      {
-        activeWorldTab === 'market' && (
-          <div className="space-y-4 animate-in fade-in duration-500">
-            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 shadow-[0_0_28px_rgba(16,185,129,0.08)]">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-300/25 bg-black/35 text-emerald-200">
-                    <Landmark size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[8px] font-black uppercase tracking-[0.28em] text-emerald-100/55">Financas do elenco</p>
-                    <h3 className="mt-0.5 text-base font-black uppercase italic tracking-tight text-white">Patrimonio do clube</h3>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-right">
-                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">uso</p>
-                  <p className="text-lg font-black italic text-emerald-100">{capUsagePercent}%</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-xl border border-white/10 bg-black/35 p-3">
-                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Teto do clube</p>
-                  <p className="mt-1 text-xl font-black italic text-white">{dashData.powerCap.toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 p-3">
-                  <p className="text-[7px] font-black uppercase tracking-widest text-white/35">Elenco atual</p>
-                  <p className="mt-1 text-xl font-black italic text-white">{dashData.totalPoints.toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
-                  <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">Livre real</p>
-                  <p className="mt-1 text-xl font-black italic text-cyan-100">{effectiveMarketSpace.toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
-                  <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/55">Congelado</p>
-                  <p className="mt-1 text-xl font-black italic text-amber-100">{marketReservedScore.toLocaleString()}</p>
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-[8px] font-black uppercase tracking-widest text-white/35">
-                  <span>cap do clube</span>
-                  <span>{(dashData.totalPoints + marketReservedScore).toLocaleString()} / {dashData.powerCap.toLocaleString()}</span>
-                </div>
-                <div className="flex h-2 overflow-hidden rounded-full bg-black/55">
-                  <div
-                    className={`h-full ${capUsagePercent >= 96 ? 'bg-rose-500' : capUsagePercent >= 88 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                    style={{ width: `${capUsagePercent}%` }}
-                  />
-                  <div
-                    className="h-full bg-amber-300"
-                    style={{ width: `${frozenCapPercent}%` }}
-                  />
-                  <div
-                    className="h-full bg-cyan-400/70"
-                    style={{ width: `${freeCapPercent}%` }}
-                  />
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[7px] font-black uppercase tracking-widest">
-                  <span className="text-emerald-200">Elenco {dashData.totalPoints.toLocaleString()}</span>
-                  <span className="text-amber-200">Congelado {marketReservedScore.toLocaleString()}</span>
-                  <span className="text-cyan-200">Livre {effectiveMarketSpace.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <WalletCards size={13} className="text-cyan-200" />
-                    <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/45">Contratáveis que cabem</p>
-                  </div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">
-                    {marketFitCount} livres abaixo de 80% sat cabem no cap. {affordableUpsideCount} tem potencial +60.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <TrendingUp size={13} className="text-emerald-200" />
-                    <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/45">Como cresce</p>
-                  </div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">
-                    atleta que evolui no seu clube aumenta valor do elenco e pode expandir o teto.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[8px] font-black uppercase tracking-[0.26em] text-white/35">Cap do clube</p>
-                    <h3 className="mt-1 text-sm font-black uppercase italic tracking-tight text-white">
-                      {dashData.totalPoints.toLocaleString()} / {dashData.powerCap.toLocaleString()}
-                    </h3>
-                  </div>
-                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-right">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">livre</p>
-                    <p className="text-sm font-black italic text-cyan-100">{effectiveMarketSpace.toLocaleString()}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-cyan-100/55">uso</p>
-                    <p className="mt-1 text-lg font-black italic text-white">{capUsagePercent}%</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">folha atual</p>
-                  </div>
-                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-emerald-100/55">alvos</p>
-                    <p className="mt-1 text-lg font-black italic text-white">{filteredMarketPlayers.length}</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">infelizes</p>
-                  </div>
-                  <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-fuchsia-100/55">reservado</p>
-                    <p className="mt-1 text-lg font-black italic text-white">{marketReservedScore}</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">draft/propostas</p>
-                  </div>
-                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
-                    <p className="text-[7px] font-black uppercase tracking-widest text-amber-100/55">trocas</p>
-                    <p className="mt-1 text-lg font-black italic text-white">{pendingOutgoingTrades.length + pendingIncomingTrades.length}</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/35">pendentes</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="text-[8px] font-black uppercase tracking-[0.26em] text-white/35">Seu elenco em risco</p>
-                {unhappySquadPlayers.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    {unhappySquadPlayers.map(player => (
-                      <div key={player.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                        <button type="button" onClick={() => setSelectedPlayer(player)} className="min-w-0 text-left">
-                          <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
-                          <p className="text-[8px] font-bold uppercase tracking-widest text-rose-200/70">{player.satisfaction}% sat / {player.totalRating} score</p>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSellPlayer(player.id)}
-                          className="rounded-lg border border-rose-400/25 bg-rose-400/90 px-3 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-black transition hover:bg-rose-300"
-                        >
-                          Dispensar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-3 text-[9px] font-black uppercase tracking-[0.2em] text-white/35">Ninguém pressionando saída agora.</p>
-                )}
-              </div>
-            </div>
-
-            {pendingTransferProposals.length > 0 && (
-              <section className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 sm:p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Clock size={15} className="text-amber-200" />
-                    <h3 className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-100">Propostas enviadas</h3>
-                  </div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-amber-100/55">proxima virada</span>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {pendingTransferProposals.slice(0, 4).map(proposal => {
-                    const player = state.players[proposal.playerId];
-                    if (!player) return null;
-                    return (
-                      <button
-                        key={proposal.id}
-                        type="button"
-                        onClick={() => setSelectedPlayer(player)}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-left transition hover:border-amber-300/30 hover:bg-black/40"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[10px] font-black uppercase tracking-wide text-white">{player.nickname}</span>
-                          <span className="block text-[8px] font-bold uppercase tracking-widest text-white/40">{player.role} / {player.totalRating} score</span>
-                        </span>
-                        <span className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-amber-100">Pendente</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY && (
-              <div className="glass-card-neon border-cyan-500/30 p-4 rounded-2xl flex items-center justify-between bg-cyan-500/5 group hover:bg-cyan-500/10 transition-all cursor-pointer mb-6"
-                onClick={() => props.onTabChange?.('draft')}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500 flex items-center justify-center text-black shadow-[0_0_20px_rgba(34,211,238,0.4)] group-hover:scale-110 transition-transform">
-                    <Rocket size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-white uppercase italic">Draft Genesis em Aberto</h4>
-                    <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-tighter">Clique aqui para ir ao HUB DE DRAFT e montar seu elenco</p>
-                  </div>
-                </div>
-                <ChevronRight size={20} className="text-cyan-500 group-hover:translate-x-1 transition-transform" />
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex items-center justify-between gap-3 sm:gap-4 w-full">
-                <div className="flex-1 relative group">
-                  <Search size={window.innerWidth < 640 ? 12 : 14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    value={marketSearch}
-                    onChange={(e) => setMarketSearch(e.target.value)}
-                    placeholder="BUSCAR ATLETA..."
-                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 text-[9px] sm:text-xs text-white font-bold focus:border-cyan-500/50 focus:outline-none transition-all placeholder:text-slate-600 uppercase tracking-widest shadow-inner"
-                  />
-                </div>
-                <button
-                  onClick={() => setShowMarketFilters(!showMarketFilters)}
-                  className={`px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl flex items-center gap-2 font-black text-[8px] sm:text-[10px] uppercase tracking-widest transition-all border shrink-0 ${showMarketFilters ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'bg-white/5 text-cyan-400 border-white/10'}`}
-                >
-                  <Sliders size={window.innerWidth < 640 ? 12 : 14} />
-                  <span className="hidden sm:inline">{showMarketFilters ? 'Fechar' : 'Filtrar'}</span>
-                  <span className="sm:hidden">{showMarketFilters ? 'X' : 'Filtro'}</span>
-                </button>
-              </div>
-
-              {showMarketFilters && (
-                <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
-                  {/* District Filter */}
-                  <div className="space-y-1.5">
-                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Setor</label>
-                    <select
-                      value={marketDistrict}
-                      onChange={(e) => setMarketDistrict(e.target.value)}
-                      className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer"
-                    >
-                      <option value="all">TODOS OS SETORES</option>
-                      <option value="NORTE">SETOR NORTE</option>
-                      <option value="SUL">SETOR SUL</option>
-                      <option value="LESTE">SETOR LESTE</option>
-                      <option value="OESTE">SETOR OESTE</option>
-                    </select>
-                  </div>
-
-                  {/* Position Filter */}
-                  <div className="space-y-1.5">
-                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Posição</label>
-                    <select
-                      value={marketPosition}
-                      onChange={(e) => setMarketPosition(e.target.value)}
-                      className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] sm:text-[10px] text-white font-bold focus:outline-none appearance-none uppercase tracking-widest cursor-pointer"
-                    >
-                      <option value="all">TODAS POSIÇÕES</option>
-                      <option value="GOL">GOLEIRO</option>
-                      <option value="ZAG">DEFENSOR</option>
-                      <option value="MEI">MEIO-CAMPISTA</option>
-                      <option value="ATA">ATACANTE</option>
-                    </select>
-                  </div>
-
-                  {/* Satisfaction Filter */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Satisfação até</label>
-                      <span className="text-cyan-400 font-black text-[9px] sm:text-[10px]">{marketSatisfactionMax}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="79"
-                      step="5"
-                      value={marketSatisfactionMax}
-                      onChange={(e) => setMarketSatisfactionMax(parseInt(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-500"
-                    />
-                  </div>
-
-                  {/* Exiled Only Toggle */}
-                  <div className="flex items-center justify-between sm:justify-start gap-3 glass-card p-3 rounded-xl border-white/5">
-                    <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Apenas Exilados</label>
-                    <button
-                      onClick={() => setMarketOnlyExiled(!marketOnlyExiled)}
-                      className={`w-10 h-5 rounded-full transition-colors relative shrink-0 ${marketOnlyExiled ? 'bg-cyan-500' : 'bg-slate-800'}`}
-                    >
-                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${marketOnlyExiled ? 'left-6' : 'left-1'}`} />
-                    </button>
-                  </div>
-
-                  {/* Points Slider */}
-                  <div className="space-y-4 sm:space-y-6 scrollbar-hide">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[8px] sm:text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Rating Range</label>
-                      <span className="text-[9px] sm:text-[10px] font-mono text-cyan-400 font-black">{marketPointsMin} - {marketPointsMax}</span>
-                    </div>
-                    <div className="flex gap-4">
-                      <input
-                        type="range"
-                        min="0"
-                        max="1000"
-                        step="10"
-                        value={marketPointsMin}
-                        onChange={(e) => setMarketPointsMin(parseInt(e.target.value))}
-                        className="flex-1 h-1 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-500"
-                      />
-                      <input
-                        type="range"
-                        min="0"
-                        max="1000"
-                        step="10"
-                        value={marketPointsMax}
-                        onChange={(e) => setMarketPointsMax(parseInt(e.target.value))}
-                        className="flex-1 h-1 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.25em] text-white/35">
-                Alvos infelizes: {filteredMarketPlayers.length} atletas
-              </div>
-              <div className="flex rounded-2xl border border-white/10 bg-black/40 p-1">
-                {[
-                  { id: 'cards', label: 'Cards', icon: LayoutGrid },
-                  { id: 'list', label: 'Lista', icon: Rows3 },
-                ].map(mode => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => setMarketViewMode(mode.id as 'cards' | 'list')}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
-                      marketViewMode === mode.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
-                    }`}
-                  >
-                    <mode.icon size={12} />
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {marketViewMode === 'cards' ? (
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-                {filteredMarketPlayers.map(player => {
-                  const blockedByCap = player.totalRating > effectiveMarketSpace;
-                  return (
-                    <PlayerCard
-                      key={player.id}
-                      player={player}
-                      onClick={setSelectedPlayer}
-                      onProposta={handleMakeProposal}
-                      onTeamClick={setSelectedTeamView}
-                      variant="compact"
-                      actionDisabled={blockedByCap}
-                      actionLabel="PROPOR"
-                      actionDisabledLabel="SEM ESPAÇO"
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3 border-b border-white/5 bg-white/[0.03] px-4 py-3 text-[8px] font-black uppercase tracking-[0.25em] text-white/35">
-                  <span>Jogador</span>
-                  <span>Pos</span>
-                  <span>Distrito</span>
-                  <span>Sat</span>
-                  <span>Score</span>
-                  <span>Ação</span>
-                </div>
-                <div className="divide-y divide-white/[0.04]">
-                  {filteredMarketPlayers.map(player => {
-                    const blockedByCap = player.totalRating > effectiveMarketSpace;
-                    return (
-                      <div
-                        key={player.id}
-                        className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
-                      >
-                        <button type="button" onClick={() => setSelectedPlayer(player)} className="min-w-0 text-left">
-                          <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
-                          <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{player.name}</p>
-                        </button>
-                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">{displayRole(player.role)}</span>
-                        <span className="text-[8px] font-bold uppercase tracking-widest text-white/45">{player.district}</span>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${player.satisfaction <= 45 ? 'text-rose-300' : 'text-amber-300'}`}>{player.satisfaction}%</span>
-                        <span className="text-lg font-black italic text-white">{player.totalRating}</span>
-                        <button
-                          type="button"
-                          onClick={() => !blockedByCap && handleMakeProposal(player)}
-                          disabled={blockedByCap}
-                          className="rounded-lg border border-cyan-400/25 bg-cyan-400/90 px-3 py-2 text-[7px] font-black uppercase tracking-[0.18em] text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-white/25"
-                        >
-                          {blockedByCap ? 'Sem espaço' : 'Propor'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      }
+      {activeWorldTab === 'market' && <RecruitmentPanel draft={state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= 2} />}
 
       {
         activeWorldTab === 'ranking' && (
           <div className="space-y-4 sm:space-y-6">
             <div className="flex flex-col gap-3">
               <div className="relative flex-1 group">
-                <div className="absolute inset-0 bg-cyan-500/10 blur-2xl rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex items-center glass-card border-white/5 rounded-2xl overflow-hidden transition-all focus-within:border-cyan-500/50">
-                  <div className="pl-4 sm:pl-6 pr-2 text-white/20 group-focus-within:text-cyan-400 transition-colors">
+                <div className="absolute inset-0 bg-mineral-500/10 blur-2xl rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative flex items-center glass-card border-white/5 rounded-2xl overflow-hidden transition-all focus-within:border-mineral-500/50">
+                  <div className="pl-4 sm:pl-6 pr-2 text-white/20 group-focus-within:text-mineral-400 transition-colors">
                     <Search size={window.innerWidth < 640 ? 14 : 20} />
                   </div>
                   <input
@@ -1946,7 +1531,7 @@ export const WorldTab = (props: any) => {
               <button
                 type="button"
                 onClick={() => setShowRankingFilters(!showRankingFilters)}
-                  className={`px-4 py-2 rounded-xl flex items-center gap-2 font-black text-[8px] sm:text-[10px] uppercase tracking-widest transition-all border ${showRankingFilters ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-white/5 text-cyan-400 border-white/10'}`}
+                  className={`px-4 py-2 rounded-xl flex items-center gap-2 font-black text-[8px] sm:text-[10px] uppercase tracking-widest transition-all border ${showRankingFilters ? 'bg-mineral-500 text-black border-mineral-400' : 'bg-white/5 text-mineral-400 border-white/10'}`}
                 >
                   <Sliders size={12} />
                   Filtros
@@ -1961,7 +1546,7 @@ export const WorldTab = (props: any) => {
                       type="button"
                       onClick={() => setRankingViewMode(mode.id as 'cards' | 'list')}
                       className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
-                        rankingViewMode === mode.id ? 'bg-cyan-500 text-black' : 'text-white/45 hover:text-white'
+                        rankingViewMode === mode.id ? 'bg-mineral-500 text-black' : 'text-white/45 hover:text-white'
                       }`}
                     >
                       <mode.icon size={12} />
@@ -2048,7 +1633,7 @@ export const WorldTab = (props: any) => {
                             <div
                               key={player.id}
                               onClick={() => setSelectedPlayer(player)}
-                              className={`glass-card-neon border-white/5 p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden ${isElite50 ? 'shadow-[0_0_22px_rgba(34,211,238,0.15)] border-cyan-400/15' : ''}`}
+                              className={`glass-card-neon border-white/5 p-3 sm:p-4 cursor-pointer hover:scale-[1.01] transition-all flex items-center justify-between group relative overflow-hidden ${isElite50 ? 'shadow-none border-mineral-400/15' : ''}`}
                             >
                               <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
                                 <div className="w-8 sm:w-12 text-center shrink-0">
@@ -2060,15 +1645,15 @@ export const WorldTab = (props: any) => {
                                   </span>
                                 </div>
 
-                                <div className="w-10 h-10 sm:w-14 sm:h-14 glass-card rounded-lg sm:rounded-xl border border-white/5 flex items-center justify-center group-hover:border-cyan-500/30 transition-all shrink-0 overflow-hidden relative">
-                                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent" />
+                                <div className="w-10 h-10 sm:w-14 sm:h-14 glass-card rounded-lg sm:rounded-xl border border-white/5 flex items-center justify-center group-hover:border-mineral-500/30 transition-all shrink-0 overflow-hidden relative">
+                                  <div className="absolute inset-0 bg-gradient-to-br from-mineral-500/10 to-transparent" />
                                   <span className="text-sm sm:text-xl font-black text-white italic drop-shadow-md">{player.totalRating}</span>
                                 </div>
 
                                 <div className="flex flex-col min-w-0">
                                   <div className="text-xs sm:text-lg font-black text-white uppercase italic tracking-tight group-hover:translate-x-1 transition-transform truncate">{player.name}</div>
                                   <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
-                                    <span className="text-[7px] sm:text-[9px] font-black text-cyan-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-cyan-500/20">
+                                    <span className="text-[7px] sm:text-[9px] font-black text-mineral-400 uppercase tracking-widest px-1.5 sm:px-2 py-0.5 glass-card rounded-md border border-mineral-500/20">
                                       {displayRole(player.role)}
                                     </span>
                                     {isElite50 && (
@@ -2099,7 +1684,7 @@ export const WorldTab = (props: any) => {
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent pointer-events-none" />
                               )}
                               {isElite50 && !isTop3 && (
-                                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-transparent to-transparent pointer-events-none" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-mineral-500/8 via-transparent to-transparent pointer-events-none" />
                               )}
                             </div>
                           );
@@ -2133,10 +1718,10 @@ export const WorldTab = (props: any) => {
 
             {!userTeam && (
               <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-[1.8rem] border border-cyan-400/20 bg-cyan-500/10 p-4 sm:p-5">
+                <div className="rounded-[1.8rem] border border-mineral-400/20 bg-mineral-500/10 p-4 sm:p-5">
                   <div className="flex items-center gap-2">
-                    <Users size={15} className="text-cyan-200" />
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-100">Radar de tecnicos</h3>
+                    <Users size={15} className="text-mineral-200" />
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.24em] text-mineral-100">Radar de tecnicos</h3>
                   </div>
                   <div className="mt-4 space-y-3">
                     {opportunityTeams.map(({ team, standing, squadScore, offer }) => (
@@ -2158,7 +1743,7 @@ export const WorldTab = (props: any) => {
                             />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-mineral-200">
                               {team.district} {standing ? `- ${standing.position}o ${standing.name}` : ''}
                             </p>
                             <h4 className="mt-1 truncate text-lg font-black uppercase italic tracking-tight text-white">{team.name}</h4>
@@ -2217,7 +1802,7 @@ export const WorldTab = (props: any) => {
                 <section key={group.key} className="rounded-2xl sm:rounded-[2rem] border border-white/10 bg-black/25 p-3 sm:p-5">
                   <div className="mb-3 sm:mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-cyan-300/75">{group.district}</p>
+                      <p className="text-[8px] font-black uppercase tracking-[0.25em] text-mineral-300/75">{group.district}</p>
                       <h3 className="mt-1 text-lg sm:text-2xl font-black uppercase italic tracking-tight text-white">{group.name}</h3>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white/35">
@@ -2235,13 +1820,13 @@ export const WorldTab = (props: any) => {
                           onClick={() => setSelectedTeamView(team.id)}
                           className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition hover:scale-[1.01] ${
                             team.id === userTeam?.id
-                              ? 'border-cyan-400/45 bg-cyan-500/[0.08]'
+                              ? 'border-mineral-400/45 bg-mineral-500/[0.08]'
                               : isHuman
                                 ? 'border-emerald-400/25 bg-emerald-500/[0.06]'
                                 : 'border-white/10 bg-white/[0.03]'
                           }`}
                         >
-                          <div className="absolute right-0 top-0 h-24 w-24 bg-fuchsia-500/5 blur-3xl" />
+                          <div className="absolute right-0 top-0 h-24 w-24 bg-mineral-500/5 blur-3xl" />
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/35">
@@ -2310,4 +1895,3 @@ export const WorldTab = (props: any) => {
     </div >
   );
 }
-

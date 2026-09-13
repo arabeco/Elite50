@@ -18,7 +18,7 @@ import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingU
 export const CompetitionTab = (props: any) => {
   const { state, setState } = useGame();
   const dashData = useDashboardData();
-  const { userTeam, upcomingMatches, userTeamMatches } = dashData;
+  const { userTeam } = dashData;
   const {
     handleMockReport,
     selectedMatchReport,
@@ -30,6 +30,7 @@ export const CompetitionTab = (props: any) => {
   const { handleAdvanceDay } = useGameDay();
   const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [calendarLimit, setCalendarLimit] = useState(24);
 
   const handleRevealMatch = (matchId: string) => {
     setState(prev => {
@@ -84,6 +85,7 @@ export const CompetitionTab = (props: any) => {
         homeScore: match.homeScore,
         awayScore: match.awayScore,
         played: match.played,
+        status: match.status,
         revealed: match.revealed,
         result: match.result,
         type
@@ -113,8 +115,21 @@ export const CompetitionTab = (props: any) => {
     });
   }, [state.teams, state.world]);
 
-  const nextScheduledMatch = upcomingMatches[0] || allWorldMatches.find(m => !m.played);
-  const featuredMatch = nextScheduledMatch || [...allWorldMatches].reverse().find(m => m.played) || allWorldMatches[0];
+  const worldNowMs = new Date(state.world.currentDate).getTime();
+  const getMatchTime = (match: MatchViewModel) => new Date(`${match.date}T${match.time || '16:00'}`).getTime();
+  const isCompletedMatch = (match: MatchViewModel) => match.played || match.status === 'FINISHED';
+  const futureMatches = allWorldMatches.filter(match => {
+    const matchTime = getMatchTime(match);
+    return !isCompletedMatch(match) && Number.isFinite(matchTime) && matchTime > worldNowMs;
+  });
+  const nextScheduledMatch = futureMatches.find(match =>
+    userTeam && (match.homeId === userTeam.id || match.awayId === userTeam.id)
+  ) || futureMatches[0];
+  const lastCompletedMatch = [...allWorldMatches]
+    .reverse()
+    .find(match => isCompletedMatch(match) && Number.isFinite(getMatchTime(match)) && getMatchTime(match) <= worldNowMs);
+  const featuredMatch = nextScheduledMatch || lastCompletedMatch || null;
+  const isFeaturedUpcoming = !!nextScheduledMatch && featuredMatch?.id === nextScheduledMatch.id;
   const userCampaignMatches = React.useMemo(() => {
     if (!userTeam) return [];
     return allWorldMatches.filter(match => match.homeId === userTeam.id || match.awayId === userTeam.id);
@@ -122,11 +137,14 @@ export const CompetitionTab = (props: any) => {
 
   React.useEffect(() => {
     const nextMatch = nextScheduledMatch;
-    if (!nextMatch) return;
+    if (!nextMatch) {
+      setTimeLeft('ENCERRADO');
+      return;
+    }
 
     const timer = setInterval(() => {
       if (isBeforeKickoff) {
-        setTimeLeft('--D • --H');
+        setTimeLeft('PENDENTE');
         return;
       }
 
@@ -159,17 +177,19 @@ export const CompetitionTab = (props: any) => {
     if (allWorldMatches.length > 0) {
       allWorldMatches.forEach(m => {
         const matchDate = new Date(`${m.date}T${m.time}`);
+        const completed = isCompletedMatch(m);
+        const overdue = !completed && matchDate.getTime() <= worldNowMs;
 
         events.push({
           id: `match_${m.id}`,
           type: 'match',
           date: matchDate,
-          status: m.played ? 'played' : 'scheduled',
+          status: completed ? 'played' : overdue ? 'overdue' : 'scheduled',
           data: m
         });
 
         // Generate news for played matches
-        if (userTeam && m.played && (m.homeId === userTeam.id || m.awayId === userTeam.id)) {
+        if (userTeam && completed && (m.homeId === userTeam.id || m.awayId === userTeam.id)) {
           const isRevealed = m.revealed !== false;
           const isWin = (m.homeId === userTeam?.id && m.homeScore > m.awayScore) ||
             (m.awayId === userTeam?.id && m.awayScore > m.homeScore);
@@ -196,19 +216,33 @@ export const CompetitionTab = (props: any) => {
       });
     }
 
-    return events.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [allWorldMatches, userTeam]);
+    const worldNow = new Date(state.world.currentDate).getTime();
+    return events.sort((a, b) => {
+      const aTime = a.date.getTime();
+      const bTime = b.date.getTime();
+      const aUpcoming = aTime >= worldNow;
+      const bUpcoming = bTime >= worldNow;
+
+      if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+      return aUpcoming ? aTime - bTime : bTime - aTime;
+    });
+  }, [allWorldMatches, state.world.currentDate, userTeam, worldNowMs]);
+
+  const visibleCalendarEvents = calendarEvents.slice(0, calendarLimit);
 
   if (!featuredMatch) return (
     <div className="h-64 flex flex-col items-center justify-center text-slate-500 gap-4">
       <Calendar size={48} className="opacity-20" />
-      <span className="text-xs font-black uppercase tracking-widest italic">Nenhuma partida agendada</span>
+      <span className="text-xs font-black uppercase tracking-widest italic">Nenhuma partida registrada</span>
     </div>
   );
 
   const nextMatch = featuredMatch;
   const homeTeam = state.teams[featuredMatch.homeId];
   const awayTeam = state.teams[featuredMatch.awayId];
+  const featuredScore = isCompletedMatch(featuredMatch) && featuredMatch.revealed !== false
+    ? `${featuredMatch.homeScore ?? 0} - ${featuredMatch.awayScore ?? 0}`
+    : 'VS';
 
   const matchDateTime = new Date(`${featuredMatch.date}T${featuredMatch.time}`);
   const formattedDate = matchDateTime.toLocaleDateString('pt-BR', {
@@ -220,20 +254,20 @@ export const CompetitionTab = (props: any) => {
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-700 max-w-6xl mx-auto pb-12 px-2 sm:px-0">
       {/* Main Highlight Match - Futuristic Redesign */}
-      <div className="glass-card-neon white-gradient-sheen relative overflow-hidden rounded-[1.5rem] sm:rounded-[2.5rem] border-cyan-400/30 p-5 sm:p-12 shadow-[0_0_50px_rgba(34,211,238,0.15)] group transition-all duration-700 hover:border-cyan-400/50">
+      <div className="glass-card-neon white-gradient-sheen relative overflow-hidden rounded-[1.5rem] sm:rounded-[2.5rem] border-mineral-400/30 p-5 sm:p-12 shadow-none group transition-all duration-700 hover:border-mineral-400/50">
         {/* Neon Glow Effects */}
-        <div className="absolute top-0 left-0 w-32 h-32 bg-cyan-500/10 blur-[80px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute top-0 left-0 w-32 h-32 bg-mineral-500/10 blur-[80px] -translate-x-1/2 -translate-y-1/2" />
         <div className="absolute bottom-0 right-0 w-32 h-32 bg-purple-500/10 blur-[80px] translate-x-1/2 translate-y-1/2" />
 
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-12">
           {/* Left Side: Info */}
           <div className="flex-1 space-y-3 sm:space-y-6 text-center md:text-left">
             <div className="space-y-0.5 sm:space-y-2">
-              <h3 className="text-[9px] sm:text-xs font-black text-cyan-400 uppercase tracking-[0.4em] sm:tracking-[0.5em] italic">
-                PRÓXIMO JOGO
+              <h3 className="text-[9px] sm:text-xs font-black text-mineral-400 uppercase tracking-[0.4em] sm:tracking-[0.5em] italic">
+                {isFeaturedUpcoming ? 'PRÓXIMO JOGO' : 'ÚLTIMO JOGO'}
               </h3>
               <div className="text-3xl sm:text-7xl font-black text-white tracking-tighter italic leading-tight">
-                {isBeforeKickoff ? '--D • --H' : timeLeft}
+                {timeLeft}
               </div>
             </div>
 
@@ -242,15 +276,15 @@ export const CompetitionTab = (props: any) => {
                         <button
                           type="button"
                           onClick={() => setSelectedTeamView(nextMatch.homeId)}
-                          className={`truncate max-w-[100px] text-left transition hover:text-cyan-300 sm:max-w-none ${nextMatch.homeId === userTeam?.id ? 'text-cyan-400' : ''}`}
+                          className={`truncate max-w-[100px] text-left transition hover:text-mineral-300 sm:max-w-none ${nextMatch.homeId === userTeam?.id ? 'text-mineral-400' : ''}`}
                         >
                           {nextMatch.home}
                         </button>
-                        <span className="text-white/20 shrink-0 text-[10px] sm:text-base">VS</span>
+                        <span className="text-white/30 shrink-0 text-[10px] sm:text-base">{featuredScore}</span>
                         <button
                           type="button"
                           onClick={() => setSelectedTeamView(nextMatch.awayId)}
-                          className={`truncate max-w-[100px] text-left transition hover:text-cyan-300 sm:max-w-none ${nextMatch.awayId === userTeam?.id ? 'text-cyan-400' : ''}`}
+                          className={`truncate max-w-[100px] text-left transition hover:text-mineral-300 sm:max-w-none ${nextMatch.awayId === userTeam?.id ? 'text-mineral-400' : ''}`}
                         >
                           {nextMatch.away}
                         </button>
@@ -267,8 +301,8 @@ export const CompetitionTab = (props: any) => {
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent hidden sm:block" />
 
             <button type="button" onClick={() => setSelectedTeamView(nextMatch.homeId)} className="relative group/home">
-              <div className="absolute inset-0 bg-cyan-500/20 blur-2xl rounded-full opacity-0 group-hover/home:opacity-100 transition-opacity duration-500" />
-              <div className="w-14 h-14 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden backdrop-blur-md transition-transform duration-500 group-hover/home:scale-110 group-hover/home:border-cyan-500/50">
+              <div className="absolute inset-0 bg-mineral-500/20 blur-2xl rounded-full opacity-0 group-hover/home:opacity-100 transition-opacity duration-500" />
+              <div className="w-14 h-14 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden backdrop-blur-md transition-transform duration-500 group-hover/home:scale-110 group-hover/home:border-mineral-500/50">
                 {homeTeam?.logo ? (
                   <TeamLogo
                     primaryColor={homeTeam.logo.primary}
@@ -285,7 +319,7 @@ export const CompetitionTab = (props: any) => {
               </div>
             </button>
 
-            <div className="text-base sm:text-2xl font-black text-white/10 italic z-10">VS</div>
+            <div className="text-base sm:text-2xl font-black text-white/20 italic z-10">{featuredScore}</div>
 
             <button type="button" onClick={() => setSelectedTeamView(nextMatch.awayId)} className="relative group/away">
               <div className="absolute inset-0 bg-purple-500/20 blur-2xl rounded-full opacity-0 group-hover/away:opacity-100 transition-opacity duration-500" />
@@ -334,13 +368,13 @@ export const CompetitionTab = (props: any) => {
                   key={`campaign-${match.id}`}
                   type="button"
                   onClick={() => match.played && setSelectedMatchReport(match)}
-                  className={`min-w-[150px] rounded-2xl border p-3 text-left transition ${match.played ? 'border-white/10 bg-black/35 hover:border-cyan-400/35' : 'border-cyan-400/25 bg-cyan-500/10'}`}
+                  className={`min-w-[150px] rounded-2xl border p-3 text-left transition ${match.played ? 'border-white/10 bg-black/35 hover:border-mineral-400/35' : 'border-mineral-400/25 bg-mineral-500/10'}`}
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/35">
                       {new Date(`${match.date}T${match.time}`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
                     </span>
-                    <span className={`rounded-md px-1.5 py-0.5 text-[8px] font-black ${result === 'V' ? 'bg-emerald-400/20 text-emerald-200' : result === 'D' ? 'bg-red-400/20 text-red-200' : result === 'E' ? 'bg-yellow-400/20 text-yellow-100' : 'bg-cyan-400/20 text-cyan-100'}`}>
+                    <span className={`rounded-md px-1.5 py-0.5 text-[8px] font-black ${result === 'V' ? 'bg-emerald-400/20 text-emerald-200' : result === 'D' ? 'bg-red-400/20 text-red-200' : result === 'E' ? 'bg-yellow-400/20 text-yellow-100' : 'bg-mineral-400/20 text-mineral-100'}`}>
                       {result}
                     </span>
                   </div>
@@ -359,18 +393,19 @@ export const CompetitionTab = (props: any) => {
       <div className="space-y-4 sm:space-y-6 px-1 sm:px-0">
         <div className="flex items-center justify-between px-1 sm:px-2">
           <h3 className="text-[10px] sm:text-xs font-black text-white uppercase tracking-[0.2em] sm:tracking-[0.3em] flex items-center gap-2 sm:gap-3">
-            <Calendar size={window.innerWidth < 640 ? 14 : 16} className="text-cyan-400" />
+            <Calendar size={window.innerWidth < 640 ? 14 : 16} className="text-mineral-400" />
             Cronograma & Notícias
           </h3>
-          <span className="text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest">Temporada 2050</span>
+          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Temporada {state.world.currentSeason}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-          {calendarEvents.map((event: any) => {
+          {visibleCalendarEvents.map((event: any) => {
             if (event.type === 'match') {
               const homeTeam = state.teams[event.data.homeId];
               const awayTeam = state.teams[event.data.awayId];
               const isPlayed = event.status === 'played';
+              const isOverdue = event.status === 'overdue';
               const isHomeUser = event.data.homeId === userTeam?.id;
               const isAwayUser = event.data.awayId === userTeam?.id;
 
@@ -379,8 +414,10 @@ export const CompetitionTab = (props: any) => {
                   key={event.id}
                   onClick={() => isPlayed && setSelectedMatchReport(event.data)}
                   className={`group relative overflow-hidden rounded-lg sm:rounded-xl border transition-all duration-300 ${isPlayed
-                    ? 'cursor-pointer bg-slate-900/40 border-slate-500/10 opacity-60 hover:opacity-100 hover:border-cyan-500/30'
-                    : 'bg-gradient-to-r from-cyan-950/20 to-black/40 border-cyan-500/20 hover:border-cyan-400/50 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]'
+                    ? 'cursor-pointer bg-slate-900/40 border-slate-500/10 opacity-60 hover:opacity-100 hover:border-mineral-500/30'
+                    : isOverdue
+                      ? 'bg-amber-950/15 border-amber-400/20'
+                      : 'bg-gradient-to-r from-mineral-950/20 to-black/40 border-mineral-500/20 hover:border-mineral-400/50 hover:shadow-none'
                     }`}
                 >
                   {/* Hover Effect */}
@@ -392,8 +429,8 @@ export const CompetitionTab = (props: any) => {
                       <span className="text-[7px] sm:text-[10px] font-black text-white/50 uppercase leading-none mb-0.5">
                         {isBeforeKickoff ? '--/--' : event.date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
                       </span>
-                      <span className={`text-[8px] sm:text-[11px] font-bold ${isPlayed ? 'text-slate-500' : 'text-cyan-400'} leading-none`}>
-                        {isPlayed ? 'FIM' : isBeforeKickoff ? '--:--' : event.data.time}
+                      <span className={`text-[8px] sm:text-[11px] font-bold ${isPlayed ? 'text-slate-500' : isOverdue ? 'text-amber-300' : 'text-mineral-400'} leading-none`}>
+                        {isPlayed ? 'FIM' : isOverdue ? 'PEND.' : isBeforeKickoff ? '--:--' : event.data.time}
                       </span>
                     </div>
 
@@ -407,7 +444,7 @@ export const CompetitionTab = (props: any) => {
                             eventClick.stopPropagation();
                             setSelectedTeamView(event.data.homeId);
                           }}
-                          className={`truncate text-right text-[8px] font-bold uppercase transition hover:text-cyan-300 sm:text-[11px] ${isHomeUser ? 'text-cyan-400' : 'text-slate-400'}`}
+                          className={`truncate text-right text-[8px] font-bold uppercase transition hover:text-mineral-300 sm:text-[11px] ${isHomeUser ? 'text-mineral-400' : 'text-slate-400'}`}
                         >
                           {homeTeam?.name || event.data.home}
                         </button>
@@ -462,7 +499,7 @@ export const CompetitionTab = (props: any) => {
                             eventClick.stopPropagation();
                             setSelectedTeamView(event.data.awayId);
                           }}
-                          className={`truncate text-left text-[8px] font-bold uppercase transition hover:text-cyan-300 sm:text-[11px] ${isAwayUser ? 'text-cyan-400' : 'text-slate-400'}`}
+                          className={`truncate text-left text-[8px] font-bold uppercase transition hover:text-mineral-300 sm:text-[11px] ${isAwayUser ? 'text-mineral-400' : 'text-slate-400'}`}
                         >
                           {awayTeam?.name || event.data.away}
                         </button>
@@ -497,6 +534,18 @@ export const CompetitionTab = (props: any) => {
             );
           })}
         </div>
+
+        {calendarLimit < calendarEvents.length && (
+          <button
+            type="button"
+            onClick={() => setCalendarLimit(limit => limit + 24)}
+            className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white/70 transition hover:border-mineral-400/35 hover:text-mineral-200"
+          >
+            <ChevronDown size={15} />
+            Mais jogos
+            <span className="text-white/35">{calendarEvents.length - calendarLimit}</span>
+          </button>
+        )}
       </div>
 
       {/* Match Report Modal */}

@@ -1,44 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { useGame } from '../store/GameContext';
-import { HomeTab } from './dashboard/HomeTab';
-import { SquadTab } from './dashboard/SquadTab';
-import { TacticsTab } from './dashboard/TacticsTab';
-import { TrainingTab } from './dashboard/TrainingTab';
-import { CompetitionTab } from './dashboard/CompetitionTab';
-import { WorldTab } from './dashboard/WorldTab';
-import { DatabaseTab } from './dashboard/DatabaseTab';
-import { CareerTab } from './dashboard/CareerTab';
 import { NewGameFlow } from './NewGameFlow';
-import { Users, Brain, Target, Home, Trophy, History, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, X } from 'lucide-react';
+import { Users, Brain, Target, Home, Trophy, History, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, LoaderCircle, X } from 'lucide-react';
 import { useGameDispatch, useGameState } from '../store/GameContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RecruitmentPanel } from './dashboard/RecruitmentPanel';
 import { DraftPanel } from './dashboard/DraftPanel';
 import { LiveReport, PostGameReport } from './MatchReports';
-import { LeagueState, Match, Player, Team, Manager } from '../types';
+import { LeagueState, Match, Player, Manager, SeasonReport } from '../types';
 import { GENESIS_DRAFT_LAST_DAY, MATCH_REAL_TIME_SECONDS, SEASON_DAYS } from '../constants/gameConstants';
 import { ManagerModal } from './ManagerModal';
-import { startNewSeason } from '../engine/gameLogic';
 import { TeamModal } from './TeamModal';
 import { PlayerModal } from './PlayerModal';
 import { TeamLogo } from './TeamLogo';
 import { ObserverClaimPanel } from './ObserverClaimPanel';
 import { OnboardingActionHint, OnboardingArea, OnboardingHint } from './OnboardingHint';
-import { addNews } from '../engine/newsService';
 import { FeedbackReportModal } from './FeedbackReportModal';
 import { SeasonReportModal } from './SeasonReportModal';
 import { runInteractionFeedback } from '../utils/uiFeedback';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useMatchNotifications } from '../hooks/useMatchNotifications';
-import { claimWorldTick, completeWorldDayTick } from '../lib/worldTick';
+import { getDistrictTheme } from '../utils/districtTheme';
 import { getNextGameMidnight, getNextRealMidnight } from '../utils/worldSchedule';
+
+const HomeTab = lazy(() => import('./dashboard/HomeTab').then(module => ({ default: module.HomeTab })));
+const SquadTab = lazy(() => import('./dashboard/SquadTab').then(module => ({ default: module.SquadTab })));
+const TacticsTab = lazy(() => import('./dashboard/TacticsTab').then(module => ({ default: module.TacticsTab })));
+const TrainingTab = lazy(() => import('./dashboard/TrainingTab').then(module => ({ default: module.TrainingTab })));
+const CompetitionTab = lazy(() => import('./dashboard/CompetitionTab').then(module => ({ default: module.CompetitionTab })));
+const WorldTab = lazy(() => import('./dashboard/WorldTab').then(module => ({ default: module.WorldTab })));
+const CareerTab = lazy(() => import('./dashboard/CareerTab').then(module => ({ default: module.CareerTab })));
+
+const TabLoadingState = () => (
+  <div className="grid min-h-[45vh] place-items-center" role="status" aria-label="Carregando aba">
+    <LoaderCircle className="animate-spin text-mineral-300" size={28} />
+  </div>
+);
 
 // 'draft' e alcancavel pelo atalho do WorldTab (onTabChange('draft')) e renderiza
 // o DraftPanel em tela cheia. Nao tem item na navegacao inferior de proposito.
-type Tab = 'home' | 'team' | 'calendar' | 'world' | 'career' | 'draft';
+type Tab = 'home' | 'team' | 'calendar' | 'world' | 'career' | 'draft' | 'market';
 type TeamSubTab = 'squad' | 'lineup' | 'tactics' | 'training' | 'draft';
 
 export const Dashboard: React.FC = () => {
-  const { state, isPaused, worldId } = useGameState();
+  const { state, isPaused } = useGameState();
   const { setState, saveGame, togglePause, logout, leaveWorld, addToast, resignFromTeam, requestConfirm } = useGameDispatch();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeTeamTab, setActiveTeamTab] = useState<TeamSubTab>(
@@ -51,12 +56,10 @@ export const Dashboard: React.FC = () => {
   const [watchedMatches, setWatchedMatches] = useState<Set<string>>(new Set());
   const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-  const [isSeasonEndDismissed, setIsSeasonEndDismissed] = useState(false);
   const [selectedTeamView, setSelectedTeamView] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [selectedManager, setSelectedManager] = useState<Manager | null>(null);
   const [selectedSeasonReport, setSelectedSeasonReport] = useState<number | null>(null);
-  const [autoOpenedSeasonReport, setAutoOpenedSeasonReport] = useState<number | null>(null);
   const isObserver = !state.userTeamId && (!!state.userManagerId || !state.isCreator);
   const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
   const squadNeedsAttention = !!userTeam && !isObserver && isDraftOpen && (userTeam.squad?.length || 0) < 15;
@@ -75,7 +78,7 @@ export const Dashboard: React.FC = () => {
       // O draft em tela cheia reaproveita a dica da sub-aba de draft.
       : activeTab === 'draft'
         ? 'team-draft'
-        : activeTab;
+        : activeTab === 'market' ? 'world' : activeTab;
 
   useEffect(() => {
     if (!isDraftOpen && activeTeamTab === 'draft') {
@@ -125,12 +128,55 @@ export const Dashboard: React.FC = () => {
     month: '2-digit'
   }).replace('.', '')}`;
   const headerSeasonDay = state.world.currentDay < 0 ? 0 : (state.world.currentDay || 0);
+  const headerSeasonProgress = Math.min(100, Math.max(0, (headerSeasonDay / SEASON_DAYS) * 100));
+  const headerPhaseLabel = state.world.status === 'LOBBY'
+    ? 'Genesis'
+    : state.world.phase === 'OFFSEASON'
+      ? 'Offseason'
+      : state.world.phase === 'ELITE_CUP'
+        ? 'Copa Elite'
+        : 'Temporada';
 
   const { daysPassed, userTeamMatches, upcomingMatches, totalPoints, powerCap } = useDashboardData();
   useMatchNotifications(state, userTeam, upcomingMatches);
   const marketNeedsAttention = !!userTeam && !isObserver && state.world.transferWindowOpen === true && (powerCap - totalPoints) >= 120;
   const calendarNeedsAttention = !!userTeam && userTeamMatches.some(match => match.played && match.revealed === false);
-  const isSeasonEnded = state.world.status !== 'LOBBY' && daysPassed > SEASON_DAYS;
+  const currentSeasonPreview = React.useMemo<SeasonReport | null>(() => {
+    if (state.world.phase !== 'OFFSEASON') return null;
+    const season = state.world.currentSeason || 2050;
+    const archived = state.world.history?.find(report => report.season === season);
+    if (archived) return archived;
+
+    const teams = Object.values(state.teams);
+    const players = Object.values(state.players);
+    const profitTeam = [...teams].sort((a, b) => (b.powerCap || 0) - (a.powerCap || 0))[0];
+    const mvpPlayer = [...players].sort((a, b) =>
+      (b.history.seasonRatingDelta || 0) - (a.history.seasonRatingDelta || 0)
+    )[0];
+
+    return {
+      season,
+      finalStandings: Object.fromEntries(
+        Object.entries(state.world.leagues || {}).map(([key, league]) => [key, league.standings || []])
+      ),
+      reallocatedTeams: [],
+      profitWinner: {
+        teamId: profitTeam?.id || '',
+        capGain: Math.max(0, (profitTeam?.powerCap || 8000) - 8000),
+      },
+      mvpRating: {
+        playerId: mvpPlayer?.id || '',
+        ratingGain: mvpPlayer?.history.seasonRatingDelta || 0,
+      },
+      eliteCupWinnerId: state.world.eliteCup?.winnerId || null,
+      districtCupWinnerId: state.world.districtCup?.winnerId || null,
+    };
+  }, [state.players, state.teams, state.world.currentSeason, state.world.districtCup?.winnerId, state.world.eliteCup?.winnerId, state.world.history, state.world.leagues, state.world.phase]);
+  const availableSeasonReports = React.useMemo(() => {
+    const history = state.world.history || [];
+    if (!currentSeasonPreview || history.some(report => report.season === currentSeasonPreview.season)) return history;
+    return [currentSeasonPreview, ...history];
+  }, [currentSeasonPreview, state.world.history]);
   const actionOnboardingHint = React.useMemo<OnboardingActionHint | null>(() => {
     if (isObserver || activeTab !== 'home') return null;
 
@@ -231,114 +277,6 @@ export const Dashboard: React.FC = () => {
     state.world.status,
     userTeamMatches
   ]);
-  const seasonEndSummary = React.useMemo(() => {
-    const leagues = Object.values(state.world.leagues || {}) as LeagueState[];
-    const sortRows = (rows: any[]) => [...rows].sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      const gdA = a.goalsFor - a.goalsAgainst;
-      const gdB = b.goalsFor - b.goalsAgainst;
-      return gdB - gdA;
-    });
-
-    const champions = leagues
-      .map(league => {
-        const sorted = sortRows(league.standings || []);
-        const row = sorted[0];
-        return row ? { league: league.name, team: state.teams[row.teamId], row } : null;
-      })
-      .filter(Boolean) as Array<{ league: string; team: Team; row: any }>;
-
-    const bottomTeams = leagues.flatMap(league => {
-      const sorted = sortRows(league.standings || []);
-      return sorted.slice(-2).map(row => ({ league: league.name, team: state.teams[row.teamId], row }));
-    }).filter(item => item.team);
-
-    const userTeamId = state.userTeamId || (state.userManagerId ? state.managers[state.userManagerId]?.career.currentTeamId : null);
-    const userBottom = bottomTeams.some(item => item.team.id === userTeamId);
-    const userStanding = leagues
-      .map(league => {
-        const sorted = sortRows(league.standings || []);
-        const index = sorted.findIndex(row => row.teamId === userTeamId);
-        return index >= 0 ? { league: league.name, row: sorted[index], position: index + 1 } : null;
-      })
-      .find(Boolean);
-    const eliteWinner = state.world.eliteCup?.winnerId ? state.teams[state.world.eliteCup.winnerId] : null;
-    const districtWinner = state.world.districtCup?.winnerId ? state.teams[state.world.districtCup.winnerId] : null;
-
-    return { champions, bottomTeams, userBottom, userStanding, eliteWinner, districtWinner };
-  }, [state.world.leagues, state.world.eliteCup?.winnerId, state.world.districtCup?.winnerId, state.teams, state.userTeamId, state.userManagerId, state.managers]);
-
-  const handleOffseasonDecision = async (choice: 'STAY' | 'SEEK_CLUB') => {
-    const newState = {
-      ...state,
-      world: {
-        ...state.world,
-        offseasonDecision: {
-          season: state.world.currentSeason || 2050,
-          choice,
-          date: state.world.currentDate
-        }
-      }
-    };
-    addNews(
-      newState,
-      choice === 'STAY' ? 'MANAGER CONFIRMA PERMANENCIA' : 'MANAGER AVALIA NOVO CLUBE',
-      choice === 'STAY'
-        ? 'O comando decidiu permanecer no projeto apos o fim da temporada.'
-        : 'O comando registrou interesse em procurar um novo clube para a proxima temporada.',
-      'SYSTEM',
-      2
-    );
-
-    setState(newState);
-    await saveGame(newState);
-    addToast(choice === 'STAY' ? 'Decisao registrada: permanecer.' : 'Decisao registrada: procurar novo clube.', 'info');
-  };
-
-  const handleSeasonEndContinue = async () => {
-    if (!state.isCreator) {
-      setIsSeasonEndDismissed(true);
-      return;
-    }
-
-    const confirmed = await requestConfirm({
-      title: 'Preparar nova temporada',
-      message: 'A proxima temporada sera agendada para amanha as 00:00.',
-      confirmLabel: 'Preparar',
-    });
-    if (!confirmed) return;
-    const season = state.world.currentSeason || 2050;
-    const tickClaim = await claimWorldTick(
-      worldId,
-      `season-${season}:prepare-next-season`,
-      state.world.currentDate
-    );
-    if (!tickClaim.ok) {
-      addToast('A proxima temporada ja esta sendo preparada.', 'warning');
-      return;
-    }
-
-    try {
-      const nextStart = getNextRealMidnight();
-      const nextGameStart = getNextGameMidnight(state.world.currentDate);
-
-      const newState = startNewSeason(state);
-      newState.world.status = 'LOBBY';
-      newState.world.currentDay = -1;
-      newState.world.startScheduledAt = nextStart.toISOString();
-      newState.world.seasonStartReal = nextGameStart.toISOString();
-      setState(newState);
-      await saveGame(newState);
-      await completeWorldDayTick(worldId, tickClaim.tickKey, true);
-      setIsSeasonEndDismissed(true);
-      addToast('Nova temporada preparada e agendada para amanha 00:00.', 'success');
-    } catch (error: any) {
-      await completeWorldDayTick(worldId, tickClaim.tickKey, false, error?.message || String(error));
-      console.error('Erro ao preparar nova temporada:', error);
-      addToast('Erro ao preparar nova temporada', 'error');
-    }
-  };
-
   const handleResignFromClub = async () => {
     const confirmed = await requestConfirm({
       title: 'Demitir do clube',
@@ -427,16 +365,6 @@ export const Dashboard: React.FC = () => {
     }
   }, [userTeamMatches, state.world.currentDate, state.userTeamId, watchedMatches, liveMatch]);
 
-  useEffect(() => {
-    const latestSeasonReport = state.world.history?.[0];
-    if (!latestSeasonReport) return;
-    if (state.world.phase !== 'OFFSEASON') return;
-    if (autoOpenedSeasonReport === latestSeasonReport.season) return;
-
-    setSelectedSeasonReport(latestSeasonReport.season);
-    setAutoOpenedSeasonReport(latestSeasonReport.season);
-  }, [state.world.history, state.world.phase, autoOpenedSeasonReport]);
-
   // Live Match Timer
   useEffect(() => {
     if (!liveMatch) return;
@@ -479,15 +407,13 @@ export const Dashboard: React.FC = () => {
             setActiveTeamTab('tactics');
           }}
           onOpenLeague={() => setActiveTab('calendar')}
+          onOpenSeasonReport={(season: number) => setSelectedSeasonReport(season)}
         />
       );
       case 'team':
         return (
           <div className="space-y-4 sm:space-y-6">
-            <div
-              data-onboarding="team-mode-tabs"
-              className="flex bg-black/40 backdrop-blur-md rounded-2xl p-1 border border-white/5 shadow-lg overflow-x-auto scrollbar-hide"
-            >
+            <div data-onboarding="team-mode-tabs" className="sport-tabs hide-scrollbar">
               {[
                 ...(isDraftOpen ? [{ id: 'draft', label: 'Draft', icon: Rocket, attention: squadNeedsAttention }] : []),
                 { id: 'squad', label: 'Elenco', icon: Users, attention: squadNeedsAttention },
@@ -497,22 +423,15 @@ export const Dashboard: React.FC = () => {
               ].map(tab => (
                 <button
                   key={tab.id}
+                  type="button"
+                  aria-pressed={activeTeamTab === tab.id}
+                  data-attention={tab.attention && activeTeamTab !== tab.id ? 'true' : undefined}
                   onClick={() => {
                     runInteractionFeedback();
                     setActiveTeamTab(tab.id as TeamSubTab);
                   }}
-                  className={`relative flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold transition-all whitespace-nowrap text-[9px] sm:text-[10px] uppercase tracking-widest active:scale-90
-                    ${activeTeamTab === tab.id
-                      ? 'bg-cyan-500 text-black shadow-[0_0_20px_rgba(6,182,212,0.4)]'
-                      : tab.attention
-                        ? 'text-cyan-100 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.12)] hover:text-white hover:bg-cyan-400/15'
-                        : 'text-white/40 hover:text-white hover:bg-white/5'
-                    }`}
                 >
-                  {tab.attention && activeTeamTab !== tab.id && (
-                    <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
-                  )}
-                  <tab.icon size={14} className={activeTeamTab === tab.id ? 'animate-pulse' : ''} />
+                  <tab.icon size={15} aria-hidden="true" />
                   {tab.label}
                 </button>
               ))}
@@ -527,7 +446,13 @@ export const Dashboard: React.FC = () => {
       case 'calendar': return <CompetitionTab />;
       case 'world': return <WorldTab onTabChange={(tab: any) => setActiveTab(tab)} />;
       case 'draft': return <DraftPanel />;
-      case 'career': return <CareerTab onOpenFeedback={() => setIsFeedbackOpen(true)} />;
+      case 'market': return <RecruitmentPanel draft={isDraftOpen} />;
+      case 'career': return (
+        <CareerTab
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
+          onOpenSeasonReport={(season: number) => setSelectedSeasonReport(season)}
+        />
+      );
       default: return <HomeTab />;
     }
   };
@@ -543,6 +468,8 @@ export const Dashboard: React.FC = () => {
   const headerLeagueName = headerTeam?.league
     ? (Object.values(state.world.leagues || {}) as LeagueState[]).find(league => league.id === headerTeam.league)?.name
     : null;
+  const headerDistrictTheme = getDistrictTheme(headerTeam?.district);
+  const clubAccent = headerTeam?.logo?.secondary || headerDistrictTheme.color;
   const handleGlobalInteractionFeedback = (event: React.PointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     const interactive = target?.closest('button, a, [role="button"]');
@@ -552,16 +479,14 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden text-white font-sans selection:bg-cyan-500/30 stadium-bg"
+    <div className="elite-shell relative h-screen w-screen overflow-hidden text-white font-sans selection:bg-mineral-500/30"
       onPointerDownCapture={handleGlobalInteractionFeedback}
-      style={{ backgroundImage: `linear-gradient(to bottom, rgba(14, 15, 17, 0.38), rgba(14, 15, 17, 0.9)), url(${bgImage})` }}>
+      style={{ '--club-accent': clubAccent } as React.CSSProperties}>
 
-      {/* Background Glows */}
-      <div className="absolute top-0 left-1/4 w-[50%] h-[30%] bg-[var(--district-norte)]/10 blur-[150px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-[50%] h-[30%] bg-[var(--district-oeste)]/10 blur-[150px] pointer-events-none animate-pulse" />
+      <div className="elite-backdrop" style={{ backgroundImage: `url(${bgImage})` }} />
 
       {/* Boxed Floating Glass Header */}
-      <header className="fixed top-2 sm:top-4 left-1/2 -translate-x-1/2 max-w-7xl w-[96%] sm:w-[92%] glass-card-neon neon-border-cyan white-gradient-sheen z-50 flex items-center px-3 sm:px-8 h-14 sm:h-20 rounded-xl sm:rounded-3xl shadow-[0_15px_40px_rgba(0,0,0,0.7)] group">
+      <header className="silver-header sport-sheen safe-top fixed top-2 sm:top-4 left-1/2 -translate-x-1/2 max-w-7xl w-[96%] sm:w-[92%] glass-card z-50 flex items-center px-3 sm:px-8 h-14 sm:h-20 rounded-xl sm:rounded-3xl shadow-[0_15px_40px_rgba(0,0,0,0.7)] group">
         <div className="flex items-center gap-2 sm:gap-6 relative z-10 w-full justify-between">
           <div
             className="flex items-center gap-2 sm:gap-4 cursor-pointer hover:opacity-80 transition-opacity"
@@ -570,7 +495,7 @@ export const Dashboard: React.FC = () => {
               setIsManagerModalOpen(true);
             }}
           >
-            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-cyan-500/50 bg-black/40 p-1 shadow-2xl sm:h-14 sm:w-14 sm:rounded-2xl">
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-mineral-500/50 bg-black/40 p-1 shadow-2xl sm:h-14 sm:w-14 sm:rounded-2xl">
               {headerTeam?.logo ? (
                 <TeamLogo
                   primaryColor={headerTeam.logo.primary}
@@ -590,10 +515,10 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
             <div className="flex flex-col">
-              <h1 className="text-[9px] sm:text-[14px] font-black italic tracking-tighter uppercase text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] leading-none truncate max-w-[80px] sm:max-w-none">
+              <h1 className="text-[9px] sm:text-[14px] font-black italic tracking-tighter uppercase text-white  leading-none truncate max-w-[80px] sm:max-w-none">
                 {isObserver ? 'Observador Elite' : (headerTeam?.name || 'Sem Clube')}
               </h1>
-              <p className="text-[6px] sm:text-[9px] font-bold text-cyan-400 uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1">
+              <p style={{ color: headerDistrictTheme.color }} className="text-[6px] sm:text-[9px] font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-0.5 sm:mt-1">
                 {isObserver ? 'Escolha um clube' : (headerLeagueName || headerTeam?.district || 'Temporada')}
               </p>
             </div>
@@ -603,8 +528,17 @@ export const Dashboard: React.FC = () => {
             <div className="text-[8px] sm:text-[11px] font-black italic tabular-nums text-white leading-tight drop-shadow-md uppercase tracking-widest">
               S{state.world.currentSeason || 1} - Dia {headerSeasonDay} - {headerClock}
             </div>
-            <div className="mt-1 flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1">
-              <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.24em] text-cyan-200">Score</span>
+            <div className="mt-1 flex w-[116px] items-center gap-1.5 sm:w-[184px]" aria-label={`${headerPhaseLabel}: ${Math.round(headerSeasonProgress)}%`}>
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-mineral-300 shadow-none transition-[width] duration-500"
+                  style={{ width: `${headerSeasonProgress}%` }}
+                />
+              </div>
+              <span className="text-[6px] font-black uppercase tracking-wider text-mineral-200/70">{headerPhaseLabel}</span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 rounded-full border border-mineral-400/25 bg-mineral-400/10 px-3 py-0.5 sm:py-1">
+              <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.24em] text-mineral-200">Score</span>
               <span className="text-[10px] sm:text-sm font-black italic tabular-nums text-white">
                 {totalPoints.toLocaleString()}
               </span>
@@ -623,7 +557,7 @@ export const Dashboard: React.FC = () => {
                 });
                 if (confirmed) leaveWorld();
               }}
-              className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-black/40 hover:bg-black/60 flex items-center justify-center transition-all border border-cyan-500/30 shadow-inner group active:scale-90"
+              className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-black/40 hover:bg-black/60 flex items-center justify-center transition-all border border-mineral-500/30 shadow-inner group active:scale-90"
               title="Sair do Mundo"
             >
               <LogOut size={12} className="text-red-400 group-hover:scale-110 transition-transform sm:size-[16px]" />
@@ -639,7 +573,7 @@ export const Dashboard: React.FC = () => {
             <motion.div
               initial={{ opacity: 0, y: -14 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-2 sm:mb-4 rounded-[1.5rem] border border-cyan-500/30 bg-cyan-500/10 p-4 text-center text-[9px] font-black uppercase tracking-[0.25em] text-cyan-100 shadow-[0_0_35px_rgba(6,182,212,0.12)] sm:p-5"
+              className="mb-2 sm:mb-4 rounded-[1.5rem] border border-mineral-500/30 bg-mineral-500/10 p-4 text-center text-[9px] font-black uppercase tracking-[0.25em] text-mineral-100 shadow-none sm:p-5"
             >
               Voce entrou como observador. Pode acompanhar o mundo ou assumir um clube de IA.
             </motion.div>
@@ -759,17 +693,20 @@ export const Dashboard: React.FC = () => {
               exit={{ opacity: 0, scale: 1.02, filter: 'blur(4px)' }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             >
-              {renderCurrentTab()}
+              <Suspense fallback={<TabLoadingState />}>
+                {renderCurrentTab()}
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
 
       {/* Universal Bottom Navigation */}
-      <nav className="fixed bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 max-w-3xl w-[96%] sm:w-[92%] glass-card rounded-[1.5rem] sm:rounded-[3rem] p-1 sm:p-2.5 flex justify-between items-center z-50 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-3xl">
+      <nav aria-label="Navegacao principal" className="elite-nav sport-nav sport-sheen safe-bottom fixed bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 max-w-3xl w-[96%] sm:w-[92%] glass-card rounded-[1.5rem] sm:rounded-[3rem] p-1 sm:p-2.5 flex justify-between items-center z-50 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-3xl">
         {[
-          { id: 'home', label: 'Home', icon: Home },
+          { id: 'home', label: 'Início', icon: Home },
           { id: 'team', label: isObserver ? 'Entrar' : 'Elenco', icon: Users, attention: teamNeedsAttention },
+          ...(!isObserver ? [{ id: 'market', label: isDraftOpen ? 'Draft' : 'Transferir', icon: Users, attention: marketNeedsAttention }] : []),
           { id: 'calendar', label: 'Calendario', icon: Calendar, attention: calendarNeedsAttention },
           { id: 'world', label: 'Mundo', icon: Trophy, attention: marketNeedsAttention },
           ...(isObserver ? [] : [{ id: 'career', label: 'Carreira', icon: Briefcase }]),
@@ -777,6 +714,7 @@ export const Dashboard: React.FC = () => {
           <button
             key={tab.id}
             data-testid={`main-tab-${tab.id}`}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
             onClick={() => {
               if (activeTab !== tab.id) {
                 runInteractionFeedback();
@@ -787,15 +725,15 @@ export const Dashboard: React.FC = () => {
                 }
               }
             }}
-            className={`flex-1 flex flex-col items-center gap-1 sm:gap-2 py-2 sm:py-4 rounded-[1.2rem] sm:rounded-[2.5rem] transition-all relative group active:scale-90 ${activeTab === tab.id ? 'text-cyan-400' : 'text-white/20 hover:text-white/50'} ${tab.attention && activeTab !== tab.id ? 'text-cyan-200 shadow-[0_0_24px_rgba(34,211,238,0.16)]' : ''}`}
+            className={`flex-1 flex flex-col items-center gap-1 sm:gap-2 py-2 sm:py-4 rounded-[1.2rem] sm:rounded-[2.5rem] transition-all relative group active:scale-90 ${activeTab === tab.id ? 'text-mineral-400' : 'text-white/60 hover:text-white'} ${tab.attention && activeTab !== tab.id ? 'text-mineral-200 shadow-none' : ''}`}
           >
             {tab.attention && activeTab !== tab.id && (
-              <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.95)]" />
+              <span className="sport-nav__notification absolute right-3 top-2 h-2 w-2 rounded-full" />
             )}
             {activeTab === tab.id && (
               <motion.div
                 layoutId="nav-glow"
-                className="absolute inset-0 bg-gradient-to-t from-cyan-500/30 to-transparent rounded-[1.2rem] sm:rounded-[2.5rem] z-0"
+                className="sport-nav__plate absolute inset-0 z-0"
               />
             )}
             <tab.icon
@@ -803,169 +741,15 @@ export const Dashboard: React.FC = () => {
               // Tailwind faz varredura estatica do fonte: classe montada em template
               // string (sm:size-[${...}px]) nunca chega a ser gerada no CSS. Precisa ser
               // uma alternancia entre duas classes completas.
-              className={`relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'sm:size-[26px] drop-shadow-[0_0_12px_rgba(34,211,238,1)] scale-110' : 'sm:size-[24px] group-hover:scale-110'}`}
+              className={`relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'sm:size-[26px] shadow-none scale-110' : 'sm:size-[24px] group-hover:scale-110'}`}
             />
-            <span className={`text-[6px] sm:text-[9px] font-black tracking-[0.1em] sm:tracking-[0.2em] uppercase relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'opacity-100 translate-y-0' : 'opacity-40 translate-y-0.5 group-hover:opacity-100 group-hover:translate-y-0'}`}>
+            <span className={`text-[9px] font-black tracking-[0.1em] sm:tracking-[0.2em] uppercase relative z-10 transition-all duration-300 ${activeTab === tab.id ? 'opacity-100 translate-y-0' : 'opacity-55 translate-y-0.5 group-hover:opacity-100 group-hover:translate-y-0'}`}>
               {tab.label}
             </span>
           </button>
         ))}
       </nav>
 
-      <AnimatePresence>
-        {isSeasonEnded && !isSeasonEndDismissed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/90 p-3 backdrop-blur-xl sm:p-4"
-          >
-            <motion.div
-              initial={{ y: 30, scale: 0.96 }}
-              animate={{ y: 0, scale: 1 }}
-              exit={{ y: 20, scale: 0.98 }}
-              className="relative my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_70px_rgba(6,182,212,0.22)] slim-scrollbar"
-            >
-              <button
-                type="button"
-                onClick={() => setIsSeasonEndDismissed(true)}
-                className="absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-black/50 p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-
-              <div className="border-b border-white/10 bg-gradient-to-br from-cyan-950/50 via-slate-950 to-fuchsia-950/40 p-6 sm:p-8">
-                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.35em] text-cyan-300">
-                  Fim de ciclo
-                </p>
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white sm:text-5xl">
-                  Temporada Encerrada
-                </h2>
-                <p className="mt-3 max-w-2xl text-xs font-bold uppercase tracking-widest text-slate-400">
-                  O mundo parou para registrar campeoes, quedas e decisoes de carreira.
-                </p>
-              </div>
-
-              <div className="max-h-[62vh] overflow-y-auto p-5 slim-scrollbar sm:p-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-300">
-                    <Trophy size={15} /> Campeoes
-                  </div>
-                  <div className="space-y-2">
-                    {seasonEndSummary.champions.map(item => (
-                      <div key={item.league} className="flex items-center justify-between gap-3 rounded-xl bg-black/35 px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => item.team && setSelectedTeamView(item.team.id)}
-                          className="truncate text-left text-[10px] font-black uppercase tracking-wider text-white transition hover:text-cyan-300"
-                        >
-                          {item.team?.name || '---'}
-                        </button>
-                        <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-slate-500">{item.league}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-300">
-                    <TrendingUp size={15} className="rotate-180" /> Zona de queda
-                  </div>
-                  <div className="space-y-2">
-                    {seasonEndSummary.bottomTeams.slice(0, 8).map(item => (
-                      <div key={`${item.league}-${item.team.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-black/35 px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTeamView(item.team.id)}
-                          className="truncate text-left text-[10px] font-black uppercase tracking-wider text-white transition hover:text-cyan-300"
-                        >
-                          {item.team.name}
-                        </button>
-                        <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-slate-500">{item.league}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                </div>
-              </div>
-
-              <div className="mx-5 mb-5 grid gap-3 sm:mx-6 sm:grid-cols-3">
-                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-cyan-200">Seu clube</p>
-                  <p className="mt-2 text-xl font-black uppercase italic text-white">
-                    {seasonEndSummary.userStanding ? `${seasonEndSummary.userStanding.position}o` : '--'}
-                  </p>
-                  <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                    {seasonEndSummary.userStanding?.league || 'sem liga'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-fuchsia-200">Copa Elite</p>
-                  <button
-                    type="button"
-                    onClick={() => seasonEndSummary.eliteWinner && setSelectedTeamView(seasonEndSummary.eliteWinner.id)}
-                    className="mt-2 block max-w-full truncate text-left text-sm font-black uppercase italic text-white transition hover:text-cyan-300"
-                  >
-                    {seasonEndSummary.eliteWinner?.name || 'a definir'}
-                  </button>
-                </div>
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-emerald-200">Copa Distritos</p>
-                  <button
-                    type="button"
-                    onClick={() => seasonEndSummary.districtWinner && setSelectedTeamView(seasonEndSummary.districtWinner.id)}
-                    className="mt-2 block max-w-full truncate text-left text-sm font-black uppercase italic text-white transition hover:text-cyan-300"
-                  >
-                    {seasonEndSummary.districtWinner?.name || 'a definir'}
-                  </button>
-                </div>
-              </div>
-
-              {seasonEndSummary.userBottom && (
-                <div className="mx-5 mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:mx-6">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">
-                    Seu time caiu de zona. Registrar decisao:
-                  </p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOffseasonDecision('STAY')}
-                      className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-white/10"
-                    >
-                      Permanecer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOffseasonDecision('SEEK_CLUB')}
-                      className="rounded-xl border border-cyan-500/30 bg-cyan-500/15 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-cyan-100 transition hover:bg-cyan-500/25"
-                    >
-                      Procurar novo clube
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2 border-t border-white/10 p-5 sm:flex-row sm:justify-end sm:p-6">
-                <button
-                  type="button"
-                  onClick={() => setIsSeasonEndDismissed(true)}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition hover:bg-white/10"
-                >
-                  Continuar vendo
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSeasonEndContinue}
-                  className="rounded-xl border border-cyan-400/40 bg-cyan-400 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_24px_rgba(34,211,238,0.28)] transition hover:bg-cyan-300"
-                >
-                  {state.isCreator ? 'Acelerar offseason' : 'Continuar'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Live Match Overlay Modal */}
       <AnimatePresence>
@@ -1028,7 +812,7 @@ export const Dashboard: React.FC = () => {
                 <div className="mt-6 flex justify-center">
                   <button
                     onClick={() => setLiveMatch(null)}
-                    className="px-10 py-4 bg-cyan-500 hover:bg-cyan-400 text-black rounded-full text-xs uppercase font-black tracking-[0.3em] transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(34,211,238,0.4)]"
+                    className="px-10 py-4 bg-mineral-500 hover:bg-mineral-400 text-black rounded-full text-xs uppercase font-black tracking-[0.3em] transition-all transform hover:scale-105 shadow-none"
                   >
                     Voltar ao Dashboard
                   </button>
@@ -1066,14 +850,16 @@ export const Dashboard: React.FC = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {selectedSeasonReport !== null && state.world.history?.find(report => report.season === selectedSeasonReport) && (
+        {selectedSeasonReport !== null && availableSeasonReports.find(report => report.season === selectedSeasonReport) && (
           <SeasonReportModal
-            report={state.world.history.find(report => report.season === selectedSeasonReport)!}
+            report={availableSeasonReports.find(report => report.season === selectedSeasonReport)!}
+            reports={availableSeasonReports}
             teams={state.teams}
             players={state.players}
             managers={state.managers}
             userTeamId={state.userTeamId}
             onClose={() => setSelectedSeasonReport(null)}
+            onSelectSeason={setSelectedSeasonReport}
             onTeamClick={(teamId) => {
               setSelectedSeasonReport(null);
               setSelectedTeamView(teamId);

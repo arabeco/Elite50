@@ -1,29 +1,37 @@
 import React from 'react';
-import { X, Trophy, TrendingDown, TrendingUp, Shuffle, Star, Shield } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Trophy, TrendingDown, TrendingUp, Shuffle, Star, Shield } from 'lucide-react';
 import { LeagueTeamStats, Manager, Player, SeasonReport, Team } from '../types';
 import { getLeagueTrophyAssetByKey, TROPHY_ASSETS } from '../utils/trophyAssets';
 
 interface SeasonReportModalProps {
   report: SeasonReport;
+  reports?: SeasonReport[];
   teams: Record<string, Team>;
   players: Record<string, Player>;
   managers: Record<string, Manager>;
   userTeamId?: string | null;
   onClose: () => void;
+  onSelectSeason?: (season: number) => void;
   onTeamClick?: (teamId: string) => void;
   onPlayerClick?: (player: Player) => void;
 }
 
 export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
   report,
+  reports = [],
   teams,
   players,
   managers,
   userTeamId,
   onClose,
+  onSelectSeason,
   onTeamClick,
   onPlayerClick
 }) => {
+  const orderedReports = [...reports].sort((a, b) => b.season - a.season);
+  const reportIndex = orderedReports.findIndex(item => item.season === report.season);
+  const olderReport = reportIndex >= 0 ? orderedReports[reportIndex + 1] : undefined;
+  const newerReport = reportIndex > 0 ? orderedReports[reportIndex - 1] : undefined;
   const championRows = (Object.entries(report.finalStandings || {}) as Array<[string, LeagueTeamStats[]]>)
     .map(([leagueKey, rows]) => {
       const sorted = [...(rows || [])].sort((a, b) => {
@@ -63,9 +71,38 @@ export const SeasonReportModal: React.FC<SeasonReportModalProps> = ({
           <p className="mb-2 text-[9px] font-black uppercase tracking-[0.35em] text-cyan-300">
             The Pulse Arquivo
           </p>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white sm:text-5xl">
-            Temporada {report.season}
-          </h2>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              title={olderReport ? `Temporada ${olderReport.season}` : 'Sem temporada anterior'}
+              aria-label="Temporada anterior"
+              disabled={!olderReport}
+              onClick={() => olderReport && onSelectSeason?.(olderReport.season)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-black/30 text-white/60 transition hover:border-cyan-300/40 hover:text-white disabled:opacity-20"
+            >
+              <ChevronLeft size={19} />
+            </button>
+            <div className="min-w-0 flex-1 text-center sm:text-left">
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white sm:text-5xl">
+                Temporada {report.season}
+              </h2>
+              {orderedReports.length > 1 && (
+                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/30">
+                  {reportIndex + 1}/{orderedReports.length} no arquivo
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              title={newerReport ? `Temporada ${newerReport.season}` : 'Relatório mais recente'}
+              aria-label="Temporada seguinte"
+              disabled={!newerReport}
+              onClick={() => newerReport && onSelectSeason?.(newerReport.season)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-black/30 text-white/60 transition hover:border-cyan-300/40 hover:text-white disabled:opacity-20"
+            >
+              <ChevronRight size={19} />
+            </button>
+          </div>
           <p className="mt-3 max-w-2xl text-xs font-bold uppercase tracking-widest text-slate-400">
             Recap oficial com campeoes, clubes sob pressao e destaques da season.
           </p>

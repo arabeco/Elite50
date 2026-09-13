@@ -43,6 +43,29 @@ const EXPECTED_ROLE: Record<NativeSector, Player['role']> = {
   attack: 'ATA', midfield: 'MEI', defense: 'ZAG', goalkeeper: 'GOL',
 };
 
+const MENTALITY_SECTOR_EFFECT: Record<NonNullable<Team['tactics']['mentality']>, Record<NativeSector, number>> = {
+  Calculista: { attack: 1, midfield: 1, defense: 1, goalkeeper: 1 },
+  Emocional: { attack: 1.08, midfield: 1.03, defense: 0.92, goalkeeper: 0.96 },
+  Predadora: { attack: 1.06, midfield: 1.02, defense: 0.97, goalkeeper: 0.99 },
+};
+
+const tacticalCardSectorEffect = (team: Team, sector: NativeSector) => {
+  let multiplier = 1;
+  (team.tactics?.slots || []).forEach(card => {
+    if (!card) return;
+    const name = card.name || '';
+    if (sector === 'attack' && name.includes('Ataque')) multiplier += 0.05;
+    if (sector === 'defense' && name.includes('Defesa')) multiplier += 0.05;
+    if (sector === 'midfield' && name.includes('Meio')) multiplier += 0.05;
+    if (sector === 'goalkeeper' && name.includes('Goleiro')) multiplier += 0.05;
+    if (sector === 'attack' && name === 'Super Chute') multiplier += 0.1;
+    if (sector === 'defense' && name === 'Muralha') multiplier += 0.1;
+    if (sector === 'midfield' && name === 'Maestro') multiplier += 0.08;
+    if (name === 'Bio-Otimização') multiplier += 0.04;
+  });
+  return multiplier;
+};
+
 const playerSectorSkill = (player: Player, sector: NativeSector) => {
   const fusion = player.fusion || ({} as Player['fusion']);
   const values = SECTOR_FUSION_KEYS[sector]
@@ -81,7 +104,13 @@ const teamSectorStrength = (team: Team, players: Record<string, Player>, sector:
     ? support.reduce((sum, player) => sum + playerSectorSkill(player, sector), 0) / support.length
     : specialistScore;
   const chemistry = 0.88 + (team.chemistry || 50) / 500;
-  return (specialistScore * (sector === 'goalkeeper' ? 1 : 0.84) + supportScore * (sector === 'goalkeeper' ? 0 : 0.16)) * chemistry;
+  const mentality = team.tactics?.mentality || 'Calculista';
+  const mentalityEffect = MENTALITY_SECTOR_EFFECT[mentality]?.[sector] || 1;
+  const cardEffect = tacticalCardSectorEffect(team, sector);
+  return (specialistScore * (sector === 'goalkeeper' ? 1 : 0.84) + supportScore * (sector === 'goalkeeper' ? 0 : 0.16))
+    * chemistry
+    * mentalityEffect
+    * cardEffect;
 };
 
 const STYLE_PROFILE: Record<Team['tactics']['playStyle'], { possession: number; passRisk: number; progression: number; chance: number; defense: number; press: number; transition: number }> = {

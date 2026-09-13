@@ -12,6 +12,83 @@ vi.mock('@supabase/supabase-js', () => ({
       getUser: vi.fn(async () => ({ data: { user: mockDb.user } }))
     },
     rpc: vi.fn(async (fnName: string, params: any) => {
+      if (fnName === 'claim_legacy_world_team') {
+        const master = mockDb.records.find(record => record.is_creator);
+        const claimed = mockDb.records.some(record =>
+          record.world_id === params.p_world_id &&
+          record.user_id !== mockDb.user.id &&
+          record.user_team_id === params.p_team_id
+        );
+        if (claimed) {
+          return { data: null, error: { message: 'team_already_claimed', code: 'P0001' } };
+        }
+
+        const selectedTeam = master?.teams_data?.[params.p_team_id];
+        if (!master || !selectedTeam) {
+          return { data: null, error: { message: 'team_not_available', code: 'P0001' } };
+        }
+
+        const manager = {
+          id: mockDb.user.id,
+          name: params.p_manager_name,
+          district: selectedTeam.district,
+          reputation: 50,
+          isNPC: false,
+          attributes: { evolution: 50, negotiation: 50, scout: 50 },
+          career: { currentTeamId: params.p_team_id, historyTeamIds: [params.p_team_id] },
+          achievements: []
+        };
+        const payload = {
+          ...master,
+          user_id: mockDb.user.id,
+          is_creator: false,
+          is_public: false,
+          user_team_id: params.p_team_id,
+          user_manager_id: mockDb.user.id,
+          teams_data: { [params.p_team_id]: { ...selectedTeam, managerId: mockDb.user.id } },
+          players_data: Object.fromEntries(
+            (selectedTeam.squad || []).map((playerId: string) => [playerId, master.players_data[playerId]]).filter(([, player]) => player)
+          ),
+          managers_data: { [mockDb.user.id]: manager },
+          training_data: params.p_training_data
+        };
+        mockDb.upserts.push(payload);
+        const index = mockDb.records.findIndex(record =>
+          record.user_id === mockDb.user.id && record.world_id === params.p_world_id
+        );
+        if (index >= 0) mockDb.records[index] = payload;
+        else mockDb.records.push(payload);
+        return { data: params.p_world_id, error: null };
+      }
+
+      if (fnName === 'submit_legacy_draft_proposal') {
+        const master = mockDb.records.find(record => record.is_creator && record.world_id === params.p_world_id);
+        const member = mockDb.records.find(record => record.user_id === mockDb.user.id && record.world_id === params.p_world_id);
+        const proposals = master.world_state.draftProposals || [];
+        master.world_state = {
+          ...master.world_state,
+          draftProposals: [...proposals, {
+            playerId: params.p_player_id,
+            managerId: member.user_manager_id,
+            teamId: member.user_team_id,
+            priority: proposals.filter((proposal: any) => proposal.managerId === member.user_manager_id).length + 1
+          }]
+        };
+        return { data: true, error: null };
+      }
+
+      if (fnName === 'cancel_legacy_draft_proposal') {
+        const master = mockDb.records.find(record => record.is_creator && record.world_id === params.p_world_id);
+        const member = mockDb.records.find(record => record.user_id === mockDb.user.id && record.world_id === params.p_world_id);
+        master.world_state = {
+          ...master.world_state,
+          draftProposals: (master.world_state.draftProposals || []).filter((proposal: any) =>
+            proposal.playerId !== params.p_player_id || proposal.managerId !== member.user_manager_id
+          )
+        };
+        return { data: true, error: null };
+      }
+
       if (fnName !== 'join_world_by_code' || params.p_join_code !== 'ELITE-123456') {
         return { data: null, error: { message: 'invalid_join_code' } };
       }
@@ -130,6 +207,18 @@ const createMasterRecord = () => ({
       potential: 700,
       district: 'NORTE',
       contract: { teamId: 't_1' },
+      history: { goals: 0, assists: 0, gamesPlayed: 0 },
+      achievements: []
+    },
+    p_free: {
+      id: 'p_free',
+      name: 'Free Player',
+      nickname: 'FREE',
+      role: 'MEI',
+      totalRating: 480,
+      potential: 620,
+      district: 'OESTE',
+      contract: { teamId: null },
       history: { goals: 0, assists: 0, gamesPlayed: 0 },
       achievements: []
     }
@@ -338,5 +427,21 @@ describe('Supabase multiplayer smoke', () => {
     const { claimTeamInWorld } = await import('../lib/supabase');
 
     await expect(claimTeamInWorld('world_1', 't_1', 'Joiner Manager')).rejects.toThrow('TEAM_ALREADY_CLAIMED');
+  });
+
+  it('writes and removes participant draft choices on the master world', async () => {
+    const { claimTeamInWorld, submitDraftProposalInWorld, cancelDraftProposalInWorld } = await import('../lib/supabase');
+    await claimTeamInWorld('world_1', 't_1', 'Joiner Manager');
+
+    await submitDraftProposalInWorld('world_1', 'p_free');
+    const master = mockDb.records.find(record => record.is_creator);
+    expect(master.world_state.draftProposals).toContainEqual(expect.objectContaining({
+      playerId: 'p_free',
+      managerId: 'user_joiner',
+      teamId: 't_1'
+    }));
+
+    await cancelDraftProposalInWorld('world_1', 'p_free');
+    expect(master.world_state.draftProposals).toEqual([]);
   });
 });
