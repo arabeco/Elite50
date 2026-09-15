@@ -1,3 +1,5 @@
+import { AttentionDot } from '../AttentionDot';
+import { getInboxAttention } from '../../utils/attention';
 ﻿import React, { useState } from 'react';
 import { RecruitmentPanel } from './RecruitmentPanel';
 import { useGame } from '../../store/GameContext';
@@ -20,7 +22,8 @@ import { ELITE_PLAYER_CUTOFF, getElitePlayers } from '../../utils/elitePlayers';
 import { getDistrictFromLeagueKey, getDistrictTheme } from '../../utils/districtTheme';
 import { Home, Trophy, ShoppingCart, Database, User, Clock, Newspaper, TrendingUp, AlertCircle, Award, Calendar, Users, Activity, Sliders, Flame, Target, Zap, FastForward, Globe, MessageSquare, AlertTriangle, TrendingDown, Briefcase, Star, Search, Crown, ChevronRight, Lock, ChevronDown, Eye, Shield, Brain, X, Save, Rocket, LayoutGrid, Rows3, WalletCards, Landmark } from 'lucide-react';
 export const WorldTab = (props: any) => {
-  const { state, setState } = useGame();
+  const { state, setState, saveGame, addToast } = useGame();
+  const inboxAttention = getInboxAttention(state);
   const dashData = useDashboardData();
   const { userTeam, upcomingMatches } = dashData;
   const { handleMockReport, setSelectedMatchReport } = useMatchSimulation(userTeam?.id || null);
@@ -449,12 +452,19 @@ export const WorldTab = (props: any) => {
           >
             <tab.icon size={15} aria-hidden="true" />
             {tab.label}
+            {tab.id === 'news' && inboxAttention.news > 0 && <AttentionDot label={`${inboxAttention.news} notícias não lidas`} />}
           </button>
         ))}
       </div>
 
       {activeWorldTab === 'news' && (
         <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          {inboxAttention.news > 0 && <button className="recruit-secondary" onClick={async () => {
+            const unreadIds = new Set(state.notifications.filter(item => !item.read).map(item => item.id));
+            const next = {...state, notifications: state.notifications.map(item => unreadIds.has(item.id) ? {...item, read: true} : item)};
+            try { await saveGame(next); setState(prev => ({...prev, notifications: prev.notifications.map(item => unreadIds.has(item.id) ? {...item, read: true} : item)})); }
+            catch { addToast('Não foi possível marcar as notícias como lidas.', 'error'); }
+          }}>Marcar como lidas</button>}
           {state.notifications?.length > 0 ? (
             state.notifications.map(notification => (
               <div
@@ -532,10 +542,7 @@ export const WorldTab = (props: any) => {
                     <div className="flex items-center gap-2 sm:gap-3">
                       <h3 className="font-black text-white uppercase tracking-wider text-[10px] sm:text-xs italic truncate max-w-[120px] sm:max-w-none">{notification.title}</h3>
                       {!notification.read && (
-                        <div className="flex gap-1">
-                          <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full bg-mineral-400 animate-pulse shadow-none" />
-                          <span className="text-[7px] sm:text-[8px] font-black text-mineral-400 uppercase tracking-widest hidden sm:inline">Novo</span>
-                        </div>
+                        <AttentionDot label="Notícia não lida" />
                       )}
                     </div>
                     <span className="text-[7px] sm:text-[9px] text-white/20 font-black uppercase tracking-[0.1em] sm:tracking-[0.2em]">

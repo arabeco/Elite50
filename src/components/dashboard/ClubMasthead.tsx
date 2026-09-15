@@ -5,8 +5,9 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { TeamLogo } from '../TeamLogo';
 import { getDistrictTheme } from '../../utils/districtTheme';
 
-export function ClubMasthead({ team, players, season, onOpenTeam }: {
+export function ClubMasthead({ team, players, season, onOpenTeam, phaseAction }: {
   team?: Team | null; players: Record<string, Player>; season: number; onOpenTeam?: () => void;
+  phaseAction?: { label: string; action: string; onClick?: () => void; highlight?: boolean };
 }) {
   const theme = getDistrictTheme(team?.district);
   const featured = team ? Object.values(players)
@@ -19,7 +20,9 @@ export function ClubMasthead({ team, players, season, onOpenTeam }: {
         <div className="sport-wordmark">ELITE <b>2050</b></div>
         <p className="club-masthead__edition">TEMPORADA {season} / {team ? 'LIGA ' + theme.label : 'QUATRO LIGAS. UM MUNDO.'}</p>
         <h2>{team?.name || 'O jogo é seu.'}</h2>
-        <button type="button" onClick={onOpenTeam} disabled={!onOpenTeam} className="sport-team-link">{team ? 'Conhecer meu elenco' : 'Escolher meu clube'} <ArrowUpRight size={16} aria-hidden="true" /></button>
+        {phaseAction ? <button type="button" className="sport-phase-action" data-highlight={phaseAction.highlight || undefined} onClick={phaseAction.onClick} disabled={!phaseAction.onClick}>
+          <span>{phaseAction.label}</span><strong>{phaseAction.action} <ArrowUpRight size={16} aria-hidden="true" /></strong>
+        </button> : <button type="button" onClick={onOpenTeam} disabled={!onOpenTeam} className="sport-team-link">{team ? 'Conhecer meu elenco' : 'Escolher meu clube'} <ArrowUpRight size={16} aria-hidden="true" /></button>}
       </div>
       {featured ? <div className="club-masthead__athlete">
         <PlayerAvatar player={featured} size="xl" mode="no-boots" cropBottomPercent={0} className="club-masthead__avatar" />

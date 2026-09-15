@@ -26,6 +26,7 @@ const getWorldRules = (state: GameState) => ({
   rank1000PlayerId: state.world.rank1000PlayerId || null,
   offseasonDecision: state.world.offseasonDecision || null,
   draftProposals: state.world.draftProposals || [],
+  draftResults: state.world.draftResults || [],
   clubOffers: state.world.clubOffers || [],
 });
 

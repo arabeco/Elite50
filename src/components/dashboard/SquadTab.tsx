@@ -1,3 +1,4 @@
+import { PlayerRosterRow } from '../PlayerRosterRow';
 import React, { useState } from 'react';
 import { useGame } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
@@ -187,23 +188,8 @@ export const SquadTab = (props: { showLineup?: boolean; lineupOnly?: boolean }) 
                 </div>
                 <div className="divide-y divide-white/[0.04]">
                   {players.map(player => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => handlePlayerClick(player)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-black uppercase tracking-wide text-white">{player.nickname}</p>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/35">{player.role} • {player.district}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-lg font-black italic text-mineral-300">{player.totalRating}</p>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/25">
-                          {player.contract.teamId ? state.teams[player.contract.teamId]?.name || 'Clube' : 'Sem clube'}
-                        </p>
-                      </div>
-                    </button>
+                    <PlayerRosterRow key={player.id} player={player} onClick={handlePlayerClick}
+                      clubName={player.contract.teamId ? state.teams[player.contract.teamId]?.name || 'Clube' : 'Sem clube'} />
                   ))}
                 </div>
               </div>

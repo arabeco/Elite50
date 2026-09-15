@@ -97,6 +97,45 @@ const renderDashboard = (state: GameState) => render(
 );
 
 describe('Dashboard click smoke', () => {
+  it('leads from the World dot to unread news and clears it when marked read', async () => {
+    const state = makeDraftWorld();
+    state.notifications = [{id:'qa-news', title:'Aviso de teste', message:'Novo evento', date:state.world.currentDate, type:'info', read:false}];
+    renderDashboard(state);
+    const user = userEvent.setup();
+    expect(screen.getByTestId('main-tab-world')).toHaveAttribute('data-attention', 'true');
+    await user.click(screen.getByTestId('main-tab-world'));
+    await user.click(await screen.findByRole('button', {name:/Notícias/}, {timeout:10000}));
+    expect(screen.getByRole('img', {name:'Notícia não lida'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name:'Marcar como lidas'}));
+    await waitFor(() => expect(screen.getByTestId('main-tab-world')).not.toHaveAttribute('data-attention'));
+    expect(screen.queryByRole('img', {name:'Notícia não lida'})).not.toBeInTheDocument();
+  });
+
+  it('stops the draft attention dot once eleven athletes are planned', async () => {
+    const state = makeDraftWorld();
+    state.world.draftProposals = Object.values(state.players).slice(0, 11).map((p, i) => ({playerId:p.id, managerId:state.userManagerId!, teamId:state.userTeamId!, priority:i+1}));
+    renderDashboard(state);
+    await waitFor(() => expect(screen.getByTestId('main-tab-market')).toHaveAttribute('data-draft-open', 'true'));
+    expect(screen.getByTestId('main-tab-market')).not.toHaveAttribute('data-attention');
+  });
+
+  it('highlights the open draft and opens it from the short Home action', async () => {
+    renderDashboard(makeDraftWorld());
+    expect(screen.getByTestId('main-tab-market')).toHaveAttribute('data-draft-open', 'true');
+    expect(screen.getByTestId('main-tab-market')).toHaveAttribute('data-attention', 'true');
+    expect(screen.getByTestId('main-tab-world')).not.toHaveAttribute('data-attention');
+    await userEvent.setup().click(screen.getByTestId('main-tab-home'));
+    await userEvent.setup().click(await screen.findByRole('button', {name: /Draft aberto.*Montar meu elenco/i}, {timeout: 10000}));
+    expect(await screen.findByRole('heading', {name: /Draft Genesis/i})).toBeInTheDocument();
+    expect(screen.getByTestId('main-tab-market')).toHaveAttribute('aria-current', 'page');
+  });
+  it('removes the draft invitation after the draft closes', () => {
+    const state = makeDraftWorld(); state.world.currentDay = 3; state.world.status = 'ACTIVE';
+    renderDashboard(state);
+    expect(screen.getByTestId('main-tab-market')).not.toHaveAttribute('data-draft-open');
+    expect(screen.queryByRole('button', {name: /Draft aberto.*Montar meu elenco/i})).not.toBeInTheDocument();
+  });
+
   it('lets the player move from Home to Draft, World and back without dead UI', async () => {
     const user = userEvent.setup();
     const { container } = renderDashboard(makeDraftWorld());
@@ -112,7 +151,7 @@ describe('Dashboard click smoke', () => {
     await user.click(within(teamTabs).getByRole('button', { name: /Draft/i }));
 
     expect(await screen.findByRole('heading', { name: /DRAFT\s+GENESIS/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Minhas escolhas/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Respostas/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Confirmar Draft/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Escolher/i })).toBeInTheDocument();
 

@@ -20,6 +20,10 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             return;
         }
 
+        if (!isDraftDay && !state.world.transferWindowOpen) {
+            addToast('Janela de transferências fechada. Você pode consultar os atletas e negociar quando ela abrir.', 'warning');
+            return;
+        }
         const blocked = getRecruitmentBlock(state, userTeam.id, player, isDraftDay);
         if (blocked) { addToast(blocked, 'warning'); return; }
 
@@ -70,17 +74,9 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             }
         }
 
-        const currentPower = userTeam.squad.reduce((sum, id) => sum + (state.players[id]?.totalRating || 0), 0);
-        // Also account for pending proposals in the power cap check
-        const pendingDraftPower = (state.world.draftProposals || [])
-            .filter(p => p.managerId === state.userManagerId)
-            .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
-        const pendingMarketPower = (state.transferProposals || [])
-            .filter(p => p.toTeamId === userTeam.id && p.status === 'PENDING')
-            .reduce((sum, p) => sum + (state.players[p.playerId]?.totalRating || 0), 0);
-        const pendingPower = pendingDraftPower + pendingMarketPower;
-
-        const nextTotalPoints = currentPower + pendingPower + player.totalRating;
+        const recruitmentBudget = getRecruitmentBudget(state, userTeam.id);
+        const pendingPower = recruitmentBudget.pending;
+        const nextTotalPoints = recruitmentBudget.used + pendingPower + player.totalRating;
         const exceedsPowerCap = nextTotalPoints > powerCap;
 
         if (exceedsPowerCap) {
@@ -100,8 +96,8 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
             }
             // Draft proposals reserve score until the daily resolution accepts or rejects them.
             const remainingAfterReserve = powerCap - nextTotalPoints;
-            const confirmed = await requestConfirm({
-                title: 'Reservar no Draft',
+            const confirmed = options?.quickDraft || await requestConfirm({
+                title: 'Adicionar ao draft',
                 message: `${player.nickname} ocupa ${player.totalRating} de score ate a resolucao. Chance estimada: ${interest.chance}% (${interest.label}). ${interest.reasons[0]} Score restante apos reserva: ${remainingAfterReserve}.`,
                 confirmLabel: 'Reservar',
             });
@@ -118,7 +114,8 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     setState(nextState);
                     await saveGame(nextState);
                 }
-                addToast(`${player.nickname} adicionado. ${player.totalRating} de score reservado.`, 'success');
+                addToast(`Proposta enviada para ${player.nickname}. Acompanhe em Respostas.`, 'success');
+                return true;
             } catch (error) {
                 console.error('Erro ao enviar escolha do Draft:', error);
                 addToast('Nao foi possivel adicionar esse atleta.', 'error');
@@ -150,6 +147,7 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
                     setState(nextState);
                     await saveGame(nextState);
                     addToast(`Proposta enviada para ${player.nickname}. Resposta na proxima virada.`, 'success');
+                    return true;
                 } catch (error) {
                     console.error('Erro na transferência:', error);
                     addToast('Erro ao processar transferência.', 'error');
@@ -271,6 +269,10 @@ export const useTransfers = (userTeamId: string | null, totalPoints: number, pow
     const handleSendTradeOffer = async (requestedPlayerId: string, offeredPlayerId: string): Promise<boolean> => {
         const userTeam = userTeamId ? state.teams[userTeamId] : null;
         const isDraft = (state.world as any).status === 'DRAFT';
+        if (!isDraft && !state.world.transferWindowOpen) {
+            addToast('Janela de transferências fechada.', 'warning');
+            return false;
+        }
 
 
         if (!userTeam) {

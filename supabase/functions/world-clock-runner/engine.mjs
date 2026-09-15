@@ -4687,6 +4687,13 @@ var resolveDraftConflict = (state) => {
         draftedPlayerIds.add(playerId);
       }
     }
+    world.draftResults = [...world.draftResults || [], ...proposals.map((proposal) => ({
+      playerId: proposal.playerId,
+      managerId: proposal.managerId,
+      teamId: proposal.teamId,
+      day: world.currentDay,
+      status: state.players[proposal.playerId]?.contract.teamId === proposal.teamId ? "ACCEPTED" : "DECLINED"
+    }))];
     world.draftProposals = [];
   } catch (e) {
   }

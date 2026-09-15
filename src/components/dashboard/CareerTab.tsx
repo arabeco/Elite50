@@ -1,3 +1,4 @@
+import { AttentionDot } from '../AttentionDot';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGame, useGameState, useGameDispatch } from '../../store/GameContext';
 import { useDashboardData } from '../../hooks/useDashboardData';
@@ -886,7 +887,7 @@ export const CareerTab = (props: any) => {
             <div className="glass-card-neon white-gradient-sheen border border-purple-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col gap-3">
               <h3 className="text-[9px] sm:text-[11px] font-black text-purple-400 uppercase tracking-widest flex items-center gap-2">
                 <Search size={14} className="text-purple-400" />
-                Propostas de Troca
+                Propostas de Troca <AttentionDot label="Propostas aguardando sua decisão" />
               </h3>
               <div className="flex flex-col gap-2">
                 {state.tradeOffers.filter(t => t.toTeamId === userTeam?.id && t.status === 'PENDING').map(offer => {

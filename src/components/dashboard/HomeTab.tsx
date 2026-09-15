@@ -1417,7 +1417,18 @@ export const HomeTab = ({ onOpenDraft, onOpenTeam, onOpenLineup, onOpenTactics, 
 
   return (
     <div className="sport-home space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-5xl mx-auto pb-8 px-2 sm:px-0">
-      <ClubMasthead team={userTeam} players={state.players} season={state.world.currentSeason} onOpenTeam={onOpenTeam} />
+      <ClubMasthead team={userTeam} players={state.players} season={state.world.currentSeason} onOpenTeam={onOpenTeam}
+        phaseAction={state.world.status === 'LOBBY' && state.world.currentDay >= 0 && state.world.currentDay <= GENESIS_DRAFT_LAST_DAY && userTeam ? {
+          label: state.world.currentDay === GENESIS_DRAFT_LAST_DAY ? 'Último dia de draft' : 'Draft aberto',
+          action: draftCount > 0 ? 'Continuar meu draft' : 'Montar meu elenco',
+          onClick: onOpenDraft,
+          highlight: true,
+        } : state.world.status === 'LOBBY' ? {
+          label: 'Pré-temporada', action: userTeam ? 'Conhecer meu elenco' : 'Escolher meu clube', onClick: onOpenTeam,
+        } : {
+          label: isOffseason ? 'Fim de temporada' : state.world.phase === 'ELITE_CUP' ? 'Copa Elite' : 'Temporada em jogo',
+          action: !userTeam ? 'Escolher meu clube' : isOffseason ? 'Revisar meu elenco' : 'Preparar escalação', onClick: !userTeam || isOffseason ? onOpenTeam : onOpenLineup,
+        }} />
 
       {/* SYNC INDICATOR */}
       {isSyncing && (

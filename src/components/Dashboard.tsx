@@ -1,7 +1,9 @@
+import { AttentionDot } from './AttentionDot';
+import { getInboxAttention } from '../utils/attention';
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { useGame } from '../store/GameContext';
 import { NewGameFlow } from './NewGameFlow';
-import { Users, Brain, Target, Home, Trophy, History, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, LoaderCircle, X } from 'lucide-react';
+import { ArrowLeftRight, Users, Brain, Target, Home, Trophy, History, Shield, Clock, TrendingUp, Save, Rocket, PlayCircle, LogOut, Calendar, Briefcase, Globe, FastForward, LoaderCircle, X } from 'lucide-react';
 import { useGameDispatch, useGameState } from '../store/GameContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RecruitmentPanel } from './dashboard/RecruitmentPanel';
@@ -62,7 +64,11 @@ export const Dashboard: React.FC = () => {
   const [selectedSeasonReport, setSelectedSeasonReport] = useState<number | null>(null);
   const isObserver = !state.userTeamId && (!!state.userManagerId || !state.isCreator);
   const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
-  const squadNeedsAttention = !!userTeam && !isObserver && isDraftOpen && (userTeam.squad?.length || 0) < 15;
+  const plannedSquadSize = new Set([
+    ...(userTeam?.squad || []),
+    ...(state.world.draftProposals || []).filter(p => p.teamId === userTeam?.id && p.managerId === state.userManagerId).map(p => p.playerId),
+  ]).size;
+  const squadNeedsAttention = !!userTeam && !isObserver && isDraftOpen && plannedSquadSize < 11;
   const lineupNeedsAttention = !!userTeam && !isObserver && Object.values(userTeam.lineup || {}).filter(Boolean).length < 11;
   const tacticsNeedsAttention = !!userTeam && !isObserver && (!userTeam.tactics?.playStyle || !userTeam.tactics?.mentality);
   const trainingNeedsAttention = !!userTeam && !isObserver && (
@@ -139,7 +145,7 @@ export const Dashboard: React.FC = () => {
 
   const { daysPassed, userTeamMatches, upcomingMatches, totalPoints, powerCap } = useDashboardData();
   useMatchNotifications(state, userTeam, upcomingMatches);
-  const marketNeedsAttention = !!userTeam && !isObserver && state.world.transferWindowOpen === true && (powerCap - totalPoints) >= 120;
+  const inboxAttention = getInboxAttention(state);
   const calendarNeedsAttention = !!userTeam && userTeamMatches.some(match => match.played && match.revealed === false);
   const currentSeasonPreview = React.useMemo<SeasonReport | null>(() => {
     if (state.world.phase !== 'OFFSEASON') return null;
@@ -391,8 +397,8 @@ export const Dashboard: React.FC = () => {
       case 'home': return (
         <HomeTab
           onOpenDraft={() => {
-            setActiveTab('team');
-            setActiveTeamTab(isDraftOpen ? 'draft' : 'squad');
+            setActiveTab(isDraftOpen ? 'market' : 'team');
+            setActiveTeamTab('squad');
           }}
           onOpenTeam={() => {
             setActiveTab('team');
@@ -433,6 +439,7 @@ export const Dashboard: React.FC = () => {
                 >
                   <tab.icon size={15} aria-hidden="true" />
                   {tab.label}
+                  {tab.attention && activeTeamTab !== tab.id && <AttentionDot corner />}
                 </button>
               ))}
             </div>
@@ -580,7 +587,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* LOBBY STATUS BANNER - Robust check for Genesis and creator status */}
-          {(state.world.status === 'LOBBY' || state.world.currentDay < 3) && (
+          {(state.world.status === 'LOBBY' || state.world.currentDay < 3) && activeTab !== 'market' && activeTab !== 'draft' && !(activeTab === 'team' && activeTeamTab === 'draft') && (
             <motion.div
               layoutId="lobby-banner"
               initial={{ opacity: 0, y: -20 }}
@@ -706,15 +713,19 @@ export const Dashboard: React.FC = () => {
         {[
           { id: 'home', label: 'Início', icon: Home },
           { id: 'team', label: isObserver ? 'Entrar' : 'Elenco', icon: Users, attention: teamNeedsAttention },
-          ...(!isObserver ? [{ id: 'market', label: isDraftOpen ? 'Draft' : 'Transferir', icon: Users, attention: marketNeedsAttention }] : []),
+          ...(!isObserver ? [{ id: 'market', label: isDraftOpen ? 'Draft' : 'Transferir', icon: isDraftOpen ? Rocket : ArrowLeftRight, attention: isDraftOpen && squadNeedsAttention }] : []),
           { id: 'calendar', label: 'Calendario', icon: Calendar, attention: calendarNeedsAttention },
-          { id: 'world', label: 'Mundo', icon: Trophy, attention: marketNeedsAttention },
-          ...(isObserver ? [] : [{ id: 'career', label: 'Carreira', icon: Briefcase }]),
+          { id: 'world', label: 'Mundo', icon: Trophy, attention: inboxAttention.news > 0 },
+          ...(isObserver ? [] : [{ id: 'career', label: 'Carreira', icon: Briefcase, attention: inboxAttention.trades > 0 }]),
         ].map(tab => (
           <button
             key={tab.id}
             data-testid={`main-tab-${tab.id}`}
             aria-current={activeTab === tab.id ? 'page' : undefined}
+            data-attention={tab.attention ? 'true' : undefined}
+            title={tab.attention ? `${tab.label}: precisa de atenção` : tab.label}
+            data-draft-open={tab.id === 'market' && isDraftOpen ? 'true' : undefined}
+            aria-description={tab.id === 'market' && isDraftOpen ? 'Draft aberto: envie propostas para montar seu elenco' : undefined}
             onClick={() => {
               if (activeTab !== tab.id) {
                 runInteractionFeedback();
@@ -728,7 +739,7 @@ export const Dashboard: React.FC = () => {
             className={`flex-1 flex flex-col items-center gap-1 sm:gap-2 py-2 sm:py-4 rounded-[1.2rem] sm:rounded-[2.5rem] transition-all relative group active:scale-90 ${activeTab === tab.id ? 'text-mineral-400' : 'text-white/60 hover:text-white'} ${tab.attention && activeTab !== tab.id ? 'text-mineral-200 shadow-none' : ''}`}
           >
             {tab.attention && activeTab !== tab.id && (
-              <span className="sport-nav__notification absolute right-3 top-2 h-2 w-2 rounded-full" />
+              <AttentionDot corner />
             )}
             {activeTab === tab.id && (
               <motion.div

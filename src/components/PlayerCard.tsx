@@ -223,8 +223,8 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({ player, onClick, onPro
         {/* Top Section */}
         <div className="relative z-30 flex justify-between items-start">
           <div className="flex flex-col items-center">
-            <span className={`text-base sm:text-lg font-black leading-none drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] ${style.text}`}>{player.totalRating}</span>
-            <span className="text-[5px] sm:text-[6px] font-bold uppercase tracking-widest text-white/80 mt-0.5">
+            <span className={`player-card-rating text-base sm:text-lg font-black leading-none drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] ${style.text}`}>{player.totalRating}</span>
+            <span className="player-card-position text-[5px] sm:text-[6px] font-bold uppercase tracking-widest text-white/80 mt-0.5">
               {player.role === 'GOL' ? 'GOL' : player.role === 'ZAG' ? 'ZAG' : player.role === 'MEI' ? 'MEI' : 'ATA'}
             </span>
           </div>

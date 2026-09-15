@@ -582,6 +582,7 @@ export interface WorldState {
     date: string;
   };
   draftProposals?: { playerId: string; managerId: string; teamId: string; priority: number }[];
+  draftResults?: { playerId: string; managerId: string; teamId: string; day: number; status: 'ACCEPTED' | 'DECLINED' }[];
   clubOffers?: ClubOffer[];
 }
 
